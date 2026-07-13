@@ -12,8 +12,6 @@ argument-hint: "Para que será a próxima sessão?"
 
 Escreva um documento que permita a um agente **fresco** continuar o trabalho. Salve no **diretório temporário do SO** do usuário — não no workspace do produto (evita commit acidental de rascunho de sessão).
 
-Adaptada de [mattpocock/skills · handoff](https://github.com/mattpocock/skills). Idioma: **pt-BR**.
-
 ## Conteúdo
 
 1. **Objetivo da próxima sessão** — se o humano passou argumentos, use-os como foco.
@@ -29,4 +27,4 @@ Redija chaves de API, senhas, tokens e PII.
 
 ## Limites
 
-Obtida via [`planning-phase`](../planning-phase/SKILL.md) neste workflow de novo desenvolvimento. Em troca de sessão no meio de Planning, prefira sugerir de novo `planning-phase` + as concretas já em uso (`wayfinder`, `domain-modeling`, …).
+Em troca de sessão no meio de Planning, sugira à próxima sessão `planning-phase` + as concretas já em uso (`wayfinder`, `domain-modeling`, …).

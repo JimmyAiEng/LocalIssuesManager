@@ -17,19 +17,16 @@ Trabalho do pesquisador:
 3. Salvar onde o repo já guarda notas semelhantes; se não houver convenção, usar algo sensato (ex.: `docs/research/<slug>.md`) e dizer onde ficou.
 4. Idioma do artefato: **pt-BR**, salvo se a Issue/pedido pedir outro.
 
-Adaptada de [mattpocock/skills · research](https://github.com/mattpocock/skills).
-
 ## Quando usar
 
-- Ticket `research` do [`wayfinder`](../wayfinder/SKILL.md).
+- Ticket `research` do `wayfinder`.
 - Planning precisa de fato fora do working tree atual (API de terceiro, RFC, comportamento de lib).
 - Humano pediu pesquisa citada.
 
 ## O que não fazer
 
 - Não inventar a partir de conhecimento paramétrico sem checar a fonte.
-- Não substituir [`domain-modeling`](../domain-modeling/SKILL.md): research traz fatos; domínio afia linguagem/decisões.
-- Não carregar skills de outras fases.
+- Não substituir `domain-modeling`: research traz fatos; domínio afia linguagem/decisões.
 
 ## Saída mínima
 

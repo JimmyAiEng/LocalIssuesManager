@@ -8,22 +8,18 @@ description: >-
 
 # quality-assurance (camada 2 · QA)
 
-Obtida só após disclosure de [`qa-phase`](../qa-phase/SKILL.md). Spec: `WORKFLOW.md` §Q · decisões D11–D12 · D14.
-
-Skill **nova** (★) neste pack — não há equivalente ativo em mattpocock/skills (o `qa` deprecated é sessão interativa de bugs no GitHub; não reutilizar). Tracker: **issues-local**. Idioma: **pt-BR**.
-
 ## Objetivo
 
 Validar o conjunto entregue pelas Issues Implement (e Spec associada) sob **cinco perspectivas independentes**, agregar achados **sem fundir rankings**, e produzir recomendação clara para o gate **G3** (humano aprova → Deployment; reprova → Issues Implement novas).
 
 ## QA ≠ review interno
 
-| [`code-review`](../code-review/SKILL.md) (Implement) | Esta skill (TAG=`QA`) |
+| `code-review` (Implement) | Esta skill (TAG=`QA`) |
 |---|---|
 | Standards + fidelidade à Spec da fatia | Multi-perspectiva de produto/sistema |
 | Dentro do claim Implement | Issue própria TAG=`QA` |
 | Não abre G3 | Recomenda G3; humano decide |
-| Mesmo harness da build ok | Preferir **outro** harness/modelo (D12) — recomendado, não obrigatório |
+| Mesmo harness da build ok | Preferir **outro** harness/modelo — recomendado, não obrigatório |
 
 Não rode isto como substituto de `code-review` nem abra TAG=`QA` a partir de Implement.
 
@@ -33,11 +29,11 @@ Obtenha e dispare (em paralelo quando o harness permitir):
 
 | Perspectiva | Skill |
 |---|---|
-| Arquitetura / seams | [`software-architect`](../software-architect/SKILL.md) |
-| Qualidade / critérios / riscos de regressão | [`qa-engineer`](../qa-engineer/SKILL.md) |
-| Dados / consistência / migrações | [`data-engineer`](../data-engineer/SKILL.md) |
-| Segurança | [`security-engineer`](../security-engineer/SKILL.md) |
-| Operação / entregabilidade | [`devops-engineer`](../devops-engineer/SKILL.md) |
+| Arquitetura / seams | `software-architect` |
+| Qualidade / critérios / riscos de regressão | `qa-engineer` |
+| Dados / consistência / migrações | `data-engineer` |
+| Segurança | `security-engineer` |
+| Operação / entregabilidade | `devops-engineer` |
 
 Cada perspectiva reporta **só** no seu eixo. O orquestrador **não** mescla nem reordena achados entre eixos num ranking único.
 
@@ -94,7 +90,7 @@ Feche com:
 
 ## Recomendação G3
 - `aprovar` | `reprovar`
-- Se reprovar: sugestão de Issues Implement (título + problema em 1 linha cada), **independentes** (D10)
+- Se reprovar: sugestão de Issues Implement (título + problema em 1 linha cada), **independentes**
 ```
 
 ### 4. Entregar
@@ -108,4 +104,4 @@ Peça Decisão humana explícita (G3). Não crie Issue `Deployment` nem Issues I
 
 ## Limites
 
-Obtida via [`qa-phase`](../qa-phase/SKILL.md). Não carregue skills de Planning/Design/Implement/Deployment neste claim (exceto [`devops-engineer`](../devops-engineer/SKILL.md) no modo perspectiva QA).
+Exceção de fase permitida neste claim: `devops-engineer` no modo perspectiva QA.

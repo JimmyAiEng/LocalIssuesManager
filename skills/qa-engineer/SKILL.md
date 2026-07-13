@@ -7,8 +7,6 @@ description: >-
 
 # qa-engineer (camada 2 · QA · perspectiva)
 
-Obtida via [`quality-assurance`](../quality-assurance/SKILL.md) após [`qa-phase`](../qa-phase/SKILL.md). Idioma: **pt-BR**.
-
 ## Eixo (só isto)
 
 O comportamento entregue é **verificável** contra a Issue/Spec? Há buracos de cenário, regressão óbvia ou critérios não observáveis?

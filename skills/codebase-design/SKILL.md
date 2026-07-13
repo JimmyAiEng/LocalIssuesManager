@@ -8,8 +8,6 @@ description: >-
 
 # codebase-design (camada 2 · Design)
 
-Obtida só após disclosure de [`design-phase`](../design-phase/SKILL.md). Spec: `WORKFLOW.md` §E · catálogo: `SKILLS.md`.
-
 ## Objetivo
 
 Explorar desenho quando os requisitos **não** bastam para ir a Spec. Entregar **opções + trade-offs** e parar no **gate de direção** (humano escolhe) antes de `to-spec` / `prototype` (se ainda fizer sentido).
@@ -69,4 +67,3 @@ Documento ou comentário na Issue com opções + trade-offs. Próximo passo oper
 
 - Implementar produto (fase Implement / TDD).
 - Substituir Spec ou Issues (`to-spec` / `to-tickets`).
-- Skills de outras fases.

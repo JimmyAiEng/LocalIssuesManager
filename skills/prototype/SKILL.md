@@ -8,8 +8,6 @@ description: >-
 
 # prototype (camada 2 · Design)
 
-Obtida só após disclosure de [`design-phase`](../design-phase/SKILL.md). Spec: `WORKFLOW.md` §Proto · decisão D03.
-
 ## Objetivo
 
 Validar **uma** pergunta de desenho com artefato **throwaway**. O aprendizado (não o código) é o que importa.
@@ -18,7 +16,7 @@ Heurística: UI nova, modelo de estado difícil de raciocinar no papel, dúvida 
 
 ## Obrigatório: worktree
 
-Todo protótipo vive em **git worktree** separado da working tree principal (D03).
+Todo protótipo vive em **git worktree** separado da working tree principal.
 
 ```bash
 # exemplo — adapte branch/path ao repo

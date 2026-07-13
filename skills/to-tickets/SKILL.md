@@ -8,20 +8,11 @@ description: >-
 
 # to-tickets (camada 2 · Design)
 
-Obtida só após disclosure de [`design-phase`](../design-phase/SKILL.md). Spec: `WORKFLOW.md` §S · decisão D10.
-
 ## Objetivo
 
 Transformar Spec (ou conversa alinhada) em **Issues** no issues-local: fatias verticais, **independentes**, claimáveis em paralelo. Continuação de trabalho grande = **criar** Issues ao fechar — **não** bloquear claim com arestas obrigatórias.
 
-## Diferença crítica vs mattpocock
-
-| mattpocock | Aqui |
-|---|---|
-| Tickets com **Blocked by** / grafo | Issues **sem** dependência obrigatória de claim |
-| Labels `ready-for-agent` | Status `OPEN` na fila FIFO do issues-local |
-| `tickets.md` ou GitHub/Linear | `issues create … --agent <ia>` (ou `--human` se o humano pedir) |
-
+Sem grafo de **Blocked by** e sem labels de triage: prontidão = status `OPEN` na fila FIFO.
 Ordem sugerida no texto da Issue é **orientação**, não pré-requisito de claim.
 
 ## Processo
@@ -41,7 +32,7 @@ Explore o bastante para títulos/corpos no glossário do domínio e ADRs. Prefat
 - Cabe num contexto fresco de agente.
 - Prefactor primeiro (Issue separada), se necessário.
 
-**Refator largo (exceção):** expand–contract em Issues **independentes** (expand, migrates por lote, contract). No corpo, cite “sequência recomendada” como texto — **sem** campo Blocked-by que impeça claim paralelo. Se paralelo for perigoso, diga no `problem` / critérios e deixe o humano ordenar via fila; não invente grafo no tracker.
+**Refator largo (exceção):** expand–contract em Issues **independentes** (expand, migrações por lote, contract). No corpo, cite “sequência recomendada” como texto — **sem** campo Blocked-by que impeça claim paralelo. Se paralelo for perigoso, diga no `problem` / critérios e deixe o humano ordenar via fila; não invente grafo no tracker.
 
 ### 4. Quiz rápido com o humano
 

@@ -8,13 +8,9 @@ description: >-
 
 # to-spec (camada 2 · Design)
 
-Obtida só após disclosure de [`design-phase`](../design-phase/SKILL.md). Spec de processo: `WORKFLOW.md` §S.
-
 ## Objetivo
 
 Congelar o desenho numa **Spec** a partir do que já foi discutido (Issue, conversa, exploração, protótipo). **Não** entreviste o humano — sintetize o que já sabe. Se faltar fato crítico, registre lacuna e vá a `AWAITING`; não invente.
-
-Tracker: **issues-local** (não GitHub/Linear/labels `ready-for-agent`).
 
 ## Pré-condições
 
@@ -28,7 +24,7 @@ Tracker: **issues-local** (não GitHub/Linear/labels `ready-for-agent`).
 3. Escreva a Spec com o template abaixo num artefato versionável, tipicamente:
    - `docs/features/<area>/SPEC.md` (ou caminho já usado no projeto)
    - Referencie o caminho no comentário da Issue Design.
-4. **Não** publique a Spec como Issue no issues-local (Issues são unidades de trabalho; a Spec é documento). Próximo passo: [`to-tickets`](../to-tickets/SKILL.md).
+4. **Não** publique a Spec como Issue no issues-local (Issues são unidades de trabalho; a Spec é documento). Próximo passo: `to-tickets`.
 
 ## Template da Spec
 
@@ -83,4 +79,3 @@ Spec em markdown no repo + referência na Issue Design. Em seguida: `to-tickets`
 
 - Criar Issues (isso é `to-tickets`).
 - Implementar código / TDD.
-- Labels de triage mattpocock / GitHub.

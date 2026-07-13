@@ -8,8 +8,6 @@ description: >-
 
 # software-architect (camada 2 · QA · perspectiva)
 
-Obtida via [`quality-assurance`](../quality-assurance/SKILL.md) após [`qa-phase`](../qa-phase/SKILL.md). Idioma: **pt-BR**.
-
 ## Eixo (só isto)
 
 Avaliar se o desenho entregue **sustenta** o que a Spec / domínio pedem: módulos profundos, seams claros, dependências na direção certa, ADRs respeitados.

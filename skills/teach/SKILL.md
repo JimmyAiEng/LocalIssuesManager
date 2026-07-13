@@ -11,7 +11,7 @@ argument-hint: "Sobre o que você quer aprender?"
 
 Pedido com estado: o humano quer aprender o tópico ao longo de várias sessões. Trate o diretório atual como **workspace de ensino**.
 
-Adaptada de [mattpocock/skills · teach](https://github.com/mattpocock/skills). Idioma dos artefatos e da condução: **pt-BR** (a menos que o humano peça outro).
+Idioma dos artefatos e da condução: **pt-BR** (a menos que o humano peça outro).
 
 ## Workspace de ensino
 
@@ -57,7 +57,3 @@ Leia learning-records + missão. Ensine o próximo passo desafiador “na medida
 ## issues-local
 
 Se o ensino estiver amarrado a uma Issue Planning: progresso relevante pode ir no comentário de `AWAITING`/`CLOSED`. Não use esta skill para substituir `domain-modeling` do produto — glossário de produto continua em `CONTEXT.md`.
-
-## Limites
-
-Obtida via [`planning-phase`](../planning-phase/SKILL.md). Não carregue Design/Implement/QA/Deployment neste claim.

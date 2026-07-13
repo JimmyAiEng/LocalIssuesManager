@@ -8,14 +8,12 @@ description: >-
 
 # devops-engineer (camada 2 · Deployment · reuso QA)
 
-★ Skill **nova** neste pack (sem homônima em [mattpocock/skills](https://github.com/mattpocock/skills)). Reaproveita práticas de PR/checklist/handoff adaptadas a **issues-local**, **pt-BR** e ao workflow do usuário (`WORKFLOW.md` §D · D06–D07 · D14).
-
-Uma cópia canônica em `skills/devops-engineer/`. O disclosure da fase define o modo:
+Uma cópia canônica; o disclosure da fase define o modo:
 
 | Modo | Quem obtém | Foco |
 |---|---|---|
-| **Entrega** | [`deployment-phase`](../deployment-phase/SKILL.md) (TAG=`Deployment`) | PR / checklist / handoff operacional / pedido **G4** |
-| **Perspectiva QA** | [`quality-assurance`](../quality-assurance/SKILL.md) via [`qa-phase`](../qa-phase/SKILL.md) | Operabilidade do escopo — **sem** PR nem G4 |
+| **Entrega** | `deployment-phase` (TAG=`Deployment`) | PR / checklist / handoff operacional / pedido **G4** |
+| **Perspectiva QA** | `quality-assurance` via `qa-phase` | Operabilidade do escopo — **sem** PR nem G4 |
 
 Não misture os modos no mesmo passo.
 
@@ -61,9 +59,9 @@ Humano: `issues decide --id … --human --status OPEN|CLOSED …`
 | Decisão | Efeito |
 |---|---|
 | `CLOSED` (ex. `concluido`) ≈ **go** | Fecha Deployment; fim do caminho feliz |
-| `OPEN` ou fechamento com retrabalho ≈ **no-go** | Continua Deployment ou Issues Implement novas (D10) |
+| `OPEN` ou fechamento com retrabalho ≈ **no-go** | Continua Deployment ou Issues Implement novas |
 
-G4 **não** é label GitHub/Linear — é o ciclo `AWAITING` → Decisão no issues-local (D07).
+G4 **não** é label de tracker externo — é o ciclo `AWAITING` → Decisão no issues-local.
 
 ### Limites (Deployment)
 

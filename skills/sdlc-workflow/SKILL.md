@@ -1,9 +1,9 @@
 ---
 name: sdlc-workflow
 description: >-
-  SDLC de novo desenvolvimento com issues-local (estágios, gates, paralelismo,
-  Review≠QA) e progressive disclosure de skills. Pack portátil: use em qualquer
-  projeto ao claimar ou trabalhar Issues de novo desenvolvimento (camada 0; via AGENTS.md).
+  SDLC de novo desenvolvimento com issues-local: estágios, gates, paralelismo,
+  Review≠QA e progressive disclosure de skills. Use ao claimar ou trabalhar
+  qualquer Issue de novo desenvolvimento, antes da skill de fase.
 ---
 
 # sdlc-workflow (camada 0)
@@ -70,15 +70,13 @@ AGENTS.md
 ```
 
 1. Já está em camada 0.
-2. TAG da Issue → skill `*-phase` (caminhos no `AGENTS.md` do projeto).
+2. TAG da Issue → skill `*-phase` (tabela no `AGENTS.md` do projeto).
 3. Obtenha só as skills concretas que a fase divulgar para **esta** Issue.
 4. Não carregue skills de outras fases neste claim.
 
-## Issues-local (lembrete)
+## Issues-local
 
-Claim: `issues next --agent <ia>` (FIFO).  
-Entrega: `issues status --id … --agent <ia> --status AWAITING --comment "…"`.  
-Decisão: `issues decide … --human`. Detalhe no `AGENTS.md`.
+Sintaxe e ciclo de vida dos comandos: tabela do `AGENTS.md` (fonte única) ou `issues --help`.
 
 ## Critério de conclusão
 

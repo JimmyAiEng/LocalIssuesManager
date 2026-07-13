@@ -1,8 +1,8 @@
 # AGENTS.md — pack de discovery (novo desenvolvimento)
 
-**Entregável portátil.** Este arquivo + a pasta `skills/` formam o pack de progressive disclosure do workflow de novo desenvolvimento. Destino: **qualquer projeto** e os harnesses `cursor` · `claude-code` · `codex` · `pi`.
+**Entregável portátil.** Este arquivo + as skills do pack formam o progressive disclosure do workflow de novo desenvolvimento. Destino: **qualquer projeto** e os harnesses `cursor` · `claude-code` · `codex` · `pi`.
 
-Não é específico deste repositório produtor. Instale o pack no projeto consumidor (ver `skills/INSTALL.md`).
+As skills vivem no diretório de skills do harness (padrão do pack: `.agents/skills/<nome>/SKILL.md`). Sempre que este arquivo citar uma skill pelo nome, obtenha-a nesse diretório.
 
 - Idioma: **pt-BR**
 - Tracker: **issues-local** (CLI `issues`)
@@ -12,9 +12,7 @@ Não é específico deste repositório produtor. Instale o pack no projeto consu
 
 ## Sempre no contexto (camada 0)
 
-Antes de trabalhar Issues de **novo desenvolvimento**, leia e siga:
-
-→ [`skills/sdlc-workflow/SKILL.md`](skills/sdlc-workflow/SKILL.md)
+Antes de trabalhar Issues de **novo desenvolvimento**, leia e siga a skill **`sdlc-workflow`**.
 
 Camada 0: estágios, gates, paralelismo, Review≠QA. **Não** carregue o catálogo inteiro de skills de uma vez.
 
@@ -28,17 +26,15 @@ Camada 0: estágios, gates, paralelismo, Review≠QA. **Não** carregue o catál
 
 | TAG | Skill de fase |
 |---|---|
-| `Planning` | [`skills/planning-phase/SKILL.md`](skills/planning-phase/SKILL.md) |
-| `Design` | [`skills/design-phase/SKILL.md`](skills/design-phase/SKILL.md) |
-| `Implement` | [`skills/implement-phase/SKILL.md`](skills/implement-phase/SKILL.md) |
-| `QA` | [`skills/qa-phase/SKILL.md`](skills/qa-phase/SKILL.md) |
-| `Deployment` | [`skills/deployment-phase/SKILL.md`](skills/deployment-phase/SKILL.md) |
+| `Planning` | `planning-phase` |
+| `Design` | `design-phase` |
+| `Implement` | `implement-phase` |
+| `QA` | `qa-phase` |
+| `Deployment` | `deployment-phase` |
 | `Maintenance` | Fora deste workflow |
 
 4. A fase faz o **disclosure** das skills concretas (camada 2). Obtenha só as necessárias para **esta** Issue.
 5. Skills de outras fases ficam fora do contexto.
-
-Caminhos acima são relativos à **raiz do projeto onde o pack foi instalado**.
 
 ---
 
@@ -79,4 +75,5 @@ humano: decide OPEN|CLOSED
 - Gate humano = fechar Issue(s) da TAG atual e abrir a(s) da próxima.
 - Review interno (Implement) **≠** QA (TAG=`QA`).
 - Manutenção / bugfix: outro workflow — não use `*-phase` deste pack.
-- Camadas 0+1 (discovery) e camada 2 (Planning → Deployment) estão neste pack em `skills/<nome>/SKILL.md`. Obtenha concretas só via a skill `*-phase` da TAG.
+- Camadas 0+1 (discovery) e camada 2 (Planning → Deployment) estão neste pack, todas no mesmo diretório de skills. Obtenha concretas só via a skill `*-phase` da TAG.
+- Esta tabela de comandos é a **fonte única** da sintaxe da CLI no pack; em dúvida, rode `issues --help`.

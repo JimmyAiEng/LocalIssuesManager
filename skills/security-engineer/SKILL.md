@@ -7,8 +7,6 @@ description: >-
 
 # security-engineer (camada 2 · QA · perspectiva)
 
-Obtida via [`quality-assurance`](../quality-assurance/SKILL.md) após [`qa-phase`](../qa-phase/SKILL.md). Idioma: **pt-BR**.
-
 ## Eixo (só isto)
 
 Risco de segurança **introduzido ou ampliado** pelo escopo sob review — não um pentest genérico do monólito inteiro.

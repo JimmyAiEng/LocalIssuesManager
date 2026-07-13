@@ -8,29 +8,16 @@ description: >-
 
 # implement (camada 2 · Implement)
 
-Obtida só após disclosure de [`implement-phase`](../implement-phase/SKILL.md). Spec: `WORKFLOW.md` §I · decisões D08–D11.
-
 ## Objetivo
 
 Construir o trabalho **já** descrito na Issue Implement (e Spec referenciada) — código **funcional/integrável**. É a mão, não a cabeça: não reabre desenho nem inventa requisitos.
-
-Adaptada de [mattpocock/skills · implement](https://github.com/mattpocock/skills). Tracker: **issues-local**. Idioma: **pt-BR**.
 
 ## Quando usar
 
 - Issue claimada com TAG=`Implement` e disclosure de `implement-phase` feito.
 - Spec / critérios de aceite / seams já existem (via Design ou corpo da Issue).
 
-Se a Spec não existir: **não** escreva Spec aqui — registre lacuna e vá a `AWAITING` (humano abre/completa Design). Para um comportamento pontual sem orquestração completa, use só [`tdd`](../tdd/SKILL.md).
-
-## Diferença crítica vs mattpocock
-
-| mattpocock | Aqui |
-|---|---|
-| Cadeia `to-tickets → implement → code-review` + commit | Mesma orquestração TDD+review, mas entrega via **issues-local** |
-| Tickets com blocking edges | Uma Issue **independente** (D10); continuações = criar Issues ao fechar |
-| Fecha com commit na branch | Fatia revisável: `AWAITING` + Decisão humana (D09); commit só se o humano pediu ou a convenção do repo exigir |
-| Review = fim do build | Review **interno** ≠ Issue TAG=`QA` (D11) |
+Se a Spec não existir: **não** escreva Spec aqui — registre lacuna e vá a `AWAITING` (humano abre/completa Design). Para um comportamento pontual sem orquestração completa, use só `tdd`.
 
 ## Processo
 
@@ -43,17 +30,17 @@ Se a Spec não existir: **não** escreva Spec aqui — registre lacuna e vá a `
 
 ### 2. Construir com TDD
 
-Obtenha e siga [`tdd`](../tdd/SKILL.md):
+Obtenha e siga `tdd`:
 
-- Red → green → refactor **sem** gate humano entre red e green (D08).
+- Red → green → refactor **sem** gate humano entre red e green.
 - Fatias verticais (um comportamento por ciclo).
 - Typecheck e arquivo(s) de teste relevantes com frequência; suíte completa **uma vez** ao fim da fatia (ou quando o projeto tiver comando equivalente).
 
-Não misture trabalho de outra Issue. Se a fatia estourar o contexto: feche criando Issue(s) de **continuação** (D10) e entregue o que já estiver integrável.
+Não misture trabalho de outra Issue. Se a fatia estourar o contexto: feche criando Issue(s) de **continuação** e entregue o que já estiver integrável.
 
 ### 3. Review interno
 
-Obtenha e rode [`code-review`](../code-review/SKILL.md) no diff da fatia (ponto fixo: base da branch / commit de início do claim / o que o humano indicar).
+Obtenha e rode `code-review` no diff da fatia (ponto fixo: base da branch / commit de início do claim / o que o humano indicar).
 
 - Trate achados bloqueantes (quebra de Spec ou standards do repo) **antes** de entregar.
 - Achados de julgamento: corrija o óbvio ou registre no comentário de `AWAITING`.
@@ -71,7 +58,3 @@ issues status --id <uuid> --agent <ia> --status AWAITING \
 ```
 
 Humano revisa a fatia (Decisão). Conjunto Implement acordado completo → humano/fluxo abre Issue(s) **QA** — não é papel desta skill inventar o gate G3 sozinha sem acordo.
-
-## Limites (progressive disclosure)
-
-Obtida via [`implement-phase`](../implement-phase/SKILL.md). Não carregue skills de Planning/Design/QA/Deployment neste claim.

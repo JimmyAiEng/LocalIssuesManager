@@ -1,8 +1,8 @@
 ---
 name: qa-phase
 description: >-
-  Disclosure da fase QA (pack portátil issues-local): validação multi-perspectiva
-  ≠ review de Implement. Use ao claimar Issue com TAG=QA (camada 1).
+  Disclosure da fase QA: validação multi-perspectiva ≠ review de Implement.
+  Use ao claimar Issue com TAG=QA.
 ---
 
 # qa-phase (camada 1)
@@ -17,22 +17,22 @@ Validação multi-perspectiva. Gate **G3**: humano aprova → Deployment; reprov
 
 | Skill | Quando obter |
 |---|---|
-| [`quality-assurance`](../quality-assurance/SKILL.md) | Orquestrar validação e veredicto |
-| [`software-architect`](../software-architect/SKILL.md) | Perspectiva de arquitetura / seams (via QA) |
-| [`qa-engineer`](../qa-engineer/SKILL.md) | Perspectiva de critérios / regressão |
-| [`data-engineer`](../data-engineer/SKILL.md) | Perspectiva de dados / migrações |
-| [`security-engineer`](../security-engineer/SKILL.md) | Perspectiva de segurança |
-| [`devops-engineer`](../devops-engineer/SKILL.md) | Perspectiva operacional (modo QA) |
+| `quality-assurance` | Orquestrar validação e veredicto |
+| `software-architect` | Perspectiva de arquitetura / seams (via QA) |
+| `qa-engineer` | Perspectiva de critérios / regressão |
+| `data-engineer` | Perspectiva de dados / migrações |
+| `security-engineer` | Perspectiva de segurança |
+| `devops-engineer` | Perspectiva operacional (modo QA) |
 
-**Não** trate isto como [`code-review`](../code-review/SKILL.md) de Implement.
+**Não** trate isto como `code-review` de Implement.
+A exceção de fase é `devops-engineer`, permitida aqui no **modo perspectiva QA**.
 
-**Não** carregue skills de Planning/Design/Implement/Deployment neste claim (exceto [`devops-engineer`](../devops-engineer/SKILL.md) no **modo perspectiva QA**).
-
-Obtenha o orquestrador e as perspectivas necessárias a **esta** Issue. Se algum `SKILL.md` estiver ausente, registre a lacuna em `AWAITING`. Adaptação (repo produtor): `docs/features/common-agent-workflow/ADAPTATION-QA.md`.
+Obtenha o orquestrador e as perspectivas necessárias a **esta** Issue.
+Se alguma skill acima estiver ausente no projeto, registre a lacuna em `AWAITING`.
 
 ## Heurísticas
 
-- Preferir **outro** harness/modelo que o da Implement — recomendado, não obrigatório (D12).
+- Preferir **outro** harness/modelo que o da Implement — recomendado, não obrigatório.
 - Retrabalho: `decide OPEN` ou fecha e cria Issues Implement novas (independentes).
 - Perspectivas em paralelo quando o harness permitir; seções de relatório **nunca** fundidas num ranking único.
 

@@ -1,8 +1,8 @@
 ---
 name: implement-phase
 description: >-
-  Disclosure da fase Implement (pack portátil issues-local): TDD, review interno,
-  skills permitidas. Use ao claimar Issue com TAG=Implement (camada 1).
+  Disclosure da fase Implement: TDD, review interno, skills permitidas.
+  Use ao claimar Issue com TAG=Implement.
 ---
 
 # implement-phase (camada 1)
@@ -17,13 +17,11 @@ Entregar fatia **funcional/integrável** via TDD e review interno. Humano revisa
 
 | Skill | Quando obter |
 |---|---|
-| [`implement`](../implement/SKILL.md) | Orquestrar a fatia (TDD + review) conforme spec/ticket |
-| [`tdd`](../tdd/SKILL.md) | Red-green-refactor — **sem** gate humano entre red e green |
-| [`code-review`](../code-review/SKILL.md) | Review **interno** (standards + fidelidade à spec) — **≠** QA |
+| `implement` | Orquestrar a fatia (TDD + review) conforme spec/ticket |
+| `tdd` | Red-green-refactor — **sem** gate humano entre red e green |
+| `code-review` | Review **interno** (standards + fidelidade à spec) — **≠** QA |
 
-**Não** carregue skills de Planning/Design/QA/Deployment neste claim.
-
-Se alguma skill concreta acima estiver ausente no projeto consumidor, registre a lacuna em `AWAITING`.
+Se alguma skill acima estiver ausente no projeto, registre a lacuna em `AWAITING`.
 
 ## Heurísticas
 

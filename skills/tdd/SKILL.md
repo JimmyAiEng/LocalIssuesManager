@@ -8,9 +8,8 @@ description: >-
 
 # tdd (camada 2 · Implement)
 
-Obtida só após disclosure de [`implement-phase`](../implement-phase/SKILL.md) — tipicamente acionada por [`implement`](../implement/SKILL.md), ou sozinha se o humano pedir TDD pontual. Spec: `WORKFLOW.md` §I · decisão D08.
-
-Adaptada de [mattpocock/skills · tdd](https://github.com/mattpocock/skills). Idioma: **pt-BR**. Tracker: **issues-local** (contexto da Issue/Spec; esta skill não cria Issues).
+Tipicamente acionada por `implement`, ou sozinha se o humano pedir TDD pontual.
+Esta skill não cria Issues; o contexto vem da Issue/Spec.
 
 ## Objetivo
 
@@ -46,23 +45,11 @@ Não dá para testar tudo — acordar seams concentra esforço nos caminhos crí
 
 - **Red antes de green.** Escreva o teste que falha; só então o mínimo de código para passar. Não antecipe testes futuros nem features especulativas.
 - **Uma fatia por ciclo.** Um seam, um teste, uma implementação mínima.
-- **Sem gate humano entre red e green** (D08). O agente completa o ciclo sozinho; humano revisa a fatia integrável depois (`AWAITING`), não cada cor do loop.
-- **Refactor com a suíte verde.** Com os testes passando, limpe o óbvio (nomes, duplicação local) **antes** do próximo red. Não refatore com a suíte vermelha. Review amplo / smells de Fowler ficam para [`code-review`](../code-review/SKILL.md) — não substituem o refactor curto do ciclo.
-
-## Diferença vs mattpocock
-
-| mattpocock | Aqui |
-|---|---|
-| Refactor “fora do loop” (só no review) | Refactor **curto** no ciclo quando verde; review interno cobre o resto |
-| Confirmar seams com o usuário sempre | Seams da Spec/Issue; confirmar só se faltarem |
-| Cadeia ask-matt / GitHub | Disclosure via `implement-phase`; contexto issues-local |
+- **Sem gate humano entre red e green.** O agente completa o ciclo sozinho; humano revisa a fatia integrável depois (`AWAITING`), não cada cor do loop.
+- **Refactor com a suíte verde.** Com os testes passando, limpe o óbvio (nomes, duplicação local) **antes** do próximo red. Não refatore com a suíte vermelha. Review amplo / smells ficam para `code-review` — não substituem o refactor curto do ciclo.
 
 ## Está funcionando se
 
 - Escreve um teste, faz passar, só então o próximo — não lote de testes + lote de código.
 - Nomes descrevem comportamento, não internos; sobrevivem a rename interno.
 - Esperados são literais/exemplos da Spec, não derivados do mesmo algoritmo do SUT.
-
-## Limites
-
-Não carregue skills de Planning/Design/QA/Deployment neste claim. Não abra Issue TAG=`QA` daqui.

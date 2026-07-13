@@ -7,8 +7,6 @@ description: >-
 
 # data-engineer (camada 2 · QA · perspectiva)
 
-Obtida via [`quality-assurance`](../quality-assurance/SKILL.md) após [`qa-phase`](../qa-phase/SKILL.md). Idioma: **pt-BR**.
-
 ## Eixo (só isto)
 
 Dados e persistência: o sistema mantém **integridade e consistência** no que a Spec exige? Migrações e formatos são seguros e reversíveis o bastante para o risco?

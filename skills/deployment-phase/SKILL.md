@@ -1,8 +1,8 @@
 ---
 name: deployment-phase
 description: >-
-  Disclosure da fase Deployment (pack portátil issues-local): PR/entrega/go-no-go.
-  Use ao claimar Issue com TAG=Deployment (camada 1).
+  Disclosure da fase Deployment: PR/entrega/go-no-go.
+  Use ao claimar Issue com TAG=Deployment.
 ---
 
 # deployment-phase (camada 1)
@@ -17,13 +17,11 @@ PR / entrega / handoff operacional. Gate **G4**: go / no-go de merge.
 
 | Skill | Quando obter |
 |---|---|
-| [`devops-engineer`](../devops-engineer/SKILL.md) | PR, checklist de entrega, handoff operacional e nota go/no-go (G4) |
-
-**Não** carregue orquestração de Planning/Design/Implement/QA neste claim.
+| `devops-engineer` | PR, checklist de entrega, handoff operacional e nota go/no-go (G4) |
 
 A mesma skill `devops-engineer` pode ser reutilizada como perspectiva sob QA (`quality-assurance`); em Deployment ela roda no **modo Entrega**.
 
-Se a skill não estiver instalada no projeto, registre a lacuna em `AWAITING`. Adaptação (repo produtor): `docs/features/common-agent-workflow/ADAPTATION-DEPLOYMENT.md` (e reuso QA em `ADAPTATION-QA.md`).
+Se a skill não estiver instalada no projeto, registre a lacuna em `AWAITING`.
 
 ## Heurísticas
 

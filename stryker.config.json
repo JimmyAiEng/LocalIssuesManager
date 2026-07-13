@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "tap",
+  "tap": {
+    "testFiles": [
+      "test/app/**/*.test.ts",
+      "test/domain/**/*.test.ts",
+      "test/cli/**/*.test.ts"
+    ],
+    "nodeArgs": ["--import", "tsx"],
+    "forceBail": true
+  },
+  "checkers": ["typescript"],
+  "tsconfigFile": "tsconfig.json",
+  "mutate": ["src/**/*.ts"],
+  "reporters": ["clear-text", "progress", "html"],
+  "htmlReporter": {
+    "fileName": "reports/mutation/mutation.html"
+  },
+  "coverageAnalysis": "perTest"
+}

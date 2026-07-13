@@ -40,6 +40,8 @@ test("oldestOpen usa timestamp de entrada em OPEN e desempate estável", () => {
   const queue = new Queue(root());
   const newer = Issue.create({ ...body, project: "p", title: "new" }, "pi", new Date("2026-02-01"));
   const older = Issue.create({ ...body, project: "p", title: "old" }, "pi", new Date("2026-01-01"));
+  newer.id = "newer";
+  older.id = "older";
   queue.save(newer);
   queue.save(older);
   assert.equal(queue.oldestOpen("p")?.id, older.id);

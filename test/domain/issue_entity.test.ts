@@ -39,6 +39,7 @@ test("claim não cria Thread e somente owner move para AWAITING", () => {
     () => issue.await("pi", "feito"),
     (error: unknown) => error instanceof DomainError && error.message === "Only the Owner may await",
   );
+  assert.throws(() => issue.await("codex", "   "), /comment is required/);
   issue.await("codex", "feito", new Date("2026-01-01T02:00:00Z"));
   assert.equal(issue.status, "AWAITING");
   assert.equal(issue.thread.at(-1)?.comment, "feito");

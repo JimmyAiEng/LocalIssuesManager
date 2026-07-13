@@ -112,6 +112,10 @@ test("status rejeita combinações de ator e transições incompletas", () => {
     /IA status supports AWAITING or CLOSED with reason/,
   );
   assert.throws(
+    () => new StatusIssueUseCase(dir).execute({ id: agent.id, agent: "pi", status: "INVALID", comment: "x", closed_reason: "errado" }),
+    /IA status supports AWAITING or CLOSED with reason/,
+  );
+  assert.throws(
     () => new StatusIssueUseCase(dir).execute({ id: agent.id, human: true, status: "AWAITING", comment: "x", closed_reason: "errado" }),
     /Human status supports CLOSED with reason/,
   );
@@ -133,6 +137,10 @@ test("list combina filtros e paginação", () => {
   assert.deepEqual(
     list.execute({ project: "app", status: "OPEN", title: "needle", offset: 1, limit: 1 }).map((issue) => issue.id),
     [filtered[1].id],
+  );
+  assert.deepEqual(
+    list.execute({ project: "app", status: "OPEN", title: "needle", offset: 1 }).map((issue) => issue.id),
+    filtered.slice(1).map((issue) => issue.id),
   );
 });
 

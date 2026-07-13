@@ -1,6 +1,7 @@
 import { CreateIssueUseCase } from "./app/create_issue_use_case.js";
 import { DecideIssueUseCase } from "./app/decide_issue_use_case.js";
 import { GetIssueUseCase } from "./app/get_issue_use_case.js";
+import { InitPackUseCase } from "./app/init_pack_use_case.js";
 import { ListIssuesUseCase } from "./app/list_issues_use_case.js";
 import { NextIssueUseCase } from "./app/next_issue_use_case.js";
 import { ResetClaimUseCase } from "./app/reset_claim_use_case.js";
@@ -32,7 +33,8 @@ function execute(command: string | undefined, options: Options): Result {
   if (command === "reset") return reset(options);
   if (command === "get") return get(options);
   if (command === "list") return list(options);
-  throw new Error("Usage: issues <create|next|status|decide|reset|get|list|web> [flags]");
+  if (command === "init") return init(options);
+  throw new Error("Usage: issues <create|next|status|decide|reset|get|list|web|init> [flags]");
 }
 
 function create(options: Options): Result {
@@ -79,13 +81,18 @@ function list(options: Options): Result {
     limit: optionalNumber(options, "limit"), offset: optionalNumber(options, "offset") });
 }
 
+function init(options: Options): Result {
+  return new InitPackUseCase().execute({ harness: optional(options, "harness"),
+    target: optional(options, "target"), force: Boolean(options.force) });
+}
+
 function parseOptions(args: string[]): Options {
   const options: Options = {};
   for (let index = 0; index < args.length; index++) {
     const key = args[index];
     if (!key.startsWith("--")) throw new Error(`Unexpected argument: ${key}`);
     const name = key.slice(2);
-    if (name === "human" || name === "pretty" || name === "no-open") options[name] = true;
+    if (name === "human" || name === "pretty" || name === "no-open" || name === "force") options[name] = true;
     else options[name] = args[++index] ?? "";
   }
   return options;
@@ -125,5 +132,3 @@ async function launchWeb(options: Options): Promise<void> {
     process.exitCode = 1;
   }
 }
-
-main();

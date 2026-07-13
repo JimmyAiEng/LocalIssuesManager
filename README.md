@@ -8,14 +8,20 @@ Saída padrão: **JSON**. Use `--pretty` para JSON indentado.
 
 ## Instalação
 
+Num projeto consumidor (pacote npm com CLI + pack de skills):
+
+```bash
+npm install @jimmypgomes/issues-local   # ou npm i -g / npx
+npx issues init [--harness claude-code|cursor|codex|pi|all]
+```
+
+O `issues init` instala `AGENTS.md` + `.agents/skills/` e o wiring por harness (ver `skills/INSTALL.md`).
+
+Neste repositório (desenvolvimento):
+
 ```bash
 npm install
 npm link          # opcional: coloca `issues` no PATH
-```
-
-Sem link global:
-
-```bash
 ./bin/issues <comando> [flags]
 ```
 

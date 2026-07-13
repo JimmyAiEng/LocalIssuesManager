@@ -1,3 +1,12 @@
 #!/usr/bin/env node
-import "tsx/esm";
-await import("../src/cli.ts");
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+// ponytail: checkout de dev roda TS direto via tsx; pacote publicado só tem dist/
+const devEntry = new URL("../src/cli.ts", import.meta.url);
+if (existsSync(fileURLToPath(devEntry))) {
+  await import("tsx/esm");
+  (await import("../src/cli.ts")).main();
+} else {
+  (await import("../dist/src/cli.js")).main();
+}

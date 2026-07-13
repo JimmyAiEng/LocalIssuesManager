@@ -125,21 +125,21 @@ test("status rejeita combinações de ator e transições incompletas", () => {
 test("list combina filtros e paginação", () => {
   const dir = root();
   const create = new CreateIssueUseCase(dir);
-  create.execute({ ...body, title: "Needle old", now: new Date("2026-01-01") });
+  create.execute({ ...body, tag: "QA", title: "Needle old", now: new Date("2026-01-01") });
   create.execute({ ...body, title: "Needle middle", now: new Date("2026-01-02") });
-  create.execute({ ...body, title: "Needle new", now: new Date("2026-01-03") });
-  create.execute({ ...body, project: "other", title: "Needle other" });
-  create.execute({ ...body, title: "unrelated" });
+  create.execute({ ...body, tag: "QA", title: "Needle new", now: new Date("2026-01-03") });
+  create.execute({ ...body, tag: "QA", project: "other", title: "Needle other" });
+  create.execute({ ...body, tag: "QA", title: "unrelated" });
 
   const list = new ListIssuesUseCase(dir);
-  const filtered = list.execute({ project: "app", status: "OPEN", title: "needle" });
-  assert.deepEqual(filtered.map((issue) => issue.title).sort(), ["Needle middle", "Needle new", "Needle old"]);
+  const filtered = list.execute({ project: "app", status: "OPEN", title: "needle", tag: "QA" });
+  assert.deepEqual(filtered.map((issue) => issue.title).sort(), ["Needle new", "Needle old"]);
   assert.deepEqual(
-    list.execute({ project: "app", status: "OPEN", title: "needle", offset: 1, limit: 1 }).map((issue) => issue.id),
+    list.execute({ project: "app", status: "OPEN", title: "needle", tag: "QA", offset: 1, limit: 1 }).map((issue) => issue.id),
     [filtered[1].id],
   );
   assert.deepEqual(
-    list.execute({ project: "app", status: "OPEN", title: "needle", offset: 1 }).map((issue) => issue.id),
+    list.execute({ project: "app", status: "OPEN", title: "needle", tag: "QA", offset: 1 }).map((issue) => issue.id),
     filtered.slice(1).map((issue) => issue.id),
   );
 });

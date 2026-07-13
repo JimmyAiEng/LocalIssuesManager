@@ -1,6 +1,6 @@
 import type { Issue, Phase } from "../domain/issue_entity.js";
 import { Queue } from "../domain/queue_repository.js";
-import { parseStatus } from "../domain/value_objects.js";
+import { parseStatus, parseTag } from "../domain/value_objects.js";
 
 export type IssueSummary = {
   id: string; title: string; project: string; tag: string; status: string;
@@ -12,9 +12,10 @@ export class ListIssuesUseCase {
   private readonly queue: Queue;
   constructor(root?: string) { this.queue = new Queue(root); }
 
-  execute(filter: { status?: string; project?: string; title?: string; limit?: number; offset?: number }): IssueSummary[] {
+  execute(filter: { status?: string; project?: string; title?: string; tag?: string; limit?: number; offset?: number }): IssueSummary[] {
     const status = filter.status ? parseStatus(filter.status) : undefined;
-    const issues = this.queue.list({ ...filter, status }).map(summary);
+    const tag = filter.tag ? parseTag(filter.tag) : undefined;
+    const issues = this.queue.list({ ...filter, status, tag }).map(summary);
     const offset = filter.offset ?? 0;
     return filter.limit === undefined ? issues.slice(offset) : issues.slice(offset, offset + filter.limit);
   }

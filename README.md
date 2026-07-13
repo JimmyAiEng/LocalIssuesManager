@@ -169,3 +169,5 @@ npm run check:fitness
 ```
 
 Documentação de produto e design: `PRD.md`, `DESIGN.md`, `CONTEXT.md`.
+
+**Entregável — pack de agentes:** `AGENTS.md` + `skills/` (discovery do workflow de novo desenvolvimento). Portátil para qualquer projeto e harness; instalação em `skills/INSTALL.md`. Spec de origem: `docs/features/common-agent-workflow/`.

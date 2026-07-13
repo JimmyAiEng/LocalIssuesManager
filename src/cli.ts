@@ -5,6 +5,7 @@ import { ListIssuesUseCase } from "./app/list_issues_use_case.js";
 import { NextIssueUseCase } from "./app/next_issue_use_case.js";
 import { ResetClaimUseCase } from "./app/reset_claim_use_case.js";
 import { StatusIssueUseCase } from "./app/status_issue_use_case.js";
+import { openBrowser, startWebServer } from "./web/server.js";
 
 type Options = Record<string, string | boolean>;
 type Result = object | object[] | null;
@@ -13,6 +14,7 @@ export function main(argv = process.argv.slice(2)): void {
   try {
     const [command, ...raw] = argv;
     const options = parseOptions(raw);
+    if (command === "web") return void launchWeb(options);
     const result = execute(command, options);
     print(result, Boolean(options.pretty));
   } catch (error) {
@@ -30,7 +32,7 @@ function execute(command: string | undefined, options: Options): Result {
   if (command === "reset") return reset(options);
   if (command === "get") return get(options);
   if (command === "list") return list(options);
-  throw new Error("Usage: issues <create|next|status|decide|reset|get|list> [flags]");
+  throw new Error("Usage: issues <create|next|status|decide|reset|get|list|web> [flags]");
 }
 
 function create(options: Options): Result {
@@ -73,7 +75,7 @@ function get(options: Options): Result {
 
 function list(options: Options): Result {
   return new ListIssuesUseCase().execute({ status: optional(options, "status"),
-    project: optional(options, "project"), title: optional(options, "title"),
+    project: optional(options, "project"), title: optional(options, "title"), tag: optional(options, "tag"),
     limit: optionalNumber(options, "limit"), offset: optionalNumber(options, "offset") });
 }
 
@@ -83,7 +85,7 @@ function parseOptions(args: string[]): Options {
     const key = args[index];
     if (!key.startsWith("--")) throw new Error(`Unexpected argument: ${key}`);
     const name = key.slice(2);
-    if (name === "human" || name === "pretty") options[name] = true;
+    if (name === "human" || name === "pretty" || name === "no-open") options[name] = true;
     else options[name] = args[++index] ?? "";
   }
   return options;
@@ -110,6 +112,18 @@ function optionalNumber(options: Options, name: string): number | undefined {
 
 function print(result: Result, pretty: boolean): void {
   process.stdout.write(`${JSON.stringify(result, null, pretty ? 2 : 0)}\n`);
+}
+
+async function launchWeb(options: Options): Promise<void> {
+  try {
+    const web = await startWebServer(optionalNumber(options, "port"));
+    process.stdout.write(`Issues web disponível em ${web.url}\n`);
+    if (!options["no-open"]) openBrowser(web.url);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  }
 }
 
 main();

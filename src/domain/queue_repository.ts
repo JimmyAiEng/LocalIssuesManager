@@ -2,9 +2,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Issue, type IssueData } from "./issue_entity.js";
-import type { Status } from "./value_objects.js";
+import type { Status, Tag } from "./value_objects.js";
 
-export type ListFilter = { status?: Status; project?: string; title?: string };
+export type ListFilter = { status?: Status; project?: string; title?: string; tag?: Tag };
 const FOLDERS: Record<Status, string> = {
   OPEN: "open", CLAIMED: "claimed", AWAITING: "awaiting", CLOSED: "closed",
 };
@@ -110,6 +110,7 @@ function projectSegment(project: string): string {
 function matches(issue: Issue, filter: ListFilter): boolean {
   if (filter.project && issue.project !== filter.project) return false;
   if (filter.status && issue.status !== filter.status) return false;
+  if (filter.tag && issue.tag !== filter.tag) return false;
   return !filter.title || issue.title.toLowerCase().includes(filter.title.toLowerCase());
 }
 

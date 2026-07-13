@@ -47,6 +47,15 @@ test("CLI --pretty mantém JSON legível", () => {
   assert.equal(JSON.parse(output)[0].status, "OPEN");
 });
 
+test("CLI lista por TAG sem alterar filtros existentes", () => {
+  const vars = env();
+  run(createArgs, vars);
+  run(createArgs.map((arg) => arg === "Implement" ? "QA" : arg), vars);
+  const issues = JSON.parse(run(["list", "--project", "demo", "--tag", "QA"], vars));
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].tag, "QA");
+});
+
 test("e2e UC-01 e UC-02: validação, rejeição e novo claim", () => {
   const vars = env();
   const humanArgs = createArgs.slice(0, -2).concat("--human");

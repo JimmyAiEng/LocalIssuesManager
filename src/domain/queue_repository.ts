@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { Issue, type IssueData } from "./issue_entity.js";
 import type { Status, Tag } from "./value_objects.js";
@@ -43,7 +43,7 @@ export class Queue {
 
   #move(issue: Issue, previous: string, destination: string): void {
     this.#expectCurrent(previous, issue);
-    execFileSync("mv", [previous, destination]);
+    renameSync(previous, destination);
     writeFileSync(destination, JSON.stringify(issue.toJSON(), null, 2));
   }
 
@@ -88,7 +88,7 @@ export class Queue {
 
   #ensureProject(project: string): void {
     for (const folder of Object.values(FOLDERS)) {
-      execFileSync("mkdir", ["-p", join(this.#root, "projects", projectSegment(project), folder)]);
+      mkdirSync(join(this.#root, "projects", projectSegment(project), folder), { recursive: true });
     }
   }
 
@@ -115,5 +115,5 @@ function matches(issue: Issue, filter: ListFilter): boolean {
 }
 
 function defaultRoot(): string {
-  return process.env.ISSUES_ROOT ?? join(process.env.HOME ?? "~", "issues-manager");
+  return process.env.ISSUES_ROOT ?? join(homedir(), "issues-manager");
 }

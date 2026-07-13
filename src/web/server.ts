@@ -20,8 +20,9 @@ export function startWebServer(port = 0, root?: string): Promise<WebServer> {
 }
 
 export function openBrowser(url: string): void {
-  const command = process.platform === "darwin" ? "open" : "xdg-open";
-  const child = spawn(command, [url], { detached: true, stdio: "ignore" });
+  const [command, ...prefix] = process.platform === "darwin" ? ["open"]
+    : process.platform === "win32" ? ["cmd", "/c", "start", ""] : ["xdg-open"];
+  const child = spawn(command, [...prefix, url], { detached: true, stdio: "ignore" });
   child.once("error", () => undefined);
   child.unref();
 }

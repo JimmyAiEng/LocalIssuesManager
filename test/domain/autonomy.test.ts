@@ -48,8 +48,11 @@ test("Issue HITL: Ticket sem tag de autonomia é rejeitado", () => {
 test("Issue HITL: re-taguear Planning para AFK também é rejeitado", () => {
   const issue = issueWith("HITL");
   issue.addTicket(ticket(issue.id, "Planning", "HITL"));
-  const planningId = issue.tickets.at(-1)!.id;
-  assert.throws(() => issue.tagTicket(planningId, { human_need: "AFK" }), /Planning deve ser HITL/);
+  const planning = issue.tickets.at(-1)!;
+  const revision = issue.revision;
+  assert.throws(() => issue.tagTicket(planning.id, { human_need: "AFK" }), /Planning deve ser HITL/);
+  assert.equal(planning.tags.human_need, "HITL");
+  assert.equal(issue.revision, revision);
 });
 
 test("Issue AFK ou sem tag: sem restrição de autonomia", () => {

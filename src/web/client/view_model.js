@@ -4,6 +4,10 @@ export const TICKET_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy"];
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"];
 export const TAG_VALUES = { complexity: ["BAIXA", "MEDIA", "ALTA"], human_need: ["HITL", "AFK"], risk: ["BAIXO", "MEDIO", "ALTO"] };
 
+export function tagRoute(issueId, scope, ticketId) {
+  return scope === "ticket" ? `/api/issues/${issueId}/tickets/${ticketId}/tags` : `/api/issues/${issueId}/tags`;
+}
+
 const CREATE_FIELDS = ["title", "project", "type", "problem"];
 const TICKET_FIELDS = ["objective", "task", "acceptance_criteria", "type"];
 

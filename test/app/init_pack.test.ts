@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { InitPackUseCase } from "../../src/app/init_pack_use_case.js";
+import { InitPackUseCase, linkPackSkillsForDogfood } from "../../src/app/init_pack_use_case.js";
 
 const target = () => mkdtempSync(join(tmpdir(), "issues-init-"));
 
@@ -20,6 +20,8 @@ test("init instala AGENTS.md versionado, skills e wiring de todos os harnesses",
   assert.equal(existsSync(join(directory, ".agents", "skills", "INSTALL.md")), false);
   assert.ok(existsSync(join(directory, ".claude", "skills", "sdlc-workflow", "SKILL.md")));
   assert.ok(existsSync(join(directory, ".cursor", "skills", "sdlc-workflow", "SKILL.md")));
+  assert.ok(existsSync(join(directory, ".pi", "skills", "sdlc-workflow", "SKILL.md")));
+  assert.ok(existsSync(join(directory, ".codex", "skills", "sdlc-workflow", "SKILL.md")));
   assert.equal(readFileSync(join(directory, "CLAUDE.md"), "utf8"), "@AGENTS.md\n");
   assert.ok(result.installed.length >= 4);
 });
@@ -29,7 +31,7 @@ test("init re-executado atualiza AGENTS.md gerenciado sem exigir --force", () =>
   const first = new InitPackUseCase().execute({ target: directory });
   const again = new InitPackUseCase().execute({ target: directory });
   assert.equal(again.pack_version, first.pack_version);
-  assert.ok(again.notes.some((note) => note.includes("já existe")));
+  assert.ok(again.notes.some((note) => note.includes("já aponta") || note.includes("já existe")));
 });
 
 test("init recusa sobrescrever AGENTS.md alheio sem --force", () => {
@@ -54,5 +56,29 @@ test("init instala só o harness pedido e rejeita harness desconhecido", () => {
   assert.equal(existsSync(join(directory, ".claude")), false);
   assert.equal(existsSync(join(directory, ".cursor")), false);
   assert.ok(existsSync(join(directory, ".agents", "skills")));
+  assert.ok(existsSync(join(directory, ".codex", "skills", "sdlc-workflow", "SKILL.md")));
   assert.throws(() => new InitPackUseCase().execute({ target: target(), harness: "vscode" }), /--harness/);
+});
+
+test("init --harness pi cria .pi/skills apontando para .agents/skills", () => {
+  const directory = target();
+  new InitPackUseCase().execute({ target: directory, harness: "pi" });
+  const link = join(directory, ".pi", "skills");
+  assert.ok(lstatSync(link).isSymbolicLink());
+  assert.equal(readlinkSync(link).replace(/\\/g, "/"), "../.agents/skills");
+});
+
+test("linkPackSkillsForDogfood liga skills/ aos paths dos harnesses sem copiar", () => {
+  const directory = target();
+  mkdirSync(join(directory, "skills", "sdlc-workflow"), { recursive: true });
+  writeFileSync(join(directory, "skills", "sdlc-workflow", "SKILL.md"), "---\nname: sdlc-workflow\ndescription: x\n---\n");
+  writeFileSync(join(directory, "AGENTS.md"), "# pack\n");
+  writeFileSync(join(directory, "package.json"), "{\"version\":\"0.0.0\"}\n");
+
+  const linked = linkPackSkillsForDogfood(directory);
+  assert.ok(linked.length >= 1);
+  assert.ok(lstatSync(join(directory, ".agents", "skills")).isSymbolicLink());
+  assert.equal(readlinkSync(join(directory, ".agents", "skills")).replace(/\\/g, "/"), "../skills");
+  assert.ok(existsSync(join(directory, ".cursor", "skills", "sdlc-workflow", "SKILL.md")));
+  assert.ok(existsSync(join(directory, ".pi", "skills", "sdlc-workflow", "SKILL.md")));
 });

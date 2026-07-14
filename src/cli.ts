@@ -7,7 +7,7 @@ import { DecideTicketUseCase } from "./app/decide_ticket_use_case.js";
 import { GetIssueUseCase } from "./app/get_issue_use_case.js";
 import { GetTicketUseCase } from "./app/get_ticket_use_case.js";
 import { HarnessUseCase } from "./app/harness_use_case.js";
-import { InitPackUseCase } from "./app/init_pack_use_case.js";
+import { InitPackUseCase, linkPackSkillsForDogfood } from "./app/init_pack_use_case.js";
 import { LoopUseCase } from "./app/loop_use_case.js";
 import { ListIssuesUseCase } from "./app/list_issues_use_case.js";
 import { ListTicketsUseCase } from "./app/list_tickets_use_case.js";
@@ -163,6 +163,9 @@ function list(options: Options): Result {
 }
 
 function init(options: Options): Result {
+  if (options.dogfood) {
+    return { linked: linkPackSkillsForDogfood(optional(options, "target")) };
+  }
   return new InitPackUseCase().execute({ harness: optional(options, "harness"),
     target: optional(options, "target"), force: Boolean(options.force) });
 }
@@ -227,7 +230,7 @@ function parseOptions(args: string[]): Options {
     const key = args[index];
     if (!key.startsWith("--")) throw new Error(`Unexpected argument: ${key}`);
     const name = key.slice(2);
-    if (["human", "pretty", "no-open", "force", "cron", "now"].includes(name)) options[name] = true;
+    if (["human", "pretty", "no-open", "force", "cron", "now", "dogfood"].includes(name)) options[name] = true;
     else if (name === "attach") (options.attach = (options.attach as string[] | undefined) ?? []).push(args[++index] ?? "");
     else options[name] = args[++index] ?? "";
   }

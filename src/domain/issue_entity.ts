@@ -99,7 +99,9 @@ export class Issue implements IssueData {
 
   tag(updates: TagUpdates): void {
     if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
-    this.tags = applyTags(this.tags, updates);
+    const tags = applyTags(this.tags, updates);
+    for (const ticket of this.tickets) assertTicketAutonomy(tags.human_need, ticket.type, ticket.tags.human_need);
+    this.tags = tags;
     this.#touch();
   }
 
@@ -118,8 +120,9 @@ export class Issue implements IssueData {
 
   tagTicket(ticketId: string, updates: TagUpdates): void {
     const ticket = this.#ticket(ticketId);
+    const tags = applyTags(ticket.tags, updates);
+    assertTicketAutonomy(this.tags.human_need, ticket.type, tags.human_need);
     ticket.tag(updates);
-    assertTicketAutonomy(this.tags.human_need, ticket.type, ticket.tags.human_need);
     this.#touch();
   }
 

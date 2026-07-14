@@ -28,6 +28,7 @@ export const ISSUE_TYPES: string[];
 export const TICKET_TYPES: string[];
 export const CLOSED_REASONS: string[];
 export const TAG_VALUES: { complexity: string[]; human_need: string[]; risk: string[] };
+export function tagRoute(issueId: string, scope: string, ticketId?: string): string;
 export function filterIssues(issues: IssueCard[], filters: { title: string; project: string; type: string }): IssueCard[];
 export function groupIssues(issues: IssueCard[]): Record<string, IssueCard[]>;
 export function statusAge(issue: IssueCard, now?: Date): string;

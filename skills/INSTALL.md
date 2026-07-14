@@ -14,30 +14,61 @@ O `init` materializa no projeto:
 <projeto>/
 ├── AGENTS.md                 ← entrada do pack, com a versão gravada no cabeçalho
 ├── CLAUDE.md                 ← criado com "@AGENTS.md" se não existir (claude-code)
-├── .agents/skills/<nome>/    ← cópia canônica das skills (padrão aberto Agent Skills)
-├── .claude/skills            ← symlink → .agents/skills (claude-code)
-└── .cursor/skills            ← symlink → .agents/skills (cursor)
+├── .agents/skills/<nome>/    ← cópia canônica das skills (padrão Agent Skills)
+├── .cursor/skills            ← symlink → .agents/skills
+├── .claude/skills            ← symlink → .agents/skills
+├── .codex/skills             ← symlink → .agents/skills
+└── .pi/skills                ← symlink → .agents/skills
 ```
 
-Regra: **uma cópia canônica** em `.agents/skills/`; harnesses só linkam.
+Regra: **uma cópia canônica** em `.agents/skills/`; os demais dirs só linkam.
 Se symlink não estiver disponível (ex.: Windows sem privilégio), o `init` cai para cópia e avisa.
 
-## Por harness
+## Por harness — discovery automática
 
-| Harness | Descoberta |
-|---|---|
-| **Codex** | Lê `AGENTS.md` e `.agents/skills/` nativamente; nada a fazer. |
-| **Claude Code** | Skills via `.claude/skills`; contexto via `CLAUDE.md` → `@AGENTS.md`. |
-| **Cursor** | Lê `AGENTS.md` nativamente; skills via `.cursor/skills`. |
-| **Pi** | Lê `AGENTS.md`; aponte o path de skills do pi para `.agents/skills/`. |
+| Harness | O que o `init` faz | Como o harness descobre |
+|---|---|---|
+| **Cursor** | `.cursor/skills` → `.agents/skills` | Lê `.agents/skills` e `.cursor/skills` (e compat: `.claude`/`.codex`) |
+| **Claude Code** | `.claude/skills` → `.agents/skills` + `CLAUDE.md` | Lê `.claude/skills`; contexto via `CLAUDE.md` → `@AGENTS.md` |
+| **Codex** | `.codex/skills` → `.agents/skills` | Lê `.agents/skills` e `.codex/skills` |
+| **Pi** | `.pi/skills` → `.agents/skills` | Lê `.agents/skills` e `.pi/skills` (após **trust** do projeto: `pi --approve`) |
+
+Não é preciso apontar path manual no Pi: com `.agents/skills` (ou `.pi/skills`) no projeto e trust concedido, as skills entram no system prompt (descrições) e carregam sob demanda.
+
+## Dogfood neste repositório (pack source)
+
+Aqui o source canônico das skills é `skills/` (publicado no npm). Os harnesses **não** leem `skills/` diretamente.
+
+Para descoberta local sem sobrescrever o `AGENTS.md` do pack:
+
+```bash
+npm run skills:link
+# ou: issues init --dogfood
+```
+
+Isso cria (e versiona) os symlinks:
+
+```text
+.agents/skills → ../skills
+.cursor/skills → ../.agents/skills
+.claude/skills → ../.agents/skills
+.pi/skills     → ../.agents/skills
+.codex/skills  → ../.agents/skills
+```
+
+**Não** rode `issues init` (sem `--dogfood`) na raiz deste repo: isso reescreveria `AGENTS.md` com o marcador de pack consumidor.
 
 ## Atualização
 
-Rode o `init` de novo com a versão nova do pacote.
+Rode o `init` de novo com a versão nova do pacote no projeto consumidor.
 `AGENTS.md` gerenciado pelo pack (cabeçalho `<!-- issues-local pack v… -->`) é atualizado no lugar; um `AGENTS.md` seu só é sobrescrito com `--force`.
+Skills em `.agents/skills/` são re-copiadas; links corretos do pack são reutilizados.
+
+Skills extras do consumidor (camada 2) podem viver ao lado em `.agents/skills/<sua-skill>/` — o `init` **sobrescreve** skills com o mesmo nome do pack; use nomes distintos.
 
 ## Verificação rápida
 
-1. Abrir o projeto no harness e confirmar que `AGENTS.md` está no contexto.
-2. `issues list --pretty` responde (CLI no PATH via `npx` ou install global).
-3. Reivindicar trabalho (`issues next --agent <ia>`) e ver a skill `*-phase` do tipo do Ticket ser lida.
+1. Abrir o projeto no harness e confirmar `AGENTS.md` no contexto.
+2. Confirmar skills do pack na UI do harness (Cursor: Customize → Skills; Pi: `/skill:sdlc-workflow` ou listagem no startup).
+3. `issues list --pretty` responde (CLI no PATH via `npx` ou install global).
+4. `issues next --agent <ia>` e ver a skill `*-phase` do tipo do Ticket ser lida.

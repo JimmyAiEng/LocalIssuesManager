@@ -49,7 +49,7 @@ export class LoopUseCase {
   }
 
   #pull(agent: string, project?: string): PulledItem | null {
-    const result = new NextIssueUseCase(this.store.root).execute({ agent, project });
+    const result = new NextIssueUseCase(this.store.root).execute({ agent, project: project ?? "" });
     if (!result) return null;
     const json = JSON.stringify({ issue: result.issue.toJSON(), ticket: result.ticket?.toJSON() ?? null });
     return { json, issue: result.issue.id.slice(0, 8),

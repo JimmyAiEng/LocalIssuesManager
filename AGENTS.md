@@ -2,7 +2,7 @@
 
 **Entregável portátil.** Este arquivo + as skills do pack formam o progressive disclosure do workflow de novo desenvolvimento. Destino: **qualquer projeto** e os harnesses `cursor` · `claude-code` · `codex` · `pi`.
 
-As skills vivem no diretório de skills do harness (padrão do pack: `.agents/skills/<nome>/SKILL.md`). Sempre que este arquivo citar uma skill pelo nome, obtenha-a nesse diretório.
+As skills vivem no path canônico `.agents/skills/<nome>/SKILL.md` (o `issues init` espelha isso em `.cursor`, `.claude`, `.codex` e `.pi`). Sempre que este arquivo citar uma skill pelo nome, obtenha-a nesse diretório — o harness também a lista automaticamente se o wiring estiver correto.
 
 - Idioma: **pt-BR**
 - Tracker: **issues-local** (CLI `issues`)

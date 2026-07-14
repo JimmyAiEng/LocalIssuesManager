@@ -3,7 +3,7 @@ import { api } from "./http.js";
 import { renderBoard, renderDetail, renderError, renderLoading, renderNewIssue, root } from "./view.js";
 import {
   claimIssue, claimTicket, readForm, refreshIssue,
-  submitAction, submitComment, submitCreate, submitCreateTicket, submitTicketAction,
+  submitAction, submitComment, submitCreate, submitCreateTicket, submitTags, submitTicketAction,
 } from "./mutations.js";
 
 export async function refresh() {
@@ -96,6 +96,7 @@ export async function handleSubmit(event) {
   event.preventDefault();
   const form = event.target;
   if (form.id === "comment-form") return submitComment(form);
+  if (form.dataset.tagScope) return submitTags(form);
   readForm(form, form.id === "ticket-create-form" ? state.ticketDraft : state.draft);
   if (form.id === "create-form") return submitCreate();
   if (form.id === "action-form") return submitAction();

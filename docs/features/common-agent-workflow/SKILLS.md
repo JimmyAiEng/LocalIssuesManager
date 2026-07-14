@@ -1,10 +1,10 @@
 # Catálogo de skills — novo desenvolvimento
 
 Status: catálogo vivo.
-Todas as skills estão materializadas em `skills/`.
+Todas as skills estão materializadas em `skills/` (pack source) e descobertas pelos harnesses via `.agents/skills/` (ver `skills/INSTALL.md`).
 
 Decisão YAGNI (2026-07-13): o pack contém **apenas** skills que orientam o uso do workflow (fases, gates, entregáveis, issues-local).
-Skills que ensinavam **como executar** cada fase (wayfinder, tdd, code-review, quality-assurance, perspectivas, etc.) foram removidas; a execução é decisão do agente.
+Skills que ensinavam **como executar** cada fase (wayfinder, tdd, code-review, quality-assurance, perspectivas, etc.) foram removidas; a execução é decisão do agente (ou skills do repo consumidor).
 
 Discovery: **progressive disclosure** em duas camadas (ver `WORKFLOW.md` §5).
 
@@ -28,8 +28,10 @@ Cada uma diz o objetivo da fase, o gate, as heurísticas de processo e como ence
 | `implement-phase` | Implement | Revisão de fatia |
 | `qa-phase` | QA | G3 |
 | `deployment-phase` | Deploy | G4 |
+| `confirmation-phase` | Confirmation (sistema) | Confirmar resolução ou criar Tickets faltantes |
 
 ## Fora deste catálogo (de propósito)
 
-- Skills de execução (como pesquisar, desenhar, implementar, validar, entregar) — decisão do agente (YAGNI).
+- Skills de execução (como pesquisar, desenhar, implementar, validar, entregar) — decisão do agente ou pack do consumidor (YAGNI neste pack).
 - Manutenção / bugfix não é fase: vira Issue de tipo `Fix`/`Refactor`, resolvida pelos Tickets adequados.
+- Docker, SonarQube, loops lint/mutation e análise de PR não são skills deste pack — vivem no tooling do consumer / CI.

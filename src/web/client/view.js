@@ -36,7 +36,7 @@ export function renderDetail() {
   const owner = issue.owner ? `Owner: ${escape(issue.owner)}` : "Sem Owner";
   const closed = issue.closed_reason ? `<section class="box"><h2>Motivo de fechamento</h2><p class="preserve">${escape(issue.closed_reason)}</p></section>` : "";
   const actions = humanActions(issue.status).length ? `<section class="actionbar"><h2>Ações</h2>${actionsPanel(issue)}</section>` : "";
-  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escape(issue.title)}</h1><p class="meta">Projeto: ${escape(issue.project)} · Tipo: ${escape(issue.type)} · ${owner}</p><p class="meta">ID: <code>${escape(issue.id)}</code> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}</header>${closed}${field("Problema", issue.problem)}${field("Artefatos", issue.artifacts)}${criteriaField(issue.acceptance_criteria)}${ticketsSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
+  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escape(issue.title)}</h1><p class="meta">Projeto: ${escape(issue.project)} · Tipo: ${escape(issue.type)} · ${owner}</p><p class="meta">ID: <code>${escape(issue.id)}</code> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}${tagEditor("issue", issue.tags, null, issue.status)}</header>${closed}${field("Problema", issue.problem)}${field("Artefatos", issue.artifacts)}${criteriaField(issue.acceptance_criteria)}${ticketsSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
 }
 
 function commentSection(issue) {
@@ -82,7 +82,18 @@ function ticketsSection(issue) {
 function ticketCard(ticket) {
   const owner = ticket.owner ? `<span class="owner">${escape(ticket.owner)}</span>` : "";
   const references = ticket.references?.trim() ? `<p class="ticket-refs">Referências: ${escape(ticket.references)}</p>` : "";
-  return `<article class="ticket status-${ticket.status}"><header class="ticket-head"><span class="badge status-${ticket.status}">${ticket.status}</span><span class="ticket-type">${escape(ticket.type)}</span>${owner}</header>${tagsMarkup(ticket.tags)}<h3>${escape(ticket.objective)}</h3><p class="preserve ticket-task">${escape(ticket.task)}</p>${references}<details class="ticket-thread"><summary>Thread (${ticket.thread.length})</summary><ol class="thread">${ticket.thread.map(message).join("")}</ol></details>${ticketCommentSection(ticket)}${ticketActionsPanel(ticket)}</article>`;
+  return `<article class="ticket status-${ticket.status}"><header class="ticket-head"><span class="badge status-${ticket.status}">${ticket.status}</span><span class="ticket-type">${escape(ticket.type)}</span>${owner}</header>${tagsMarkup(ticket.tags)}${tagEditor("ticket", ticket.tags, ticket.id, ticket.status)}<h3>${escape(ticket.objective)}</h3><p class="preserve ticket-task">${escape(ticket.task)}</p>${references}<details class="ticket-thread"><summary>Thread (${ticket.thread.length})</summary><ol class="thread">${ticket.thread.map(message).join("")}</ol></details>${ticketCommentSection(ticket)}${ticketActionsPanel(ticket)}</article>`;
+}
+
+function tagEditor(scope, tags, ticketId, status) {
+  if (status === "CLOSED") return "";
+  const ticketAttr = ticketId ? ` data-ticket-id="${ticketId}"` : "";
+  return `<details class="tag-editor"><summary>Classificar ${scope === "issue" ? "Issue" : "Ticket"}</summary><form class="form tag-form" data-tag-scope="${scope}"${ticketAttr}>
+    ${selectInput("complexity", tagLabels.complexity, TAG_VALUES.complexity, tags?.complexity ?? "", "Não alterar")}
+    ${selectInput("human_need", tagLabels.human_need, TAG_VALUES.human_need, tags?.human_need ?? "", "Não alterar")}
+    ${selectInput("risk", tagLabels.risk, TAG_VALUES.risk, tags?.risk ?? "", "Não alterar")}
+    <button ${state.busy ? "disabled" : ""}>Salvar classificação</button>
+  </form></details>`;
 }
 
 function ticketCommentSection(ticket) {
@@ -148,8 +159,8 @@ function textInput(name, label, value, suggestions = []) {
   return `<label>${label}<input name="${name}" value="${escape(value)}"${list} aria-invalid="${Boolean(state.errors[name])}">${fieldError(name)}</label>${datalist}`;
 }
 
-function selectInput(name, label, values, selected) {
-  const optionsHtml = `<option value="">Selecione</option>${values.map((value) => `<option ${value === selected ? "selected" : ""}>${escape(value)}</option>`).join("")}`;
+function selectInput(name, label, values, selected, emptyLabel = "Selecione") {
+  const optionsHtml = `<option value="">${emptyLabel}</option>${values.map((value) => `<option ${value === selected ? "selected" : ""}>${escape(value)}</option>`).join("")}`;
   return `<label>${label}<select name="${name}" aria-invalid="${Boolean(state.errors[name])}">${optionsHtml}</select>${fieldError(name)}</label>`;
 }
 

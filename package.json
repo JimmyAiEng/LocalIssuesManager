@@ -22,7 +22,8 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').cpSync('src/web/client','dist/src/web/client',{recursive:true})\"",
     "prepare": "npm run build",
-    "check:fitness": "node --import tsx --test test/architecture/fitness.test.ts"
+    "check:fitness": "node --import tsx --test test/architecture/fitness.test.ts",
+    "skills:link": "node --import tsx -e \"import { linkPackSkillsForDogfood } from './src/app/init_pack_use_case.ts'; for (const line of linkPackSkillsForDogfood()) console.log(line)\""
   },
   "devDependencies": {
     "@stryker-mutator/core": "^9.6.1",

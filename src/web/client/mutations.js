@@ -1,5 +1,5 @@
 import {
-  classifyMutationError, humanActions, ticketHumanActions,
+  classifyMutationError, humanActions, tagRoute, ticketHumanActions,
   validateClose, validateCreate, validateCreateTicket, validateDecide, validateReset, validateTicketStatus,
 } from "./view_model.js";
 import { clearActionState, emptyDraft, emptyTicketDraft, state } from "./state.js";
@@ -46,6 +46,20 @@ export async function submitCreateTicket() {
     state.ticketDraft = emptyTicketDraft();
     await finishMutation("Ticket criado");
   } catch (error) { failMutation(error); }
+}
+
+export async function submitTags(form) {
+  const body = {};
+  for (const [key, value] of new FormData(form).entries()) if (value) body[key] = String(value);
+  if (!Object.keys(body).length) {
+    state.feedback = { kind: "error", message: "Selecione ao menos uma classificação" };
+    return renderDetail();
+  }
+  state.errors = {};
+  state.busy = true;
+  renderDetail();
+  const path = tagRoute(state.issue.id, form.dataset.tagScope, form.dataset.ticketId);
+  await mutate(path, body, "Classificação atualizada");
 }
 
 export async function submitComment(form) {

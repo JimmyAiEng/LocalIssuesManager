@@ -10,6 +10,7 @@ import {
   humanActions,
   parseChecklist,
   statusAge,
+  tagRoute,
   ticketHumanActions,
   validateClose,
   validateCreate,
@@ -25,6 +26,11 @@ const issues = [
   { id: "going", title: "Needle going", project: "app", type: "QA", status: "ON-GOING", created_at: "2026-01-01T00:00:00Z" },
   { id: "other", title: "Needle other", project: "other", type: "Feat", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" },
 ];
+
+test("rotas de classificação distinguem Issue e Ticket existentes", () => {
+  assert.equal(tagRoute("i1", "issue"), "/api/issues/i1/tags");
+  assert.equal(tagRoute("i1", "ticket", "t1"), "/api/issues/i1/tickets/t1/tags");
+});
 
 test("view model combina filtros por tipo e mantém as cinco colunas ordenadas", () => {
   const filtered = filterIssues(issues, { title: "needle", project: "app", type: "QA" });

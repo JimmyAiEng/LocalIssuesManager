@@ -10,8 +10,8 @@ export type CreateTicket = {
 
 // Grau de autonomia: numa Issue HITL todo Ticket precisa da tag human_need,
 // e os de Planning/Design são obrigatoriamente HITL (não podem ser AFK).
-// Issue AFK ou sem tag não impõe restrição. Choke point único usado na
-// criação (addTicket) e na marcação (tagTicket) do Ticket.
+// Issue AFK ou sem tag não impõe restrição. Validação usada na criação e
+// marcação de Ticket e ao mudar a autonomia da própria Issue.
 export function assertTicketAutonomy(issueHumanNeed: HumanNeed | undefined, type: TicketType, humanNeed: HumanNeed | undefined): void {
   if (issueHumanNeed !== "HITL") return;
   if (!humanNeed) throw new DomainError("Issue HITL: todo Ticket precisa da tag de autonomia (human_need)");

@@ -246,6 +246,14 @@ test("tag valida categoria/valor, mescla e incrementa a revisão", () => {
   assert.throws(() => issue.tag({}), /At least one tag is required/);
 });
 
+test("tag da Issue revalida a autonomia dos Tickets existentes", () => {
+  const issue = Issue.create(input, "pi");
+  issue.claim("pi");
+  issue.addTicket(ticketFor(issue));
+  assert.throws(() => issue.tag({ human_need: "HITL" }), /todo Ticket precisa da tag de autonomia/);
+  assert.deepEqual(issue.tags, {});
+});
+
 test("tagTicket delega ao Ticket; CLOSED é imutável para tags", () => {
   const { issue, ticket } = ongoing();
   const revision = issue.revision;

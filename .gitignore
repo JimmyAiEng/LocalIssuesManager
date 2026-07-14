@@ -1,3 +1,23 @@
+.*
+!.gitignore
+
+# Discovery de skills do pack (symlinks versionados; ver npm run skills:link)
+!.agents/
+.agents/*
+!.agents/skills
+!.cursor/
+.cursor/*
+!.cursor/skills
+!.claude/
+.claude/*
+!.claude/skills
+!.pi/
+.pi/*
+!.pi/skills
+!.codex/
+.codex/*
+!.codex/skills
+
 node_modules/
 dist/
 *.log
@@ -6,7 +26,3 @@ pi-loop/cron.out
 plan.md
 reports/
 .stryker-tmp/
-
-
-.*
-!.gitignore

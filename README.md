@@ -1,8 +1,11 @@
 # WorkflowDev — Issues Locais
 
-Gerenciador local de Issues via CLI, para humanos e agentes (`cursor`, `claude-code`, `codex`, `pi`). O trabalho humano fica em **planejar** e **validar**; as IAs **claimam** e entregam via fila FIFO.
+Gerenciador local de Issues via CLI, para humanos e agentes (`cursor`, `claude-code`, `codex`, `pi`).
+O trabalho humano fica em **planejar** e **validar**; as IAs **claimam** e entregam via fila.
 
 Saída padrão: **JSON**. Use `--pretty` para JSON indentado.
+
+Modelo vigente: **Issue** (agregado tipado) + **Tickets** (fatias tipadas SDLC). Glossário: `CONTEXT.md`.
 
 ---
 
@@ -15,38 +18,51 @@ npm install @jimmypgomes/issues-local   # ou npm i -g / npx
 npx issues init [--harness claude-code|cursor|codex|pi|all]
 ```
 
-O `issues init` instala `AGENTS.md` + `.agents/skills/` e o wiring por harness (ver `skills/INSTALL.md`).
+O `issues init` instala `AGENTS.md` + `.agents/skills/` e cria symlinks de discovery para cada harness (`.cursor`, `.claude`, `.codex`, `.pi`). Detalhes: `skills/INSTALL.md`.
 
-Neste repositório (desenvolvimento):
+Neste repositório (desenvolvimento / pack source):
 
 ```bash
 npm install
 npm link          # opcional: coloca `issues` no PATH
+npm run skills:link   # expõe skills/ nos paths que os harnesses leem
 ./bin/issues <comando> [flags]
 ```
 
-Dados ficam em `~/issues-manager` (ou no caminho de `ISSUES_ROOT`):
+Dados ficam em `~/issues-manager` (ou `ISSUES_ROOT`):
 
 ```text
-~/issues-manager/projects/<projeto>/{open,claimed,awaiting,closed}/<id>.json
+~/issues-manager/projects/<projeto>/{open,claimed,on-going,awaiting,closed}/…
 ```
 
 ---
 
 ## Conceitos rápidos
 
-| Status | Significado |
+### Issue (agregado)
+
+| Campo | Valores |
 |--------|-------------|
-| `OPEN` | Na fila, pronta para claim |
-| `CLAIMED` | Travada por uma IA (`owner`) |
-| `AWAITING` | IA terminou; espera decisão humana |
-| `CLOSED` | Encerrada (não reabre) |
+| Status | `OPEN` · `CLAIMED` · `ON-GOING` · `AWAITING` · `CLOSED` |
+| Tipo (imutável) | `Fix` · `Feat` · `Research` · `Refactor` |
 
-**Agentes:** `cursor` · `claude-code` · `codex` · `pi`  
-**Tags (imutáveis):** `Planning` · `Design` · `Implement` · `QA` · `Deployment` · `Maintenance`  
-**Motivos de fechamento:** `obsoleto` · `duplicado` · `concluido` · `errado`
+`ON-GOING`: Issues com Tickets criados. Só vai a `AWAITING` quando **todos** os Tickets estão `CLOSED`.
 
-`human_presence`: se a Issue foi criada ou tocada por humano, a IA **não** pode fechá-la sozinha a partir de `OPEN`.
+### Ticket (fatia SDLC)
+
+| Campo | Valores |
+|--------|-------------|
+| Status | `OPEN` · `CLAIMED` · `AWAITING` · `CLOSED` (sem `ON-GOING`) |
+| Tipo | `Planning` · `Design` · `Implement` · `QA` · `Deploy` · `Confirmation` (só sistema) |
+
+### Outros
+
+| Conceito | Valores / notas |
+|--------|-------------|
+| Agentes | `cursor` · `claude-code` · `codex` · `pi` |
+| Motivos de fechamento | `obsoleto` · `duplicado` · `concluido` · `errado` |
+| Tags | `complexity` · `human_need` (HITL/AFK) · `risk` |
+| `human_presence` | Se a Issue foi tocada por humano, a IA não fecha a Issue sozinha |
 
 ---
 
@@ -54,38 +70,34 @@ Dados ficam em `~/issues-manager` (ou no caminho de `ISSUES_ROOT`):
 
 | Comando | Função | Obrigatório | Opcional |
 |---------|--------|-------------|----------|
-| **create** | Criar Issue | `--title` `--project` `--type` `--problem` `--acceptance-criteria` + (`--human` \| `--agent`) | `--artifacts` |
-| **next** | Claimar próxima OPEN (FIFO) | `--agent` | `--project` |
+| **create** | Criar Issue | `--title` `--project` `--type` `--problem` + (`--human` \| `--agent`) | `--artifacts` `--acceptance-criteria` |
+| **next** | Claimar próximo trabalho | `--agent` | `--project` |
 | **comment** | Adicionar comentário | `--id` + (`--human` \| `--agent`) | `--comment` `--attach` |
-| **tag** | Adicionar tags | `--id` | `--complexity` `--human-need` `--risk` |
+| **tag** | Tags | `--id` | `--complexity` `--human-need` `--risk` |
 | **status** | Mudar status | `--id` `--status` `--comment` + (`--human` \| `--agent`) | `--reason` |
 | **decide** | Decisão humana (AWAITING) | `--id` `--status` `--comment` `--human` | `--reason` |
 | **reset** | Liberar claim (CLAIMED→OPEN) | `--id` `--comment` `--human` | — |
-| **get** | Detalhe completo | `--id` | — |
+| **get** | Detalhe + Tickets | `--id` | — |
 | **list** | Listar Issues | — | `--status` `--project` `--title` `--type` `--limit` `--offset` |
 
 ### Exemplos — Issues
 
 ```bash
-# Create
-issues create --title "Implementar login" --project "app" --type Implement \
+# Create (tipo da Issue = intenção, não fase SDLC)
+issues create --title "Login com e-mail" --project "app" --type Feat \
   --problem "Usuário não autentica" --acceptance-criteria "Email + senha" --human
 
 # Workflow
-issues next --agent codex --project app                    # Claimar
+issues next --agent codex --project app
 issues status --id <uuid> --agent codex --status AWAITING --comment "Pronto"
 issues decide --id <uuid> --human --status CLOSED --comment "Aceito" --reason concluido
-
-# Rejeitar
-issues decide --id <uuid> --human --status OPEN --comment "Corrigir testes"
-
-# Liberar travada
-issues reset --id <uuid> --human --comment "IA travou"
 
 # Consulta
 issues get --id <uuid> --pretty
 issues list --project app --status OPEN --pretty
 ```
+
+`next` retorna `{ issue, ticket? }`: com `ticket` → trabalhar a fase; sem ticket → decompor a Issue em Tickets.
 
 ---
 
@@ -93,43 +105,45 @@ issues list --project app --status OPEN --pretty
 
 | Comando | Função | Obrigatório | Opcional |
 |---------|--------|-------------|----------|
-| **ticket create** | Criar Ticket (subtarefa de Issue) | `--issue` `--type` `--objective` `--task` `--acceptance-criteria` + (`--human` \| `--agent`) | `--artifacts` `--references` `--depends-on` `--human-need` |
+| **ticket create** | Criar Ticket | `--issue` `--type` `--objective` `--task` `--acceptance-criteria` + (`--human` \| `--agent`) | `--artifacts` `--references` `--depends-on` `--human-need` |
 | **ticket claim** | Claimar Ticket | `--issue` `--id` + (`--human` \| `--agent`) | — |
-| **ticket comment** | Comentário em Ticket | `--issue` `--id` + (`--human` \| `--agent`) | `--comment` `--attach` |
-| **ticket tag** | Tags em Ticket | `--issue` `--id` | `--complexity` `--human-need` `--risk` |
-| **ticket status** | Mudar status Ticket | `--issue` `--id` `--status` `--comment` + (`--human` \| `--agent`) | `--reason` |
-| **ticket decide** | Decisão em Ticket AWAITING | `--issue` `--id` `--status` `--comment` `--human` | `--reason` |
-| **ticket get** | Detalhe Ticket | `--issue` `--id` | — |
-| **ticket list** | Listar Tickets da Issue | `--issue` | `--type` `--status` |
+| **ticket comment** | Comentário | `--issue` `--id` + (`--human` \| `--agent`) | `--comment` `--attach` |
+| **ticket tag** | Tags | `--issue` `--id` | `--complexity` `--human-need` `--risk` |
+| **ticket status** | Mudar status | `--issue` `--id` `--status` `--comment` + (`--human` \| `--agent`) | `--reason` |
+| **ticket decide** | Decisão AWAITING | `--issue` `--id` `--status` `--comment` `--human` | `--reason` |
+| **ticket get** | Detalhe | `--issue` `--id` | — |
+| **ticket list** | Listar | `--issue` | `--type` `--status` |
 
 ---
 
 ## Referência de Comandos — Infraestrutura
 
-**Harness** (conectar CLI a editores/agentes):
+**Harness** (registrar runner para o loop):
 
 ```bash
-issues harness add --name codex --agent codex --command "codex <args>"
+issues harness add --name pi --agent pi --command 'pi -p {prompt} --no-session'
 issues harness list
-issues harness remove --name codex
+issues harness remove --name pi
 ```
 
-**Worktree** (clonar repo para Issue):
+**Worktree** (sandbox git por Issue; manual — o loop ainda não muda o cwd automaticamente):
 
 ```bash
 issues worktree add --id <uuid> [--path <p>]
 issues worktree remove --id <uuid>
 ```
 
-**Loop** (automação recorrente):
+**Loop** (dreno periódico da fila via SO — systemd/cron):
 
 ```bash
-issues loop add --name "daily-qa" --harness codex --interval "0 9 * * *" [--project <p>] [--concurrency <n>]
+issues loop add --name "pi-dev" --harness pi --interval "1h" [--project <p>] [--concurrency <n>]
 issues loop list
-issues loop install --name "daily-qa" [--cron] [--now]
-issues loop run --name "daily-qa"
-issues loop remove --name "daily-qa"
+issues loop install --name "pi-dev" [--cron] [--now]
+issues loop run --name "pi-dev"
+issues loop remove --name "pi-dev"
 ```
+
+Detalhes: `docs/loop.md`.
 
 **Web** (UI local):
 
@@ -137,10 +151,11 @@ issues loop remove --name "daily-qa"
 issues web [--port <n>] [--no-open]
 ```
 
-**Init** (scaffold projeto consumidor):
+**Init** (scaffold consumidor + links de skills):
 
 ```bash
 issues init [--harness claude-code|cursor|codex|pi|all] [--target <dir>] [--force]
+issues init --dogfood   # só no pack source: liga skills/ → paths dos harnesses
 ```
 
 ---
@@ -149,59 +164,53 @@ issues init [--harness claude-code|cursor|codex|pi|all] [--target <dir>] [--forc
 
 | Regra | Efeito |
 |-------|--------|
-| `--human` XOR `--agent` | Comandos que precisam de ator: escolha um, nunca ambos |
-| `--limit`, `--offset`, `--concurrency` | Devem ser inteiros ≥ 0 |
-| `--id` (UUID) | Identifica Issue ou Ticket |
-| `--reason` (fechamento) | Valores: `obsoleto` \| `duplicado` \| `concluido` \| `errado` |
-| `--status` (Issue) | Valores: `OPEN` \| `CLAIMED` \| `AWAITING` \| `CLOSED` |
-| `--status` (Ticket) | Valores: `OPEN` \| `CLAIMED` \| `AWAITING` \| `CLOSED` |
-| `--type` (Issue) | Valores: `Planning` \| `Design` \| `Implement` \| `QA` \| `Deployment` \| `Maintenance` |
-| `--type` (Ticket) | Customizável por projeto |
-| `--complexity`, `--human-need`, `--risk` | Tags opcionais; strings livres |
-| `--depends-on` (Ticket) | CSV de UUIDs; bloqueia `next` até `AWAITING` ou `CLOSED` |
-| `human_presence` | Se Issue criada/tocada por humano, IA não pode fechá-la de `OPEN` sozinha |
-
----
-
-## Fluxo Típico
-
-```
-Humano:  create (--human)
-  ↓
-IA:      next (--agent …)                    → CLAIMED
-  ↓
-IA:      status … --status AWAITING          → AWAITING
-  ↓
-Humano:  decide --status OPEN (retrabalho)  → OPEN → IA: next de novo
-   ou    decide --status CLOSED               → CLOSED
-```
-
-**Atalhos:**
-
-- Claim travada → `reset --human`
-- Issue errada em OPEN → `status --human --status CLOSED --reason …`
-- Mudar fase SDLC → fechar Issue atual e **criar nova** com novo `--type`
+| `--human` XOR `--agent` | Comandos com ator: escolha um |
+| `--limit`, `--offset`, `--concurrency` | Inteiros ≥ 0 |
+| `--reason` (fechamento) | `obsoleto` \| `duplicado` \| `concluido` \| `errado` |
+| `--status` (Issue) | `OPEN` \| `CLAIMED` \| `ON-GOING` \| `AWAITING` \| `CLOSED` |
+| `--status` (Ticket) | `OPEN` \| `CLAIMED` \| `AWAITING` \| `CLOSED` |
+| `--type` (Issue) | `Fix` \| `Feat` \| `Research` \| `Refactor` |
+| `--type` (Ticket) | `Planning` \| `Design` \| `Implement` \| `QA` \| `Deploy` (`Confirmation` só sistema) |
+| `--depends-on` (Ticket) | CSV de UUIDs; `next` só entrega quando deps estão `AWAITING`/`CLOSED` |
+| Tags | `complexity`: BAIXA\|MEDIA\|ALTA · `human_need`: HITL\|AFK · `risk`: BAIXO\|MEDIO\|ALTO |
+| HITL | Em Issue HITL, Planning/Design devem ser HITL; todo Ticket precisa de `human_need` |
 
 ---
 
 ## Fluxo típico
 
 ```text
-humano: create (--human)
-    ↓
-IA:     next (--agent …)          → CLAIMED
-    ↓
-IA:     status … AWAITING         → AWAITING
-    ↓
-humano: decide OPEN  (retrabalho) → OPEN  → next de novo
-   ou   decide CLOSED             → CLOSED
+humano: create (--human)                          → Issue OPEN
+IA:     next --agent <ia>                         → { issue } (decompor) ou { issue, ticket }
+IA:     ticket create … (1º)                      → Issue ON-GOING
+IA:     ticket status … AWAITING                  → gate humano (G1/G2/fatia/…)
+humano: ticket decide OPEN|CLOSED
+… (Planning → Design → Implement* → QA → Deploy)
+sistema: injeta Confirmation ao fechar o último Ticket
+IA:     Confirmation → Issue AWAITING
+humano: decide OPEN|CLOSED na Issue
 ```
+
+`*` vários Tickets `Implement` em paralelo, se fizer sentido.
 
 Atalhos:
 
-- Claim preso → `reset --human`
-- Issue errada ainda `OPEN` → `status --human --status CLOSED --reason …`
-- Avançar de fase SDLC → fechar a Issue atual e **criar outra** com a nova tag (tag não muda)
+- Claim preso → `reset --human` (só `CLAIMED`; não há reset de `ON-GOING`)
+- Retrabalho → `decide OPEN` ou novos Tickets
+- Fechar Issue com Tickets abertos → bloqueado até todos `CLOSED`
+
+---
+
+## Pack de agentes (skills)
+
+| Camada | O quê |
+|--------|--------|
+| 0 | `AGENTS.md` → skill `sdlc-workflow` |
+| 1 | Uma skill `*-phase` por tipo de Ticket claimado |
+
+O pack **não** inclui skills de execução (TDD, review, mutation, Sonar). O *como* executar fica a cargo do agente ou de skills do repo consumidor.
+
+Wiring: `skills/INSTALL.md`. Spec: `docs/features/common-agent-workflow/`.
 
 ---
 
@@ -219,8 +228,7 @@ Atalhos:
 npm test
 npm run typecheck
 npm run check:fitness
+npm run skills:link
 ```
 
-Documentação de produto e design: `PRD.md`, `DESIGN.md`, `CONTEXT.md`.
-
-**Entregável — pack de agentes:** `AGENTS.md` + `skills/` (discovery do workflow de novo desenvolvimento). Portátil para qualquer projeto e harness; instalação em `skills/INSTALL.md`. Spec de origem: `docs/features/common-agent-workflow/`.
+Documentação de domínio: `CONTEXT.md`. Produto/design histórico: `PRD.md` / `DESIGN.md` (preferir modelo v3 Issue+Ticket e este README quando houver conflito).

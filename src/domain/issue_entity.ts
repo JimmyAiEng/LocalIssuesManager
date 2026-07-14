@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AttachmentData } from "./attachment_entity.js";
 import { DomainError } from "./domain_error.js";
-import { Ticket, type TicketData } from "./ticket_entity.js";
+import { Ticket, type CreateTicket, type TicketData } from "./ticket_entity.js";
 import { applyTags, type Actor, type AgentId, type ClosedReason, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type Thread } from "./value_objects.js";
 
 export type Phase = { status: IssueStatus; timestamp: string };
@@ -106,13 +106,17 @@ export class Issue implements IssueData {
   }
 
   transitionTicket(ticketId: string, actor: Actor, status: TicketStatus, comment: string, reason?: ClosedReason, now = new Date()): void {
-    this.#ticket(ticketId).changeStatus(actor, status, comment, reason, now);
+    const ticket = this.#ticket(ticketId);
+    ticket.changeStatus(actor, status, comment, reason, now);
     this.#touch();
+    this.#confirmWhenDone(ticket, actor, now);
   }
 
   decideTicket(ticketId: string, status: "OPEN" | "CLOSED", comment: string, reason?: ClosedReason, now = new Date()): void {
-    this.#ticket(ticketId).decide(status, comment, reason, now);
+    const ticket = this.#ticket(ticketId);
+    ticket.decide(status, comment, reason, now);
     this.#touch();
+    this.#confirmWhenDone(ticket, "human", now);
   }
 
   await(agent: AgentId, comment: string, now = new Date()): void {
@@ -166,6 +170,23 @@ export class Issue implements IssueData {
     const ticket = this.tickets.find((candidate) => candidate.id === ticketId);
     if (!ticket) throw new DomainError(`Ticket not found: ${ticketId}`);
     return ticket;
+  }
+
+  // Destrava a Issue: ao fechar o último Ticket, injeta um Ticket de confirmação
+  // OPEN para a fila (next) reabordar a Issue. Fechar o próprio Confirmation não
+  // recria outro — quebra o loop.
+  #confirmWhenDone(closed: Ticket, actor: Actor, now: Date): void {
+    if (this.status !== "ON-GOING" || closed.status !== "CLOSED") return;
+    if (closed.type === "Confirmation") return;
+    if (!this.tickets.every((ticket) => ticket.status === "CLOSED")) return;
+    this.tickets.push(Ticket.create(Issue.#confirmationTicket(this.id, actor), now)); // mesma operação do close: sem #touch extra
+  }
+
+  static #confirmationTicket(issueId: string, actor: Actor): CreateTicket {
+    return { issue_id: issueId, type: "Confirmation", actor,
+      objective: "Confirmar se a Issue foi resolvida",
+      task: "Verifique se o problema da Issue foi resolvido pelos Tickets concluídos. Se sim, mova a Issue para AWAITING; se não, crie os Tickets necessários para concluir o trabalho.",
+      acceptance_criteria: "Issue movida para AWAITING com o resumo da verificação, ou novos Tickets cobrindo o trabalho restante." };
   }
 
   #transition(status: IssueStatus, actor: Actor, comment: string, reason: ClosedReason | null, now: Date): void {

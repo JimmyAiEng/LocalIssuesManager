@@ -31,6 +31,7 @@ Camada 0: estágios, gates, paralelismo, Review≠QA. **Não** carregue o catál
 | `Implement` | `implement-phase` |
 | `QA` | `qa-phase` |
 | `Deploy` | `deployment-phase` |
+| `Confirmation` | `confirmation-phase` |
 
 4. A skill de fase diz o que a fase entrega e como fechá-la; o **como** executar é decisão do agente.
 5. Skills de outras fases ficam fora do contexto.
@@ -67,7 +68,8 @@ Ticket (grupo `ticket`; um Ticket pertence a exatamente uma Issue):
 Agentes: `cursor` · `claude-code` · `codex` · `pi`  
 Motivos: `obsoleto` · `duplicado` · `concluido` · `errado`  
 Tipo da Issue (imutável): `Fix` · `Feat` · `Research` · `Refactor`  
-Tipo do Ticket: `Planning` · `Design` · `Implement` · `QA` · `Deploy`
+Tipo do Ticket: `Planning` · `Design` · `Implement` · `QA` · `Deploy`  
+`Confirmation` é gerado pelo sistema (não se cria manualmente): ao fechar o último Ticket de uma Issue `ON-GOING`, um Ticket `Confirmation` `OPEN` é injetado para reabordar a Issue na fila.
 
 ```text
 humano: create (--human)

@@ -24,6 +24,13 @@ const ongoing = (actor: "pi" | "codex" = "pi") => {
   return { issue, ticket };
 };
 
+const closeConfirmation = (issue: Issue, actor: "pi" | "codex" = "pi") => {
+  const conf = issue.tickets.find((candidate) => candidate.type === "Confirmation");
+  if (!conf) throw new Error("Ticket de confirmação ausente");
+  issue.claimTicket(conf.id, actor);
+  issue.transitionTicket(conf.id, actor, "CLOSED", "verificado", "concluido");
+};
+
 test("cria Issue OPEN com defaults, revisão zero e sem Tickets", () => {
   const issue = Issue.create(input, "human", new Date("2026-01-01T00:00:00Z"));
   assert.equal(issue.status, "OPEN");
@@ -123,9 +130,37 @@ test("await exige ON-GOING, dono e todos os Tickets CLOSED", () => {
 
   issue.claimTicket(ticket.id, "pi");
   issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  assert.throws(() => issue.await("pi", "cedo"), /All Tickets must be CLOSED/); // Confirmation ainda OPEN
+  closeConfirmation(issue);
   issue.await("pi", "tudo pronto", new Date("2026-03-01T00:00:00Z"));
   assert.equal(issue.status, "AWAITING");
   assert.equal(issue.thread.at(-1)?.comment, "tudo pronto");
+});
+
+test("fechar o último Ticket injeta um Confirmation OPEN e destrava a Issue", () => {
+  const { issue, ticket } = ongoing();
+  issue.claimTicket(ticket.id, "pi");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  const confirmation = issue.tickets.find((candidate) => candidate.type === "Confirmation");
+  assert.ok(confirmation, "Confirmation deve ser criado ao fechar o último Ticket");
+  assert.equal(confirmation?.status, "OPEN");
+  assert.equal(issue.tickets.length, 2);
+});
+
+test("fechar o próprio Confirmation não gera outro (quebra o loop)", () => {
+  const { issue, ticket } = ongoing();
+  issue.claimTicket(ticket.id, "pi");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  closeConfirmation(issue);
+  assert.equal(issue.tickets.filter((candidate) => candidate.type === "Confirmation").length, 1);
+});
+
+test("não injeta Confirmation enquanto restam Tickets abertos (entre fases)", () => {
+  const { issue, ticket } = ongoing();
+  issue.addTicket(ticketFor(issue));
+  issue.claimTicket(ticket.id, "pi");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  assert.equal(issue.tickets.some((candidate) => candidate.type === "Confirmation"), false);
 });
 
 test("reset só age em CLAIMED e nunca em ON-GOING", () => {
@@ -145,6 +180,7 @@ test("decisão humana fecha a Issue AWAITING com motivo", () => {
   const { issue, ticket } = ongoing();
   issue.claimTicket(ticket.id, "pi");
   issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  closeConfirmation(issue);
   issue.await("pi", "entregue");
   issue.decide("CLOSED", "aceito", "concluido");
   assert.equal(issue.status, "CLOSED");

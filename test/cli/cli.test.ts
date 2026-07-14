@@ -70,6 +70,11 @@ test("e2e: ciclo Issue+Ticket via CLI até CLOSED", () => {
   assert.equal(claimed.ticket.status, "CLAIMED");
   run(["ticket", "status", "--issue", created.id, "--id", tid, "--agent", "pi",
     "--status", "CLOSED", "--comment", "feito", "--reason", "concluido"], vars);
+  const cid = JSON.parse(run(["get", "--id", created.id], vars)).tickets
+    .find((ticket: { type: string }) => ticket.type === "Confirmation").id;
+  run(["ticket", "claim", "--issue", created.id, "--id", cid, "--agent", "pi"], vars);
+  run(["ticket", "status", "--issue", created.id, "--id", cid, "--agent", "pi",
+    "--status", "CLOSED", "--comment", "verificado", "--reason", "concluido"], vars);
   run(["status", "--id", created.id, "--agent", "pi", "--status", "AWAITING", "--comment", "pronto"], vars);
   const closed = JSON.parse(run(["decide", "--id", created.id, "--human", "--status", "CLOSED",
     "--comment", "aceito", "--reason", "concluido"], vars));

@@ -22,7 +22,7 @@ test("VOs aceitam somente os enums exatos", () => {
 
 test("enums novos carregam exatamente os valores esperados", () => {
   assert.deepEqual([...ISSUE_TYPES], ["Fix", "Feat", "Research", "Refactor"]);
-  assert.deepEqual([...TICKET_TYPES], ["Planning", "Design", "Implement", "QA", "Deploy"]);
+  assert.deepEqual([...TICKET_TYPES], ["Planning", "Design", "Implement", "QA", "Deploy", "Confirmation"]);
   assert.deepEqual([...ISSUE_STATUSES], ["OPEN", "CLAIMED", "ON-GOING", "AWAITING", "CLOSED"]);
   assert.deepEqual([...TICKET_STATUSES], ["OPEN", "CLAIMED", "AWAITING", "CLOSED"]);
   assert.throws(() => parseTicketStatus("ON-GOING"), /Invalid ticket status: ON-GOING/);

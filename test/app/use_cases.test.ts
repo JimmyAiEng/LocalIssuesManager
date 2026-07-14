@@ -24,6 +24,13 @@ const root = () => mkdtempSync(join(tmpdir(), "issues-test-"));
 const addTicket = (dir: string, issueId: string, actor = "pi") =>
   new CreateTicketUseCase(dir).execute({ ...ticketBody, issueId, actor }).tickets.at(-1)!.id;
 
+const closeConfirmation = (dir: string, issueId: string, actor = "pi") => {
+  const conf = new GetIssueUseCase(dir).execute(issueId).tickets.find((t) => t.type === "Confirmation")!;
+  new ClaimTicketUseCase(dir).execute({ issueId, ticketId: conf.id, actor });
+  new StatusTicketUseCase(dir).execute({ issueId, ticketId: conf.id, actor,
+    status: "CLOSED", comment: "verificado", closed_reason: "concluido" });
+};
+
 test("next prioriza Ticket de Issue ON-GOING antes de abrir nova Issue", () => {
   const dir = root();
   const create = new CreateIssueUseCase(dir);
@@ -57,6 +64,7 @@ test("ciclo completo Issue+Ticket até CLOSED via decisão humana", () => {
   new NextIssueUseCase(dir).execute({ agent: "pi", project: "app" });
   new StatusTicketUseCase(dir).execute({ issueId: issue.id, ticketId, actor: "pi",
     status: "CLOSED", comment: "feito", closed_reason: "concluido" });
+  closeConfirmation(dir, issue.id);
   new StatusIssueUseCase(dir).execute({ id: issue.id, agent: "pi", status: "AWAITING", comment: "pronto" });
   new DecideIssueUseCase(dir).execute({ id: issue.id, human: true, status: "CLOSED", comment: "ok", closed_reason: "concluido" });
   const full = new GetIssueUseCase(dir).execute(issue.id);
@@ -74,6 +82,16 @@ test("await da Issue é recusado enquanto houver Ticket não CLOSED", () => {
     /All Tickets must be CLOSED/,
   );
   assert.equal(new GetIssueUseCase(dir).execute(issue.id).status, "ON-GOING");
+});
+
+test("CreateTicket recusa o tipo Confirmation (gerado pelo sistema)", () => {
+  const dir = root();
+  const issue = new CreateIssueUseCase(dir).execute({ ...body, title: "guard" });
+  new NextIssueUseCase(dir).execute({ agent: "pi", project: "app" });
+  assert.throws(
+    () => new CreateTicketUseCase(dir).execute({ ...ticketBody, type: "Confirmation", issueId: issue.id, actor: "pi" }),
+    /Confirmation Tickets são gerados pelo sistema/,
+  );
 });
 
 test("ClaimTicket humano, decisão humana e get/list de Tickets", () => {

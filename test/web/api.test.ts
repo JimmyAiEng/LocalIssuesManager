@@ -126,6 +126,9 @@ async function createAwaiting(url: string, root: string): Promise<string> {
   const tid = tickets[0].id;
   new ClaimTicketUseCase(root).execute({ issueId: id, ticketId: tid, actor: "pi" });
   new StatusTicketUseCase(root).execute({ issueId: id, ticketId: tid, actor: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" });
+  const conf = ((await request(url, "GET", `/api/issues/${id}`)).body.tickets as { id: string; type: string }[]).find((ticket) => ticket.type === "Confirmation")!;
+  new ClaimTicketUseCase(root).execute({ issueId: id, ticketId: conf.id, actor: "pi" });
+  new StatusTicketUseCase(root).execute({ issueId: id, ticketId: conf.id, actor: "pi", status: "CLOSED", comment: "verificado", closed_reason: "concluido" });
   new StatusIssueUseCase(root).execute({ id, agent: "pi", status: "AWAITING", comment: "feito" });
   return id;
 }

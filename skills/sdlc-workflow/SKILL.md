@@ -17,6 +17,7 @@ Válido em **qualquer projeto** que use este pack + issues-local.
 - **Ticket** é uma **fatia tipada** da solução (`TicketType`: `Planning` · `Design` · `Implement` · `QA` · `Deploy`); o **tipo do Ticket** carrega a fase SDLC e roteia a skill.
 - Uma Issue `CLAIMED` é **decomposta** em Tickets; ao criar o **1º** Ticket ela vai a `ON-GOING`.
 - A Issue só avança `ON-GOING → AWAITING` quando **todos** os seus Tickets estão `CLOSED`.
+- **Destrava automática:** ao fechar o **último** Ticket de uma Issue `ON-GOING`, o sistema injeta um Ticket `Confirmation` `OPEN`. Ele reabre a Issue na fila para o agente confirmar a resolução (→ `AWAITING`) ou criar os Tickets que faltam. Sem ele, a Issue ficaria presa em `ON-GOING` sem Tickets `OPEN`. Fechar o próprio `Confirmation` não gera outro. Roteia para `confirmation-phase`.
 - Fila `next`: prioriza o Ticket `OPEN` mais antigo (FIFO) de Issues `ON-GOING`; se não houver, reivindica a Issue `OPEN` mais antiga para decompor. Retorno: `{ issue, ticket? }`.
 
 ## Caminho feliz

@@ -23,6 +23,12 @@ function ongoingIssue(queue: Queue, project: string, id: string, ticketDate: Dat
   return { issue, ticket };
 }
 
+const closeConfirmation = (issue: Issue, actor: "pi" | "codex" = "pi") => {
+  const conf = issue.tickets.find((candidate) => candidate.type === "Confirmation")!;
+  issue.claimTicket(conf.id, actor);
+  issue.transitionTicket(conf.id, actor, "CLOSED", "verificado", "concluido");
+};
+
 test("oldestOpenTicket omite Ticket cuja dependência não está AWAITING/CLOSED", () => {
   const queue = new Queue(root());
   const issue = Issue.create({ ...body, project: "p" }, "pi");
@@ -152,6 +158,7 @@ test("pastas AWAITING e CLOSED preservam a separação por status", () => {
   const { issue, ticket } = ongoingIssue(queue, "p", "awaiting", new Date("2026-01-01"));
   issue.claimTicket(ticket.id, "pi");
   issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  closeConfirmation(issue);
   issue.await("pi", "review");
   queue.save(issue);
   const closed = Issue.create({ ...body, project: "p", title: "closed" }, "pi");
@@ -265,6 +272,7 @@ test("blob de anexo é gravado fora das pastas de status e sobrevive à transiç
   // move a Issue de ongoing -> awaiting (renomeia a pasta do JSON)
   issue.claimTicket(ticket.id, "pi");
   issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  closeConfirmation(issue);
   issue.await("pi", "pronto");
   queue.save(issue);
 

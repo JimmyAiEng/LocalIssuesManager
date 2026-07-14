@@ -4,7 +4,7 @@ import { DomainError } from "./domain_error.js";
 export const AGENT_IDS = ["cursor", "claude-code", "codex", "pi"] as const;
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"] as const;
 export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"] as const;
-export const TICKET_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy"] as const;
+export const TICKET_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy", "Confirmation"] as const;
 export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "ON-GOING", "AWAITING", "CLOSED"] as const;
 export const TICKET_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "CLOSED"] as const;
 

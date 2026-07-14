@@ -125,6 +125,22 @@ test("e2e: comment --attach anexa mídia na Thread (repetível)", () => {
   assert.equal(attachments[0].filename, "shot.png");
 });
 
+test("e2e: tag insere complexidade/humano/risco em Issue e Ticket; valor inválido falha", () => {
+  const vars = env();
+  const created = JSON.parse(run(createArgs, vars));
+  run(["next", "--agent", "pi", "--project", "demo"], vars);
+  const tid = JSON.parse(run(ticketArgs(created.id), vars)).tickets[0].id;
+  const tagged = JSON.parse(run(["tag", "--id", created.id,
+    "--complexity", "ALTA", "--human-need", "AFK", "--risk", "BAIXO"], vars));
+  assert.deepEqual(tagged.tags, { complexity: "ALTA", human_need: "AFK", risk: "BAIXO" });
+  const ticketTagged = JSON.parse(run(["ticket", "tag", "--issue", created.id, "--id", tid,
+    "--complexity", "MEDIA", "--human-need", "HITL", "--risk", "ALTO"], vars));
+  assert.deepEqual(ticketTagged.tickets[0].tags, { complexity: "MEDIA", human_need: "HITL", risk: "ALTO" });
+  const bad = spawnSync(bin, ["tag", "--id", created.id, "--risk", "ENORME"], { env: vars, encoding: "utf8" });
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /Invalid risk: ENORME/);
+});
+
 test("e2e: reset humano libera Issue CLAIMED e subcomando ticket inválido falha", () => {
   const vars = env();
   const created = JSON.parse(run(createArgs, vars));

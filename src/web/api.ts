@@ -10,6 +10,7 @@ import { ListIssuesUseCase } from "../app/list_issues_use_case.js";
 import { ResetClaimUseCase } from "../app/reset_claim_use_case.js";
 import { StatusIssueUseCase } from "../app/status_issue_use_case.js";
 import { StatusTicketUseCase } from "../app/status_ticket_use_case.js";
+import { TagUseCase } from "../app/tag_use_case.js";
 import { Queue } from "../domain/queue_repository.js";
 
 type Body = Record<string, unknown>;
@@ -42,6 +43,7 @@ async function dispatch(request: IncomingMessage, response: ServerResponse, root
   if (request.method !== "POST") return respond(response, 404, { error: "Not found" });
   if (route.length === 0) return create(response, body, root);
   if (route.length === 2 && route[1] === "comment") return comment(response, route[0], undefined, body, root);
+  if (route.length === 2 && route[1] === "tags") return tag(response, route[0], undefined, body, root);
   if (route.length === 2 && route[1] === "tickets") return createTicket(response, route[0], body, root);
   if (route.length === 4 && route[1] === "tickets") return ticketAction(response, route, body, root);
   if (route[1] === "close") return close(response, route[0], body, root);
@@ -80,7 +82,14 @@ function ticketAction(response: ServerResponse, route: string[], body: Body, roo
   if (route[3] === "status") return statusTicket(response, route[0], route[2], body, root);
   if (route[3] === "decision") return decideTicket(response, route[0], route[2], body, root);
   if (route[3] === "comment") return comment(response, route[0], route[2], body, root);
+  if (route[3] === "tags") return tag(response, route[0], route[2], body, root);
   respond(response, 404, { error: "Not found" });
+}
+
+function tag(response: ServerResponse, id: string, ticketId: string | undefined, body: Body, root?: string): void {
+  const issue = new TagUseCase(root).execute({ issueId: id, ticketId,
+    complexity: optionalText(body, "complexity"), human_need: optionalText(body, "human_need"), risk: optionalText(body, "risk") });
+  respond(response, 200, issue.toJSON());
 }
 
 function comment(response: ServerResponse, id: string, ticketId: string | undefined, body: Body, root?: string): void {

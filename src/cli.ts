@@ -13,6 +13,7 @@ import { NextIssueUseCase } from "./app/next_issue_use_case.js";
 import { ResetClaimUseCase } from "./app/reset_claim_use_case.js";
 import { StatusIssueUseCase } from "./app/status_issue_use_case.js";
 import { StatusTicketUseCase } from "./app/status_ticket_use_case.js";
+import { TagUseCase } from "./app/tag_use_case.js";
 import { openBrowser, startWebServer } from "./web/server.js";
 
 type Options = Record<string, string | boolean | string[]>;
@@ -39,24 +40,26 @@ function execute(command: string | undefined, options: Options): Result {
   if (command === "create") return create(options);
   if (command === "next") return next(options);
   if (command === "comment") return comment(options);
+  if (command === "tag") return tag(options);
   if (command === "status") return status(options);
   if (command === "decide") return decide(options);
   if (command === "reset") return reset(options);
   if (command === "get") return get(options);
   if (command === "list") return list(options);
   if (command === "init") return init(options);
-  throw new Error("Usage: issues <create|next|comment|status|decide|reset|get|list|ticket|web|init> [flags]");
+  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|get|list|ticket|web|init> [flags]");
 }
 
 function ticket(sub: string | undefined, options: Options): Result {
   if (sub === "create") return ticketCreate(options);
   if (sub === "claim") return ticketClaim(options);
   if (sub === "comment") return ticketComment(options);
+  if (sub === "tag") return ticketTag(options);
   if (sub === "status") return ticketStatus(options);
   if (sub === "decide") return ticketDecide(options);
   if (sub === "get") return ticketGet(options);
   if (sub === "list") return ticketList(options);
-  throw new Error("Usage: issues ticket <create|claim|comment|status|decide|get|list> [flags]");
+  throw new Error("Usage: issues ticket <create|claim|comment|tag|status|decide|get|list> [flags]");
 }
 
 function create(options: Options): Result {
@@ -80,6 +83,12 @@ function comment(options: Options): Result {
   const actor = options.human ? "human" : value(options, "agent");
   return new CommentUseCase().execute({ issueId: value(options, "id"),
     comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor }).toJSON();
+}
+
+function tag(options: Options): Result {
+  return new TagUseCase().execute({ issueId: value(options, "id"),
+    complexity: optional(options, "complexity"), human_need: optional(options, "human-need"),
+    risk: optional(options, "risk") }).toJSON();
 }
 
 function status(options: Options): Result {
@@ -137,6 +146,12 @@ function ticketComment(options: Options): Result {
   const actor = options.human ? "human" : value(options, "agent");
   return new CommentUseCase().execute({ issueId: value(options, "issue"), ticketId: value(options, "id"),
     comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor }).toJSON();
+}
+
+function ticketTag(options: Options): Result {
+  return new TagUseCase().execute({ issueId: value(options, "issue"), ticketId: value(options, "id"),
+    complexity: optional(options, "complexity"), human_need: optional(options, "human-need"),
+    risk: optional(options, "risk") }).toJSON();
 }
 
 function ticketStatus(options: Options): Result {

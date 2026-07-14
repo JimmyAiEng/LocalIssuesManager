@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AttachmentData } from "./attachment_entity.js";
 import { DomainError } from "./domain_error.js";
 import { Ticket, type TicketData } from "./ticket_entity.js";
-import type { Actor, AgentId, ClosedReason, IssueStatus, IssueType, TicketStatus, Thread } from "./value_objects.js";
+import { applyTags, type Actor, type AgentId, type ClosedReason, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type Thread } from "./value_objects.js";
 
 export type Phase = { status: IssueStatus; timestamp: string };
 export type CreateIssue = {
@@ -14,7 +14,7 @@ export type IssueData = {
   artifacts: string; acceptance_criteria: string; status: IssueStatus; owner: AgentId | null;
   closed_reason: ClosedReason | null; claimed_at: string | null; created_at: string;
   status_changed_at: string; human_presence: boolean; thread: Thread[]; phases: Phase[];
-  tickets: TicketData[]; revision: number;
+  tickets: TicketData[]; revision: number; tags: Tags;
 };
 
 const required = (value: string, name: string) => {
@@ -27,11 +27,12 @@ export class Issue implements IssueData {
   status!: IssueStatus; owner!: AgentId | null; closed_reason!: ClosedReason | null;
   claimed_at!: string | null; created_at!: string; status_changed_at!: string;
   human_presence!: boolean; thread!: Thread[]; phases!: Phase[];
-  tickets!: Ticket[]; revision!: number; baseRevision!: number;
+  tickets!: Ticket[]; revision!: number; tags!: Tags; baseRevision!: number;
 
   private constructor(data: IssueData) {
     Object.assign(this, data);
     this.tickets = data.tickets.map((ticket) => Ticket.fromJSON(ticket));
+    this.tags = data.tags ?? {};
     this.baseRevision = data.revision;
   }
 
@@ -46,7 +47,7 @@ export class Issue implements IssueData {
     return { ...input, artifacts: input.artifacts ?? "", acceptance_criteria: input.acceptance_criteria ?? "",
       id: randomUUID(), status: "OPEN", owner: null, closed_reason: null, claimed_at: null,
       created_at: timestamp, status_changed_at: timestamp, human_presence: actor === "human",
-      thread: [entry], phases: [{ status: "OPEN", timestamp }], tickets: [], revision: 0 };
+      thread: [entry], phases: [{ status: "OPEN", timestamp }], tickets: [], revision: 0, tags: {} };
   }
 
   static fromJSON(data: IssueData): Issue {
@@ -85,6 +86,17 @@ export class Issue implements IssueData {
 
   commentTicket(ticketId: string, actor: Actor, comment: string, attachments: AttachmentData[] = [], now = new Date()): void {
     this.#ticket(ticketId).comment(actor, comment, attachments, now);
+    this.#touch();
+  }
+
+  tag(updates: TagUpdates): void {
+    if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
+    this.tags = applyTags(this.tags, updates);
+    this.#touch();
+  }
+
+  tagTicket(ticketId: string, updates: TagUpdates): void {
+    this.#ticket(ticketId).tag(updates);
     this.#touch();
   }
 

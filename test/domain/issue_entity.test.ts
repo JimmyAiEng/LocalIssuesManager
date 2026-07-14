@@ -200,6 +200,27 @@ test("commentTicket delega ao Ticket e incrementa a revisão da Issue", () => {
   assert.throws(() => issue.commentTicket("nope", "pi", "x"), /Ticket not found: nope/);
 });
 
+test("tag valida categoria/valor, mescla e incrementa a revisão", () => {
+  const issue = Issue.create(input, "pi");
+  issue.tag({ complexity: "ALTA" });
+  issue.tag({ human_need: "AFK", risk: "BAIXO" });
+  assert.deepEqual(issue.tags, { complexity: "ALTA", human_need: "AFK", risk: "BAIXO" });
+  assert.equal(issue.revision, 2);
+  assert.throws(() => issue.tag({ risk: "GIGANTE" }), (error: unknown) => error instanceof DomainError && error.message === "Invalid risk: GIGANTE");
+  assert.throws(() => issue.tag({}), /At least one tag is required/);
+});
+
+test("tagTicket delega ao Ticket; CLOSED é imutável para tags", () => {
+  const { issue, ticket } = ongoing();
+  const revision = issue.revision;
+  issue.tagTicket(ticket.id, { complexity: "MEDIA" });
+  assert.deepEqual(issue.tickets[0].tags, { complexity: "MEDIA" });
+  assert.equal(issue.revision, revision + 1);
+  const closed = Issue.create(input, "pi");
+  closed.closeByAgent("pi", "errada", "errado");
+  assert.throws(() => closed.tag({ risk: "ALTO" }), /CLOSED aggregate is immutable/);
+});
+
 test("fromJSON hidrata Tickets como entidades e toJSON os serializa", () => {
   const { issue } = ongoing();
   const clone = Issue.fromJSON(issue.toJSON());

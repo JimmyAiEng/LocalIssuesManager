@@ -102,6 +102,19 @@ test("API rejeita anexo com mediaType não suportado", async () => withWeb(async
   assert.equal(result.status, 400);
 }));
 
+test("API grava tags em Issue e Ticket e rejeita valor inválido", async () => withWeb(async (url, root) => {
+  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
+  const tagged = await request(url, "POST", `/api/issues/${id}/tags`, { complexity: "ALTA", human_need: "HITL", risk: "MEDIO" });
+  assert.equal(tagged.status, 200);
+  assert.deepEqual(tagged.body.tags, { complexity: "ALTA", human_need: "HITL", risk: "MEDIO" });
+  new NextIssueUseCase(root).execute({ agent: "pi" });
+  const tid = ((await request(url, "POST", `/api/issues/${id}/tickets`, ticketInput)).body.tickets as { id: string }[])[0].id;
+  const ticketTagged = await request(url, "POST", `/api/issues/${id}/tickets/${tid}/tags`, { risk: "ALTO" });
+  assert.equal(ticketTagged.status, 200);
+  assert.deepEqual((ticketTagged.body.tickets as { id: string; tags: object }[]).find((t) => t.id === tid)!.tags, { risk: "ALTO" });
+  assert.equal((await request(url, "POST", `/api/issues/${id}/tags`, { complexity: "GIGANTE" })).status, 400);
+}));
+
 function ticketOf(issue: Record<string, unknown>, tid: string): { status: string } {
   return (issue.tickets as { id: string; status: string }[]).find((ticket) => ticket.id === tid)!;
 }

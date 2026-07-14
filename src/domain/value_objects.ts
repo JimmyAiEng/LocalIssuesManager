@@ -16,6 +16,30 @@ export type IssueStatus = (typeof ISSUE_STATUSES)[number];
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
 export type Actor = "human" | AgentId;
 
+export const TAG_VALUES = {
+  complexity: ["BAIXA", "MEDIA", "ALTA"],
+  human_need: ["HITL", "AFK"],
+  risk: ["BAIXO", "MEDIO", "ALTO"],
+} as const satisfies Record<string, readonly string[]>;
+
+export type TagCategory = keyof typeof TAG_VALUES;
+export type Tags = { [K in TagCategory]?: (typeof TAG_VALUES)[K][number] };
+export type TagUpdates = Partial<Record<TagCategory, string>>;
+
+export function applyTags(current: Tags, updates: TagUpdates): Tags {
+  const result: Tags = { ...current };
+  let changed = false;
+  for (const category of Object.keys(TAG_VALUES) as TagCategory[]) {
+    const value = updates[category];
+    if (value === undefined) continue;
+    if (!TAG_VALUES[category].includes(value as never)) throw new DomainError(`Invalid ${category}: ${value}`);
+    result[category] = value as never;
+    changed = true;
+  }
+  if (!changed) throw new DomainError("At least one tag is required");
+  return result;
+}
+
 export type Thread = {
   actor: Actor;
   timestamp: string;

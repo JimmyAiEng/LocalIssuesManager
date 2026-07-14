@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AttachmentData } from "./attachment_entity.js";
 import { DomainError } from "./domain_error.js";
-import type { Actor, ClosedReason, Thread, TicketStatus, TicketType } from "./value_objects.js";
+import { applyTags, type Actor, type ClosedReason, type Tags, type TagUpdates, type Thread, type TicketStatus, type TicketType } from "./value_objects.js";
 
 export type CreateTicket = {
   issue_id: string; objective: string; task: string; acceptance_criteria: string;
@@ -11,7 +11,7 @@ export type TicketData = {
   id: string; issue_id: string; objective: string; task: string;
   acceptance_criteria: string; type: TicketType; status: TicketStatus;
   owner: Actor | null; closed_reason: ClosedReason | null; artifacts: string;
-  references: string; created_at: string; status_changed_at: string; thread: Thread[];
+  references: string; created_at: string; status_changed_at: string; thread: Thread[]; tags: Tags;
 };
 
 type Decision = "OPEN" | "CLOSED";
@@ -24,10 +24,11 @@ export class Ticket implements TicketData {
   id!: string; issue_id!: string; objective!: string; task!: string;
   acceptance_criteria!: string; type!: TicketType; status!: TicketStatus;
   owner!: Actor | null; closed_reason!: ClosedReason | null; artifacts!: string;
-  references!: string; created_at!: string; status_changed_at!: string; thread!: Thread[];
+  references!: string; created_at!: string; status_changed_at!: string; thread!: Thread[]; tags!: Tags;
 
   private constructor(data: TicketData) {
     Object.assign(this, data);
+    this.tags = data.tags ?? {};
   }
 
   static create(input: CreateTicket, now = new Date()): Ticket {
@@ -43,7 +44,7 @@ export class Ticket implements TicketData {
       task: input.task, acceptance_criteria: input.acceptance_criteria, type: input.type,
       status: "OPEN", owner: null, closed_reason: null, artifacts: input.artifacts ?? "",
       references: input.references ?? "", created_at: timestamp, status_changed_at: timestamp,
-      thread: [entry] };
+      thread: [entry], tags: {} };
   }
 
   static fromJSON(data: TicketData): Ticket {
@@ -72,6 +73,11 @@ export class Ticket implements TicketData {
     if (!comment.trim() && attachments.length === 0) throw new DomainError("comment or attachment is required");
     const entry = Ticket.#entry(actor, now.toISOString(), comment, this.status, null);
     this.thread.push({ ...entry, attachments });
+  }
+
+  tag(updates: TagUpdates): void {
+    if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
+    this.tags = applyTags(this.tags, updates);
   }
 
   decide(status: Decision, comment: string, reason?: ClosedReason, now = new Date()): void {

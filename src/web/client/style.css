@@ -58,6 +58,16 @@ a { color: var(--accent); }
 .status-ON-GOING { --st: var(--st-ongoing); }
 .status-AWAITING { --st: var(--st-awaiting); } .status-CLOSED { --st: var(--st-closed); }
 
+/* ---------- Tags (complexidade / humano / risco) ---------- */
+.tags { display: flex; flex-wrap: wrap; gap: .4rem; margin: var(--sp-1) 0 0; }
+.tag {
+  font-family: var(--mono); font-size: .72rem; font-weight: 700; padding: .1rem .55rem;
+  border-radius: var(--pill); color: var(--tg, var(--dim));
+  border: 1px solid color-mix(in srgb, var(--tg, var(--dim)) 40%, transparent);
+  background: color-mix(in srgb, var(--tg, var(--dim)) 15%, transparent);
+}
+.tag-complexity { --tg: var(--st-claimed); } .tag-human_need { --tg: var(--st-open); } .tag-risk { --tg: var(--danger); }
+
 /* ---------- Quadro (tratamento Q1) ---------- */
 .board { display: grid; grid-template-columns: repeat(5, minmax(210px, 1fr)); gap: var(--sp-2); align-items: start; }
 .column { min-height: 20rem; padding: var(--sp-2); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }

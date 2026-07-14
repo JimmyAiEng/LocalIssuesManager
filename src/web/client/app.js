@@ -80,7 +80,7 @@ function renderDetail() {
   const owner = issue.owner ? `Owner: ${escape(issue.owner)}` : "Sem Owner";
   const closed = issue.closed_reason ? `<section class="box"><h2>Motivo de fechamento</h2><p class="preserve">${escape(issue.closed_reason)}</p></section>` : "";
   const actions = humanActions(issue.status).length ? `<section class="actionbar"><h2>Ações</h2>${actionsPanel(issue)}</section>` : "";
-  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escape(issue.title)}</h1><p class="meta">Projeto: ${escape(issue.project)} · Tipo: ${escape(issue.type)} · ${owner}</p><p class="meta">ID: <code>${escape(issue.id)}</code> · No Status ${statusAge(issue)}</p></header>${closed}${field("Problema", issue.problem)}${field("Artefatos", issue.artifacts)}${criteriaField(issue.acceptance_criteria)}${ticketsSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
+  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escape(issue.title)}</h1><p class="meta">Projeto: ${escape(issue.project)} · Tipo: ${escape(issue.type)} · ${owner}</p><p class="meta">ID: <code>${escape(issue.id)}</code> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}</header>${closed}${field("Problema", issue.problem)}${field("Artefatos", issue.artifacts)}${criteriaField(issue.acceptance_criteria)}${ticketsSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
 }
 
 function commentSection(issue) {
@@ -123,7 +123,7 @@ function ticketsSection(issue) {
 function ticketCard(ticket) {
   const owner = ticket.owner ? `<span class="owner">${escape(ticket.owner)}</span>` : "";
   const references = ticket.references?.trim() ? `<p class="ticket-refs">Referências: ${escape(ticket.references)}</p>` : "";
-  return `<article class="ticket status-${ticket.status}"><header class="ticket-head"><span class="badge status-${ticket.status}">${ticket.status}</span><span class="ticket-type">${escape(ticket.type)}</span>${owner}</header><h3>${escape(ticket.objective)}</h3><p class="preserve ticket-task">${escape(ticket.task)}</p>${references}<details class="ticket-thread"><summary>Thread (${ticket.thread.length})</summary><ol class="thread">${ticket.thread.map(message).join("")}</ol></details>${ticketCommentSection(ticket)}${ticketActionsPanel(ticket)}</article>`;
+  return `<article class="ticket status-${ticket.status}"><header class="ticket-head"><span class="badge status-${ticket.status}">${ticket.status}</span><span class="ticket-type">${escape(ticket.type)}</span>${owner}</header>${tagsMarkup(ticket.tags)}<h3>${escape(ticket.objective)}</h3><p class="preserve ticket-task">${escape(ticket.task)}</p>${references}<details class="ticket-thread"><summary>Thread (${ticket.thread.length})</summary><ol class="thread">${ticket.thread.map(message).join("")}</ol></details>${ticketCommentSection(ticket)}${ticketActionsPanel(ticket)}</article>`;
 }
 
 function ticketCommentSection(ticket) {
@@ -260,6 +260,14 @@ async function api(path, options = {}) {
     throw error;
   }
   return body;
+}
+
+const tagLabels = { complexity: "Complexidade", human_need: "Humano", risk: "Risco" };
+function tagsMarkup(tags) {
+  const entries = Object.entries(tags ?? {});
+  if (!entries.length) return "";
+  const chips = entries.map(([key, value]) => `<span class="tag tag-${key}">${tagLabels[key] ?? key}: ${escape(value)}</span>`).join("");
+  return `<p class="tags">${chips}</p>`;
 }
 
 function date(value) { return new Date(value).toLocaleString(); }

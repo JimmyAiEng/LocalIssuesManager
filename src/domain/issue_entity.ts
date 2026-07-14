@@ -66,6 +66,11 @@ export class Issue implements IssueData {
       throw new DomainError(`Expected CLAIMED or ON-GOING, got ${this.status}`);
     }
     if (ticket.issue_id !== this.id) throw new DomainError("Ticket belongs to another Issue");
+    for (const depId of ticket.depends_on) {
+      if (!this.tickets.some((candidate) => candidate.id === depId)) {
+        throw new DomainError(`Dependency not found: ${depId}`);
+      }
+    }
     this.tickets.push(ticket);
     if (this.status === "CLAIMED") this.#changeStatus("ON-GOING", now);
     else this.#touch();
@@ -148,6 +153,13 @@ export class Issue implements IssueData {
     this.#expect("OPEN");
     this.human_presence = true;
     this.#transition("CLOSED", "human", comment, reason, now);
+  }
+
+  dependenciesMet(ticketId: string): boolean {
+    return this.#ticket(ticketId).depends_on.every((depId) => {
+      const dep = this.tickets.find((candidate) => candidate.id === depId);
+      return dep != null && (dep.status === "AWAITING" || dep.status === "CLOSED");
+    });
   }
 
   #ticket(ticketId: string): Ticket {

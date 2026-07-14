@@ -57,7 +57,7 @@ Ticket (grupo `ticket`; um Ticket pertence a exatamente uma Issue):
 
 | Comando | Quem | Efeito |
 |---|---|---|
-| `issues ticket create --issue <id> --type <T> --objective "…" --task "…" --acceptance-criteria "…" [--artifacts "…"] [--references "…"] (--human\|--agent <ia>)` | IA/humano | Novo Ticket `OPEN`; o **1º** move a Issue `CLAIMED` → `ON-GOING` |
+| `issues ticket create --issue <id> --type <T> --objective "…" --task "…" --acceptance-criteria "…" [--artifacts "…"] [--references "…"] [--depends-on <tid[,tid…]>] (--human\|--agent <ia>)` | IA/humano | Novo Ticket `OPEN`; o **1º** move a Issue `CLAIMED` → `ON-GOING`. `--depends-on` liga o Ticket a irmãos já existentes; `next` só o entrega quando todos estão `AWAITING`/`CLOSED` |
 | `issues ticket claim --issue <id> --id <tid> (--human\|--agent <ia>)` | IA/humano | `OPEN` → `CLAIMED` (IA normalmente via `next`) |
 | `issues ticket status --issue <id> --id <tid> (--human\|--agent <ia>) --status AWAITING\|OPEN\|CLOSED --comment "…" [--reason …]` | owner | Transição a partir de `CLAIMED` |
 | `issues ticket decide --issue <id> --id <tid> --human --status OPEN\|CLOSED --comment "…" [--reason …]` | humano | Decisão em `AWAITING` |

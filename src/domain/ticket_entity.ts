@@ -5,13 +5,13 @@ import { applyTags, type Actor, type ClosedReason, type Tags, type TagUpdates, t
 
 export type CreateTicket = {
   issue_id: string; objective: string; task: string; acceptance_criteria: string;
-  type: TicketType; artifacts?: string; references?: string; actor: Actor;
+  type: TicketType; artifacts?: string; references?: string; depends_on?: string[]; actor: Actor;
 };
 export type TicketData = {
   id: string; issue_id: string; objective: string; task: string;
   acceptance_criteria: string; type: TicketType; status: TicketStatus;
   owner: Actor | null; closed_reason: ClosedReason | null; artifacts: string;
-  references: string; created_at: string; status_changed_at: string; thread: Thread[]; tags: Tags;
+  references: string; depends_on: string[]; created_at: string; status_changed_at: string; thread: Thread[]; tags: Tags;
 };
 
 type Decision = "OPEN" | "CLOSED";
@@ -24,11 +24,12 @@ export class Ticket implements TicketData {
   id!: string; issue_id!: string; objective!: string; task!: string;
   acceptance_criteria!: string; type!: TicketType; status!: TicketStatus;
   owner!: Actor | null; closed_reason!: ClosedReason | null; artifacts!: string;
-  references!: string; created_at!: string; status_changed_at!: string; thread!: Thread[]; tags!: Tags;
+  references!: string; depends_on!: string[]; created_at!: string; status_changed_at!: string; thread!: Thread[]; tags!: Tags;
 
   private constructor(data: TicketData) {
     Object.assign(this, data);
     this.tags = data.tags ?? {};
+    this.depends_on = data.depends_on ?? []; // ausente em Tickets antigos
   }
 
   static create(input: CreateTicket, now = new Date()): Ticket {
@@ -43,7 +44,7 @@ export class Ticket implements TicketData {
     return { id: randomUUID(), issue_id: input.issue_id, objective: input.objective,
       task: input.task, acceptance_criteria: input.acceptance_criteria, type: input.type,
       status: "OPEN", owner: null, closed_reason: null, artifacts: input.artifacts ?? "",
-      references: input.references ?? "", created_at: timestamp, status_changed_at: timestamp,
+      references: input.references ?? "", depends_on: input.depends_on ?? [], created_at: timestamp, status_changed_at: timestamp,
       thread: [entry], tags: {} };
   }
 

@@ -23,6 +23,39 @@ function ongoingIssue(queue: Queue, project: string, id: string, ticketDate: Dat
   return { issue, ticket };
 }
 
+test("oldestOpenTicket omite Ticket cuja dependência não está AWAITING/CLOSED", () => {
+  const queue = new Queue(root());
+  const issue = Issue.create({ ...body, project: "p" }, "pi");
+  issue.claim("pi");
+  const t1 = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
+    acceptance_criteria: "c", type: "Implement", actor: "pi" }, new Date("2026-01-01"));
+  issue.addTicket(t1);
+  const t2 = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
+    acceptance_criteria: "c", type: "Implement", depends_on: [t1.id], actor: "pi" }, new Date("2026-01-02"));
+  issue.addTicket(t2);
+  queue.save(issue);
+
+  // T1 OPEN → next entrega T1, nunca T2
+  assert.equal(queue.oldestOpenTicket("p")?.ticket.id, t1.id);
+  // T1 CLAIMED → T2 ainda bloqueado; T1 já não está OPEN, então nada a entregar
+  issue.claimTicket(t1.id, "pi");
+  queue.save(issue);
+  assert.equal(queue.oldestOpenTicket("p"), null);
+  // T1 CLOSED → T2 liberado
+  issue.transitionTicket(t1.id, "pi", "AWAITING", "done");
+  issue.decideTicket(t1.id, "CLOSED", "ok", "concluido");
+  queue.save(issue);
+  assert.equal(queue.oldestOpenTicket("p")?.ticket.id, t2.id);
+});
+
+test("addTicket recusa dependência inexistente na Issue", () => {
+  const issue = Issue.create(body, "pi");
+  issue.claim("pi");
+  const orphan = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
+    acceptance_criteria: "c", type: "Implement", depends_on: ["nao-existe"], actor: "pi" });
+  assert.throws(() => issue.addTicket(orphan), /Dependency not found: nao-existe/);
+});
+
 test("Queue move o mesmo JSON entre pastas sem cópia obsoleta", () => {
   const dir = root();
   const queue = new Queue(dir);

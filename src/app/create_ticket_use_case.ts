@@ -6,7 +6,7 @@ import { loadRequiredIssue } from "./required_issue.js";
 
 export type CreateTicketInput = {
   issueId: string; type: string; objective: string; task: string; acceptance_criteria: string;
-  artifacts?: string; references?: string; actor: string; now?: Date;
+  artifacts?: string; references?: string; depends_on?: string[]; actor: string; now?: Date;
 };
 
 export class CreateTicketUseCase {
@@ -18,7 +18,7 @@ export class CreateTicketUseCase {
     const issue = loadRequiredIssue(this.queue, input.issueId);
     const ticket = Ticket.create({ issue_id: input.issueId, type: parseTicketType(input.type),
       objective: input.objective, task: input.task, acceptance_criteria: input.acceptance_criteria,
-      artifacts: input.artifacts, references: input.references, actor }, input.now);
+      artifacts: input.artifacts, references: input.references, depends_on: input.depends_on, actor }, input.now);
     issue.addTicket(ticket, input.now);
     this.queue.save(issue);
     return issue;

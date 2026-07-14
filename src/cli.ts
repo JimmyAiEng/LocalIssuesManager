@@ -131,7 +131,7 @@ function ticketCreate(options: Options): Result {
   return new CreateTicketUseCase().execute({ issueId: value(options, "issue"),
     type: value(options, "type"), objective: value(options, "objective"), task: value(options, "task"),
     acceptance_criteria: value(options, "acceptance-criteria"), artifacts: optional(options, "artifacts"),
-    references: optional(options, "references"), actor }).toJSON();
+    references: optional(options, "references"), depends_on: optionalList(options, "depends-on"), actor }).toJSON();
 }
 
 function ticketClaim(options: Options): Result {
@@ -205,6 +205,11 @@ function value(options: Options, name: string): string {
 function optional(options: Options, name: string): string | undefined {
   const result = options[name];
   return typeof result === "string" && result ? result : undefined;
+}
+
+function optionalList(options: Options, name: string): string[] | undefined {
+  const raw = optional(options, name);
+  return raw?.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function optionalNumber(options: Options, name: string): number | undefined {

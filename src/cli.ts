@@ -1,55 +1,85 @@
+import { ClaimTicketUseCase } from "./app/claim_ticket_use_case.js";
+import { attachmentFromFile, CommentUseCase, type IncomingAttachment } from "./app/comment_use_case.js";
 import { CreateIssueUseCase } from "./app/create_issue_use_case.js";
+import { CreateTicketUseCase } from "./app/create_ticket_use_case.js";
 import { DecideIssueUseCase } from "./app/decide_issue_use_case.js";
+import { DecideTicketUseCase } from "./app/decide_ticket_use_case.js";
 import { GetIssueUseCase } from "./app/get_issue_use_case.js";
+import { GetTicketUseCase } from "./app/get_ticket_use_case.js";
 import { InitPackUseCase } from "./app/init_pack_use_case.js";
 import { ListIssuesUseCase } from "./app/list_issues_use_case.js";
+import { ListTicketsUseCase } from "./app/list_tickets_use_case.js";
 import { NextIssueUseCase } from "./app/next_issue_use_case.js";
 import { ResetClaimUseCase } from "./app/reset_claim_use_case.js";
 import { StatusIssueUseCase } from "./app/status_issue_use_case.js";
+import { StatusTicketUseCase } from "./app/status_ticket_use_case.js";
 import { openBrowser, startWebServer } from "./web/server.js";
 
-type Options = Record<string, string | boolean>;
+type Options = Record<string, string | boolean | string[]>;
 type Result = object | object[] | null;
 
 export function main(argv = process.argv.slice(2)): void {
   try {
     const [command, ...raw] = argv;
+    if (command === "ticket") return void runTicket(raw);
     const options = parseOptions(raw);
     if (command === "web") return void launchWeb(options);
-    const result = execute(command, options);
-    print(result, Boolean(options.pretty));
+    print(execute(command, options), Boolean(options.pretty));
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`${message}\n`);
-    process.exitCode = 1;
+    reportError(error);
   }
+}
+
+function runTicket(raw: string[]): void {
+  const options = parseOptions(raw.slice(1));
+  print(ticket(raw[0], options), Boolean(options.pretty));
 }
 
 function execute(command: string | undefined, options: Options): Result {
   if (command === "create") return create(options);
   if (command === "next") return next(options);
+  if (command === "comment") return comment(options);
   if (command === "status") return status(options);
   if (command === "decide") return decide(options);
   if (command === "reset") return reset(options);
   if (command === "get") return get(options);
   if (command === "list") return list(options);
   if (command === "init") return init(options);
-  throw new Error("Usage: issues <create|next|status|decide|reset|get|list|web|init> [flags]");
+  throw new Error("Usage: issues <create|next|comment|status|decide|reset|get|list|ticket|web|init> [flags]");
+}
+
+function ticket(sub: string | undefined, options: Options): Result {
+  if (sub === "create") return ticketCreate(options);
+  if (sub === "claim") return ticketClaim(options);
+  if (sub === "comment") return ticketComment(options);
+  if (sub === "status") return ticketStatus(options);
+  if (sub === "decide") return ticketDecide(options);
+  if (sub === "get") return ticketGet(options);
+  if (sub === "list") return ticketList(options);
+  throw new Error("Usage: issues ticket <create|claim|comment|status|decide|get|list> [flags]");
 }
 
 function create(options: Options): Result {
   if (options.human && options.agent) throw new Error("Choose --human or --agent");
   const actor = options.human ? "human" : value(options, "agent");
   return new CreateIssueUseCase().execute({ title: value(options, "title"),
-    project: value(options, "project"), tag: value(options, "tag"),
-    problem: value(options, "problem"), artifacts: value(options, "artifacts"),
-    acceptance_criteria: value(options, "acceptance-criteria"), actor }).toJSON();
+    project: value(options, "project"), type: value(options, "type"),
+    problem: value(options, "problem"), artifacts: optional(options, "artifacts"),
+    acceptance_criteria: optional(options, "acceptance-criteria"), actor }).toJSON();
 }
 
 function next(options: Options): Result {
   const result = new NextIssueUseCase().execute({ agent: value(options, "agent"),
     project: optional(options, "project") });
-  return result?.toJSON() ?? null;
+  if (!result) return null;
+  return { issue: result.issue.toJSON(), ticket: result.ticket?.toJSON() ?? null };
+}
+
+function comment(options: Options): Result {
+  if (options.human && options.agent) throw new Error("Choose --human or --agent");
+  const actor = options.human ? "human" : value(options, "agent");
+  return new CommentUseCase().execute({ issueId: value(options, "id"),
+    comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor }).toJSON();
 }
 
 function status(options: Options): Result {
@@ -77,13 +107,60 @@ function get(options: Options): Result {
 
 function list(options: Options): Result {
   return new ListIssuesUseCase().execute({ status: optional(options, "status"),
-    project: optional(options, "project"), title: optional(options, "title"), tag: optional(options, "tag"),
+    project: optional(options, "project"), title: optional(options, "title"), type: optional(options, "type"),
     limit: optionalNumber(options, "limit"), offset: optionalNumber(options, "offset") });
 }
 
 function init(options: Options): Result {
   return new InitPackUseCase().execute({ harness: optional(options, "harness"),
     target: optional(options, "target"), force: Boolean(options.force) });
+}
+
+function ticketCreate(options: Options): Result {
+  if (options.human && options.agent) throw new Error("Choose --human or --agent");
+  const actor = options.human ? "human" : value(options, "agent");
+  return new CreateTicketUseCase().execute({ issueId: value(options, "issue"),
+    type: value(options, "type"), objective: value(options, "objective"), task: value(options, "task"),
+    acceptance_criteria: value(options, "acceptance-criteria"), artifacts: optional(options, "artifacts"),
+    references: optional(options, "references"), actor }).toJSON();
+}
+
+function ticketClaim(options: Options): Result {
+  if (options.human && options.agent) throw new Error("Choose --human or --agent");
+  const actor = options.human ? "human" : value(options, "agent");
+  return new ClaimTicketUseCase().execute({ issueId: value(options, "issue"),
+    ticketId: value(options, "id"), actor }).toJSON();
+}
+
+function ticketComment(options: Options): Result {
+  if (options.human && options.agent) throw new Error("Choose --human or --agent");
+  const actor = options.human ? "human" : value(options, "agent");
+  return new CommentUseCase().execute({ issueId: value(options, "issue"), ticketId: value(options, "id"),
+    comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor }).toJSON();
+}
+
+function ticketStatus(options: Options): Result {
+  if (options.human && options.agent) throw new Error("Choose --human or --agent");
+  const actor = options.human ? "human" : value(options, "agent");
+  return new StatusTicketUseCase().execute({ issueId: value(options, "issue"),
+    ticketId: value(options, "id"), actor, status: value(options, "status"),
+    comment: value(options, "comment"), closed_reason: optional(options, "reason") }).toJSON();
+}
+
+function ticketDecide(options: Options): Result {
+  return new DecideTicketUseCase().execute({ issueId: value(options, "issue"),
+    ticketId: value(options, "id"), human: Boolean(options.human), status: value(options, "status"),
+    comment: value(options, "comment"), closed_reason: optional(options, "reason") }).toJSON();
+}
+
+function ticketGet(options: Options): Result {
+  return new GetTicketUseCase().execute({ issueId: value(options, "issue"),
+    ticketId: value(options, "id") }).toJSON();
+}
+
+function ticketList(options: Options): Result {
+  return new ListTicketsUseCase().execute({ issueId: value(options, "issue"),
+    type: optional(options, "type"), status: optional(options, "status") });
 }
 
 function parseOptions(args: string[]): Options {
@@ -93,9 +170,15 @@ function parseOptions(args: string[]): Options {
     if (!key.startsWith("--")) throw new Error(`Unexpected argument: ${key}`);
     const name = key.slice(2);
     if (name === "human" || name === "pretty" || name === "no-open" || name === "force") options[name] = true;
+    else if (name === "attach") (options.attach = (options.attach as string[] | undefined) ?? []).push(args[++index] ?? "");
     else options[name] = args[++index] ?? "";
   }
   return options;
+}
+
+function readAttachments(options: Options): IncomingAttachment[] {
+  const paths = Array.isArray(options.attach) ? options.attach : [];
+  return paths.map(attachmentFromFile);
 }
 
 function value(options: Options, name: string): string {
@@ -121,14 +204,18 @@ function print(result: Result, pretty: boolean): void {
   process.stdout.write(`${JSON.stringify(result, null, pretty ? 2 : 0)}\n`);
 }
 
+function reportError(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`${message}\n`);
+  process.exitCode = 1;
+}
+
 async function launchWeb(options: Options): Promise<void> {
   try {
     const web = await startWebServer(optionalNumber(options, "port"));
     process.stdout.write(`Issues web disponível em ${web.url}\n`);
     if (!options["no-open"]) openBrowser(web.url);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`${message}\n`);
-    process.exitCode = 1;
+    reportError(error);
   }
 }

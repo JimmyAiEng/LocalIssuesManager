@@ -15,7 +15,7 @@ test("init instala AGENTS.md versionado, skills e wiring de todos os harnesses",
   assert.ok(agents.startsWith(`<!-- issues-local pack v${result.pack_version} -->`));
   assert.ok(agents.includes("sdlc-workflow"));
   assert.ok(existsSync(join(directory, ".agents", "skills", "sdlc-workflow", "SKILL.md")));
-  assert.ok(existsSync(join(directory, ".agents", "skills", "code-review", "smells.md")));
+  assert.ok(existsSync(join(directory, ".agents", "skills", "planning-phase", "SKILL.md")));
   assert.equal(existsSync(join(directory, ".agents", "skills", "README.md")), false);
   assert.equal(existsSync(join(directory, ".agents", "skills", "INSTALL.md")), false);
   assert.ok(existsSync(join(directory, ".claude", "skills", "sdlc-workflow", "SKILL.md")));

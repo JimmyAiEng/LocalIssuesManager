@@ -1,18 +1,20 @@
-export const STATUSES = ["OPEN", "CLAIMED", "AWAITING", "CLOSED"];
-export const TAGS = ["Planning", "Design", "Implement", "QA", "Deployment", "Maintenance"];
+export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "ON-GOING", "AWAITING", "CLOSED"];
+export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"];
+export const TICKET_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy"];
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"];
 
-const CREATE_FIELDS = ["title", "project", "tag", "problem", "artifacts", "acceptance_criteria"];
+const CREATE_FIELDS = ["title", "project", "type", "problem"];
+const TICKET_FIELDS = ["objective", "task", "acceptance_criteria", "type"];
 
 export function filterIssues(issues, filters) {
   const title = filters.title.trim().toLowerCase();
   return issues.filter((issue) => (!title || issue.title.toLowerCase().includes(title))
     && (!filters.project || issue.project === filters.project)
-    && (!filters.tag || issue.tag === filters.tag));
+    && (!filters.type || issue.type === filters.type));
 }
 
 export function groupIssues(issues) {
-  return Object.fromEntries(STATUSES.map((status) => [status, issues
+  return Object.fromEntries(ISSUE_STATUSES.map((status) => [status, issues
     .filter((issue) => issue.status === status)
     .sort((left, right) => left.created_at.localeCompare(right.created_at))]));
 }
@@ -46,12 +48,31 @@ export function humanActions(status) {
   return [];
 }
 
+export function ticketHumanActions(ticket) {
+  if (ticket.status === "AWAITING") return ["ticket-decide-open", "ticket-decide-close"];
+  if (ticket.status === "CLAIMED" && ticket.owner === "human") return ["ticket-await", "ticket-reopen", "ticket-close"];
+  return [];
+}
+
+export function canCreateTicket(status) {
+  return status === "CLAIMED" || status === "ON-GOING";
+}
+
 export function validateCreate(values) {
   const errors = {};
   for (const field of CREATE_FIELDS) {
     if (!String(values[field] ?? "").trim()) errors[field] = "Campo obrigatório";
   }
-  if (values.tag?.trim() && !TAGS.includes(values.tag)) errors.tag = "TAG inválida";
+  if (values.type?.trim() && !ISSUE_TYPES.includes(values.type)) errors.type = "Tipo inválido";
+  return { ok: Object.keys(errors).length === 0, values, errors };
+}
+
+export function validateCreateTicket(values) {
+  const errors = {};
+  for (const field of TICKET_FIELDS) {
+    if (!String(values[field] ?? "").trim()) errors[field] = "Campo obrigatório";
+  }
+  if (values.type?.trim() && !TICKET_TYPES.includes(values.type)) errors.type = "Tipo inválido";
   return { ok: Object.keys(errors).length === 0, values, errors };
 }
 
@@ -71,11 +92,32 @@ export function validateDecide(values) {
   return validateCommentAndReason(values, { requireComment: false, requireReason: true });
 }
 
+export function validateTicketStatus(values) {
+  const requireReason = values.status === "CLOSED";
+  const result = validateCommentAndReason(values, { requireComment: true, requireReason });
+  return { ok: result.ok, values, errors: result.errors };
+}
+
+export function attachmentsMarkup(attachments) {
+  if (!attachments?.length) return "";
+  const tags = attachments.map((att) => {
+    const src = `/api/attachments/${encodeURIComponent(att.id)}`;
+    if (att.kind === "video") return `<video class="attachment" controls src="${src}"></video>`;
+    return `<a class="attachment" href="${src}" target="_blank" rel="noopener"><img src="${src}" alt="${escapeAttr(att.filename)}" loading="lazy"></a>`;
+  }).join("");
+  return `<div class="attachments">${tags}</div>`;
+}
+
 export function classifyMutationError(status, message) {
   if (status === 409) {
     return { kind: "conflict", message: "Esta Issue mudou desde a última atualização." };
   }
   return { kind: "error", message };
+}
+
+function escapeAttr(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]);
 }
 
 function validateCommentAndReason(values, { requireComment, requireReason }) {

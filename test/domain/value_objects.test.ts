@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DomainError } from "../../src/domain/domain_error.js";
 import {
-  AGENT_IDS, CLOSED_REASONS, STATUSES, TAGS,
-  parseAgentId, parseClosedReason, parseStatus, parseTag,
+  AGENT_IDS, CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, TICKET_STATUSES, TICKET_TYPES,
+  parseAgentId, parseClosedReason, parseIssueStatus, parseIssueType, parseTicketStatus, parseTicketType,
 } from "../../src/domain/value_objects.js";
 
 const cases = [
-  [TAGS, parseTag], [STATUSES, parseStatus], [AGENT_IDS, parseAgentId],
-  [CLOSED_REASONS, parseClosedReason],
+  [ISSUE_TYPES, parseIssueType], [TICKET_TYPES, parseTicketType],
+  [ISSUE_STATUSES, parseIssueStatus], [TICKET_STATUSES, parseTicketStatus],
+  [AGENT_IDS, parseAgentId], [CLOSED_REASONS, parseClosedReason],
 ] as const;
 
 test("VOs aceitam somente os enums exatos", () => {
@@ -17,6 +18,14 @@ test("VOs aceitam somente os enums exatos", () => {
     assert.throws(() => parse("invalid" as never));
     assert.throws(() => parse("" as never));
   }
+});
+
+test("enums novos carregam exatamente os valores esperados", () => {
+  assert.deepEqual([...ISSUE_TYPES], ["Fix", "Feat", "Research", "Refactor"]);
+  assert.deepEqual([...TICKET_TYPES], ["Planning", "Design", "Implement", "QA", "Deploy"]);
+  assert.deepEqual([...ISSUE_STATUSES], ["OPEN", "CLAIMED", "ON-GOING", "AWAITING", "CLOSED"]);
+  assert.deepEqual([...TICKET_STATUSES], ["OPEN", "CLAIMED", "AWAITING", "CLOSED"]);
+  assert.throws(() => parseTicketStatus("ON-GOING"), /Invalid ticket status: ON-GOING/);
 });
 
 test("VOs identificam o enum inválido nas mensagens de domínio", () => {
@@ -30,6 +39,8 @@ test("VOs identificam o enum inválido nas mensagens de domínio", () => {
   };
   invalid(parseAgentId, "Invalid IA: bad");
   invalid(parseClosedReason, "Invalid closed reason: bad");
-  invalid(parseStatus, "Invalid status: bad");
-  invalid(parseTag, "Invalid TAG: bad");
+  invalid(parseIssueStatus, "Invalid status: bad");
+  invalid(parseTicketStatus, "Invalid ticket status: bad");
+  invalid(parseIssueType, "Invalid type: bad");
+  invalid(parseTicketType, "Invalid ticket type: bad");
 });

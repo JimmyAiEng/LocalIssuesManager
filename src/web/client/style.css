@@ -8,8 +8,8 @@
   --bg: #0e1416; --surface: #16211f; --surface-2: #1b2a28; --border: #2a3b3a;
   --ink: #f2f7f6; --dim: #aebfbd; --faint: #7d908d;
   --accent: #3fd0c9; --accent-ink: #06110f;
-  /* status (inalterados) */
-  --st-open: #65b6ff; --st-claimed: #b59cff; --st-awaiting: #f2bd57; --st-closed: #82c99b;
+  /* status (inalterados; +ON-GOING) */
+  --st-open: #65b6ff; --st-claimed: #b59cff; --st-ongoing: #56cbb0; --st-awaiting: #f2bd57; --st-closed: #82c99b;
   /* feedback */
   --danger: #df7180; --danger-ink: #ff9aa8;
   --ok-bg: #12352a; --ok-border: #2f8f63;
@@ -55,10 +55,11 @@ a { color: var(--accent); }
 }
 .badge::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
 .status-OPEN { --st: var(--st-open); } .status-CLAIMED { --st: var(--st-claimed); }
+.status-ON-GOING { --st: var(--st-ongoing); }
 .status-AWAITING { --st: var(--st-awaiting); } .status-CLOSED { --st: var(--st-closed); }
 
 /* ---------- Quadro (tratamento Q1) ---------- */
-.board { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: var(--sp-2); align-items: start; }
+.board { display: grid; grid-template-columns: repeat(5, minmax(210px, 1fr)); gap: var(--sp-2); align-items: start; }
 .column { min-height: 20rem; padding: var(--sp-2); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .column h2 { margin: 0 0 var(--sp-1); font-size: 1rem; display: flex; align-items: center; justify-content: space-between; color: var(--col, var(--ink)); }
 .column h2 small {
@@ -69,6 +70,7 @@ a { color: var(--accent); }
 }
 .column > p { margin: 0 0 var(--sp-2); color: var(--dim); font-size: .8rem; }
 .status-OPEN.column { --col: var(--st-open); } .status-CLAIMED.column { --col: var(--st-claimed); }
+.status-ON-GOING.column { --col: var(--st-ongoing); }
 .status-AWAITING.column { --col: var(--st-awaiting); } .status-CLOSED.column { --col: var(--st-closed); }
 
 /* card com faixa de status à esquerda (Q1) */
@@ -82,7 +84,13 @@ a { color: var(--accent); }
 .card span, .card time { color: var(--dim); font-size: .82rem; }
 .card .owner { color: var(--accent); font-family: var(--mono); font-size: .76rem; }
 .card.status-OPEN { --cst: var(--st-open); } .card.status-CLAIMED { --cst: var(--st-claimed); }
+.card.status-ON-GOING { --cst: var(--st-ongoing); }
 .card.status-AWAITING { --cst: var(--st-awaiting); } .card.status-CLOSED { --cst: var(--st-closed); }
+.card .pill-count {
+  font-family: var(--mono); font-size: .72rem; color: var(--dim);
+  background: color-mix(in srgb, var(--dim) 14%, transparent); border: 1px solid var(--border);
+  border-radius: var(--pill); padding: .08rem .5rem; justify-self: start;
+}
 
 /* estados auxiliares */
 .empty, .muted, .hint { color: var(--dim); }
@@ -142,6 +150,34 @@ code { overflow-wrap: anywhere; font-family: var(--mono); font-size: .9em; }
 .feedback-success { background: var(--ok-bg); border: 1px solid var(--ok-border); }
 .feedback-error, .feedback-conflict { background: #3a1d24; border: 1px solid var(--danger); }
 [aria-invalid="true"] { border-color: var(--danger); }
+
+/* ---------- Tickets (agregado da Issue) ---------- */
+.tickets { display: grid; gap: var(--sp-2); }
+.ticket {
+  border: 1px solid var(--border); border-left: 4px solid var(--cst, var(--border));
+  border-radius: var(--radius-sm); background: var(--surface-2); padding: var(--sp-2) var(--sp-3);
+  display: grid; gap: var(--sp-1);
+}
+.ticket.status-OPEN { --cst: var(--st-open); } .ticket.status-CLAIMED { --cst: var(--st-claimed); }
+.ticket.status-AWAITING { --cst: var(--st-awaiting); } .ticket.status-CLOSED { --cst: var(--st-closed); }
+.ticket-head { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; }
+.ticket-type {
+  font-family: var(--mono); font-size: .72rem; font-weight: 700; letter-spacing: .05em;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: var(--pill); padding: .12rem .55rem;
+}
+.ticket h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+.ticket-task { margin: 0; color: var(--dim); font-size: .9rem; }
+.ticket-refs { margin: 0; color: var(--faint); font-size: .82rem; }
+.ticket-thread summary { cursor: pointer; color: var(--dim); font-size: .82rem; }
+.ticket-thread[open] summary { margin-bottom: var(--sp-1); }
+.ticket-thread .thread { max-width: 100%; }
+.new-ticket { justify-self: start; margin-top: var(--sp-1); }
+.new-comment { justify-self: start; margin-top: var(--sp-1); }
+.attachments { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
+.attachment { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: var(--bg); }
+.attachment img, video.attachment { max-width: 240px; max-height: 200px; width: auto; height: auto; display: block; }
+#comment-form input[type="file"] { font: inherit; color: var(--dim); }
 
 @media (max-width: 1000px) {
   .board { grid-template-columns: repeat(2, 1fr); }

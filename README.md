@@ -231,4 +231,4 @@ npm run check:fitness
 npm run skills:link
 ```
 
-Documentação de domínio: `CONTEXT.md`. Produto/design histórico: `PRD.md` / `DESIGN.md` (preferir modelo v3 Issue+Ticket e este README quando houver conflito).
+Documentação de domínio: `CONTEXT.md`. Produto/design: `PRD.md`, `DESIGN.md` (compilados; stubs `PRD_v3.md` / `PRD-UI.md` / `DESIGN_v3.md` apontam para eles).

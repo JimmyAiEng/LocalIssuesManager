@@ -1,325 +1,248 @@
-# PRD — Issues Locais (CLI)
+# PRD — Issues Locais (CLI + web + pack)
 
 | Campo | Valor |
 |-------|--------|
-| Produto | Gerenciador local de Issues via CLI |
-| Versão do documento | 1.0 |
-| Status | Aprovado (requisitos fechados) |
-| Escopo | Single-user, máquina local, Linux PATH |
-| Fora de escopo | Orquestração de IAs, sync multi-máquina, UI web, links entre Issues, ritual de trabalho humano, qualidade semântica dos critérios de aceite |
+| Produto | Gerenciador local de Issues via CLI + web, com pack de skills SDLC |
+| Versão do documento | 3.1 (compilado) |
+| Status | Vigente |
+| Fontes compiladas | `PRD.md` (v1) · `PRD_v3.md` · `PRD-UI.md` |
+| Escopo | Single-user, máquina local; tracker (domínio + CLI + web) e pack de skills |
+| Fora de escopo | Orquestração profunda de agentes, sync multi-máquina, multiusuário, validação semântica de critérios |
 
 ---
 
 ## 1. Visão
 
-Substituir GitHub Issues por um sistema local mínimo, acionável por humanos e por IAs (Cursor, Claude Code, Codex, Pi), para que o trabalho diário do humano se concentre em **planejar Issues** e **validar entregas**, enquanto agentes consomem Issues via CLI e seguem um fluxo de status previsível.
+Sistema local mínimo, acionável por humanos e por IAs (`cursor`, `claude-code`, `codex`, `pi`), para que o humano se concentre em **planejar** e **validar**, enquanto agentes consomem trabalho via CLI (e, opcionalmente, loop/harness).
 
-O sistema **não** define workflow de engenharia nem orquestra agentes. Ele apenas persiste Issues, histórico e transições de status com regras de autorização.
+A **Issue** é um **agregado** nascido de uma ideia/problema e resolvido por um ou mais **Tickets**. O tipo de trabalho SDLC (Planning → Design → Implement → QA → Deploy) vive no **Ticket**; o **tipo da Issue** classifica a intenção (`Fix` · `Feat` · `Research` · `Refactor`). O pack de skills roteia a skill de fase pelo **tipo do Ticket** reivindicado.
+
+A UI local oferece visão espacial do fluxo e executa as ações humanas já previstas no domínio, sem substituir a CLI.
+
+O sistema **não** define ritual de engenharia nem orquestra o “como” executar cada fase; apenas persiste agregados, histórico, transições e o pack de discovery.
 
 ---
 
 ## 2. Objetivos
 
-1. Permitir criar, consultar, listar, claimar e transicionar Issues por CLI instalada no PATH.
-2. Garantir que cada Issue em execução tenha no máximo um claim ativo (uma IA por vez).
-3. Registrar histórico Human ↔ IA como thread (append-only), atrelado a mudanças de status.
-4. Separar claramente o que IA pode fazer do que só humano pode fazer (validação em `AWAITING`, reset de claim).
-5. Agrupar Issues por projeto (nome livre) e filtrar a fila / listagens por projeto, status e título.
+1. Criar, consultar, listar, claimar e transicionar Issues e Tickets por CLI no PATH.
+2. Garantir claim exclusivo (uma IA por Item claimado por vez).
+3. Registrar histórico Human ↔ IA como thread append-only (exceto claim).
+4. Separar o que IA pode fazer do que só humano pode (decisão em `AWAITING`, reset de `CLAIMED`).
+5. Agrupar por projeto e filtrar fila/listagens.
+6. Priorizar na fila o trabalho já iniciado (`ON-GOING` / Tickets `OPEN`) antes de novas Issues.
+7. Só avançar a Issue para `AWAITING` quando **todos** os Tickets estiverem `CLOSED`.
+8. Oferecer UI desktop local para acompanhar Status e executar Decisões/Reset/criação.
+9. Entregar pack portátil (`AGENTS.md` + skills) instalável via `issues init`.
 
 ### Não-objetivos
 
-- Validar se critérios de aceite são bons ou completos.
-- Ligar Issues entre si (pai/filho, bloqueios, épicos).
-- Migrar TAG SDLC dentro da mesma Issue.
-- Reabrir Issue `CLOSED`.
-- Apagar Issues (delete físico).
-- Conhecer ou agendar agentes além de gravar um enum de identidade no claim.
+- Validar qualidade de objetivos, tarefas ou critérios de aceite.
+- Grafo obrigatório de dependência entre Tickets ( `--depends-on` é opcional).
+- Prioridade além de “ON-GOING primeiro, depois FIFO”.
+- Reabrir `CLOSED`, delete físico, sync multi-máquina.
+- Skills de execução (TDD, review, mutation, Sonar) no pack — YAGNI; ficam no consumidor ou com o agente.
 
 ---
 
 ## 3. Personas e atores
 
-| Ator | Identidade no sistema | Papel |
-|------|------------------------|--------|
-| Humano | Ator distinto das IAs (não faz parte do enum de IA) | Cria Issues, valida `AWAITING`, reseta claims, pode fechar Issues |
-| IA | Enum: `cursor` \| `claude-code` \| `codex` \| `pi` | Claima `OPEN`, move para `AWAITING`, pode fechar `OPEN` sob restrições |
+| Ator | Identidade | Papel |
+|------|------------|--------|
+| Humano | distinto do enum de IA | Cria Issues/Tickets, decide `AWAITING`, reseta claims, usa a UI |
+| IA | `cursor` \| `claude-code` \| `codex` \| `pi` | Claima via `next`, trabalha Ticket ou decompõe Issue, move a `AWAITING`/`CLOSED` sob regras |
 
-O sistema não autentica usuários de rede; a “identidade” é o valor passado na CLI (enum para IA; indicação de humano nos comandos humanos).
+Sem autenticação de rede; identidade = valor na CLI (`--human` ou `--agent`).
 
 ---
 
 ## 4. Modelo de dados
 
-### 4.1 Issue
+### 4.1 Issue (agregado)
 
-Campos obrigatórios na criação:
+| Campo | Regra |
+|-------|-------|
+| `id` | gerado |
+| `title`, `project`, `problem` | obrigatórios |
+| `type` | enum §4.3; imutável |
+| `artifacts`, `acceptance_criteria` | **opcionais** |
+| `status` | §4.5; inicia `OPEN` |
+| `owner` | IA do último claim da Issue; limpo no reset |
+| `closed_reason` | obrigatório se `CLOSED` |
+| `human_presence` | true após qualquer ação humana |
+| `thread` | append-only |
+| `tickets` | lista de Tickets do agregado |
+| `tags` | opcional: `complexity`, `human_need` (HITL/AFK), `risk` |
 
-| Campo | Tipo / regra | Descrição |
-|-------|----------------|-----------|
-| `id` | gerado pelo sistema | Identificador estável para consulta |
-| `title` | string | Título da Issue |
-| `project` | string (nome livre) | Exatamente um projeto por Issue; obrigatório |
-| `tag` | enum SDLC | Ver §4.2; definido na criação; **imutável** |
-| `problem` | texto | Problema a ser resolvido |
-| `artifacts` | texto | Menções a arquivos, outras Issues (texto livre), caminhos locais, etc. |
-| `acceptance_criteria` | texto | Critérios para considerar concluído |
-| `status` | enum de status | Ver §4.3; inicia em `OPEN` |
-| `owner` | IA enum ou vazio | Identidade do **último claim**; limpo no reset |
-| `closed_reason` | enum ou vazio | Obrigatório quando `status = CLOSED` |
+### 4.2 Ticket (fatia)
 
-Não há validação de unicidade de título (nem global, nem por projeto).
+Pertence a exatamente uma Issue.
 
-### 4.2 TAG (fase SDLC)
+| Campo | Regra |
+|-------|-------|
+| `id`, `issue_id` | gerados / obrigatório |
+| `objective`, `task`, `acceptance_criteria` | **obrigatórios** |
+| `type` | enum §4.4; roteia skill |
+| `status` | §4.5 sem `ON-GOING`; inicia `OPEN` |
+| `owner` | IA **ou** humano |
+| `closed_reason` | obrigatório se `CLOSED` |
+| `artifacts`, `references` | opcionais |
+| `depends_on` | opcional; CSV de irmãos; `next` só entrega se deps `AWAITING`/`CLOSED` |
+| `thread` | append-only |
+| `tags` | mesmas categorias da Issue |
 
-Enum imutável por Issue:
+`Confirmation` é tipo de Ticket **somente do sistema**: ao fechar o último Ticket de uma Issue `ON-GOING`, o sistema injeta um Ticket `Confirmation` `OPEN` para reabordar a Issue (confirmar → `AWAITING`, ou criar Tickets faltantes). Fechar o próprio `Confirmation` não gera outro.
 
-| TAG | Significado |
-|-----|-------------|
-| `Planning` | Escopo, requisitos, clareza do que deve ser cumprido |
-| `Design` | Arquitetura, especificação técnica, design de interface |
-| `Implement` | TDD + codificação |
-| `QA` | Validação técnica (stress, análise estática, etc.) |
-| `Deployment` | Deploy HML/PROD |
-| `Maintenance` | Bug fix |
+### 4.3 Tipo da Issue
 
-**Regra:** não há migração de TAG. Avançar no ciclo de vida implica **fechar** a Issue atual e **criar** outra com a nova TAG.
+| Tipo | Significado |
+|------|-------------|
+| `Fix` | Bug / correção |
+| `Feat` | Nova funcionalidade |
+| `Research` | Pesquisa |
+| `Refactor` | Refatoração |
 
-### 4.3 Status
+`Maintenance` não existe; manutenção vira `Fix` ou `Refactor`.
 
-| Status | Significado |
-|--------|-------------|
-| `OPEN` | Disponível na fila FIFO para claim |
-| `CLAIMED` | Travada por uma IA (owner = IA do claim) |
-| `AWAITING` | Trabalho da IA concluído; aguarda decisão humana |
-| `CLOSED` | Encerrada; motivo obrigatório; **não reabre** |
+### 4.4 Tipo do Ticket
 
-Motivos de `CLOSED` (enum fixo):
+| Tipo | Skill |
+|------|-------|
+| `Planning` | `planning-phase` |
+| `Design` | `design-phase` |
+| `Implement` | `implement-phase` |
+| `QA` | `qa-phase` |
+| `Deploy` | `deployment-phase` |
+| `Confirmation` | `confirmation-phase` (sistema) |
 
-| Motivo | Uso típico |
-|--------|------------|
-| `obsoleto` | Não faz mais sentido |
-| `duplicado` | Redundante com outra Issue (referência só em texto) |
-| `concluido` | Aceito / feito |
-| `errado` | Criada por engano / incorreta |
+### 4.5 Status
 
-### 4.4 Histórico (thread)
+| Status | Vale para | Significado |
+|--------|-----------|-------------|
+| `OPEN` | Issue, Ticket | Na fila |
+| `CLAIMED` | Issue, Ticket | Reivindicado |
+| `ON-GOING` | **só Issue** | Com Tickets criados |
+| `AWAITING` | Issue, Ticket | Aguarda decisão humana |
+| `CLOSED` | Issue, Ticket | Encerrado; não reabre |
 
-Toda mudança de status **exceto** `→ CLAIMED` gera uma entrada de histórico com:
+Motivos: `obsoleto` \| `duplicado` \| `concluido` \| `errado`.
 
-- autor (humano ou IA enum)
-- timestamp
-- texto do comentário (obrigatório)
-- status resultante
-- `closed_reason` quando o status resultante for `CLOSED`
+### 4.6 Thread
 
-Não existe comentário sem mudança de status.
-
-`OPEN → CLAIMED` registra claim (IA + data) nos metadados da Issue, **sem** entrada de thread de comentário.
-
----
-
-## 5. Matriz de transições
-
-| De | Para | Quem | Comando / mecanismo | Comentário na thread? |
-|----|------|------|---------------------|------------------------|
-| `OPEN` | `CLAIMED` | IA (enum) | `next` (FIFO + filtro projeto opcional) | Não |
-| `CLAIMED` | `AWAITING` | IA owner | Comando de mudança de status (agente) | Sim |
-| `CLAIMED` | `OPEN` | **Só humano** | Reset de claim | Sim |
-| `AWAITING` | `OPEN` | **Só humano** | Comando humano de decisão | Sim |
-| `AWAITING` | `CLOSED` | **Só humano** | Comando humano de decisão + motivo | Sim |
-| `OPEN` | `CLOSED` | Humano **ou** IA* | Comando de status + motivo | Sim |
-| `CLAIMED` | `CLOSED` | — | **Proibido** | — |
-| `CLOSED` | `OPEN` | — | **Proibido** | — |
-| `CLOSED` | qualquer | — | **Proibido** (Issue imutável em status) | — |
-
-\* Restrição da IA em `OPEN → CLOSED`: a IA **só** pode fechar se o histórico **não contiver nenhuma ação humana**. Se já houve criação/comentário/reset/decisão humana, apenas o humano pode fechar.
-
-### 5.1 Ownership
-
-- `owner` = identidade da IA do **último claim**.
-- Humano pode **resetar**: limpa `owner`, status → `OPEN`.
-- Enquanto `CLAIMED`, a Issue não entra na fila do `next`.
-
-### 5.2 Cancelamento em `CLAIMED`
-
-Como `CLAIMED → CLOSED` é proibido:
-
-1. Humano faz reset → `OPEN` (com comentário).
-2. Em seguida, humano ou IA elegível faz `OPEN → CLOSED` com motivo.
+Toda mudança de status **exceto** claim gera entrada com autor, timestamp, comentário obrigatório, status resultante e `closed_reason` se `CLOSED`.
 
 ---
 
-## 6. Comandos CLI (requisitos funcionais)
+## 5. Ciclo de vida
 
-Os nomes exatos dos binários/subcomandos são de design; o PRD exige **capacidade** equivalente no PATH após instalação.
+### 5.1 Issue
 
-### RF-01 — Criar Issue
+```text
+OPEN ──claim──► CLAIMED ──1º Ticket──► ON-GOING ──todos Tickets CLOSED──► AWAITING ──decisão──► CLOSED | OPEN
+                  │
+                  └── reset (humano) ──► OPEN
+```
 
-**Entrada obrigatória:** título, projeto, TAG, problema, artefatos, critérios de aceite.  
-**Efeito:** Issue criada com `status = OPEN`, sem owner.  
-**Ator:** humano ou IA.
+- Não há reset de `ON-GOING`.
+- A IA nunca move a Issue para `OPEN`/`CLOSED` a partir de `CLAIMED`/`ON-GOING`/`AWAITING`.
+- `OPEN → CLOSED` por IA só se **sem** `human_presence`.
 
-**Exemplo:** humano cria Issue de implementação para o projeto `workflowdev`.
+### 5.2 Ticket
 
-**Exceção:** recusar criação se faltar campo obrigatório ou TAG/projeto inválidos (projeto vazio; TAG fora do enum).
+```text
+OPEN ──claim(IA|humano)──► CLAIMED ──► AWAITING | OPEN | CLOSED
+                              AWAITING ──decisão humana──► CLOSED | OPEN
+```
 
-### RF-02 — Próxima Issue (`next`)
+### 5.3 Matriz (resumo)
 
-**Entrada:** identidade IA (enum); filtro opcional de projeto.  
-**Seleção:** FIFO entre Issues `OPEN` (mais antiga primeiro), respeitando filtro.  
-**Efeito:** `OPEN → CLAIMED`; grava owner = IA e timestamp do claim; **não** cria comentário de thread.  
-**Saída:** dados da Issue (incluindo TAG e corpo) para a IA trabalhar.
+| Entidade | De → Para | Quem |
+|----------|-----------|------|
+| Issue | `OPEN → CLAIMED` | IA (`next`) |
+| Issue | `CLAIMED → ON-GOING` | ao criar 1º Ticket |
+| Issue | `ON-GOING → AWAITING` | IA (todos Tickets `CLOSED`) |
+| Issue | `AWAITING → OPEN\|CLOSED` | humano |
+| Issue | `CLAIMED → OPEN` | humano (reset) |
+| Ticket | `OPEN → CLAIMED` | IA (`next`) ou humano |
+| Ticket | `CLAIMED → AWAITING\|OPEN\|CLOSED` | owner |
+| Ticket | `AWAITING → OPEN\|CLOSED` | humano |
 
-**Caso de uso:** sessão Cursor inicia o dia, roda `next --project workflowdev --agent cursor`, recebe a Issue mais antiga `OPEN` daquele projeto.
+### 5.4 Autonomia (tags HITL/AFK)
 
-**Exceções:**
-
-- Nenhuma Issue `OPEN` (com o filtro): retorno vazio / erro claro, sem side effect.
-- IA fora do enum: rejeitar.
-- Issue já `CLAIMED` / `AWAITING` / `CLOSED`: nunca selecionada.
-
-### RF-03 — Mudança de status (comando de agente)
-
-**Uso principal:** `CLAIMED → AWAITING` com texto obrigatório.  
-**Também:** `OPEN → CLOSED` quando a IA for elegível (sem histórico humano), com texto + motivo.
-
-**Exceções / bloqueios:**
-
-- IA **não** pode, por este comando, fazer `AWAITING → OPEN` nem `AWAITING → CLOSED` (reservado ao comando humano).
-- IA **não** pode `CLAIMED → CLOSED`.
-- IA **não** pode `CLAIMED → OPEN` (só reset humano).
-- `CLAIMED → AWAITING` só pelo **owner** atual (IA do claim).
-- `OPEN → CLOSED` por IA bloqueado se existir qualquer ação humana no histórico.
-
-### RF-04 — Decisão humana em `AWAITING`
-
-Comando **separado**, exclusivo de humano.
-
-**Entradas:** id da Issue; decisão `OPEN` (rejeitar / pedir correção) ou `CLOSED` (aceitar ou encerrar); texto obrigatório; motivo se `CLOSED`.
-
-**Caso de uso:** humano lê entrega da IA, rejeita com lista de problemas → `AWAITING → OPEN`; a Issue volta à fila FIFO; próximo claim vê o histórico completo.
-
-**Caso de uso:** humano aceita → `AWAITING → CLOSED` com motivo `concluido`.
-
-**Exceções:**
-
-- Issue não está `AWAITING`: rejeitar.
-- Tentativa de uso por IA / sem indicação humana: rejeitar.
-- `CLOSED` sem motivo: rejeitar.
-
-### RF-05 — Reset de claim (humano)
-
-**Efeito:** `CLAIMED → OPEN`; limpa owner; gera comentário na thread.
-
-**Caso de uso:** IA travou ou claim abandonado; humano libera a Issue.
-
-**Exceções:** Issue não está `CLAIMED`; ator não humano.
-
-### RF-06 — Obter Issue por ID
-
-**Entrada:** id (obrigatório).  
-**Saída:** Issue completa **incluindo histórico completo** da thread, mesmo se `CLOSED`.
-
-**Exceção:** id inexistente → erro claro.
-
-### RF-07 — Listar / folhear Issues
-
-**Filtros:** status, projeto, título.  
-**Saída por item:** metadados + título + **histórico de fases** (pares status + timestamp), **sem** corpo dos comentários.  
-**UX:** permitir ir lendo no próprio terminal (paginação / sequencial).
-
-**Caso de uso:** humano lista `AWAITING` do projeto `workflowdev` para validar o inbox do dia.
-
-**Exceção:** filtros sem match → lista vazia (não é erro).
+Em Issue com `human_need=HITL`: todo Ticket precisa de `human_need`; Planning/Design **devem** ser HITL (não AFK). Issue AFK ou sem tag não impõe restrição. Revalidar ao taguear Issue ou Ticket.
 
 ---
 
-## 7. Casos de uso ponta a ponta
+## 6. Fila (`next`)
 
-### UC-01 — Fluxo feliz (IA + validação humana)
+1. Ticket `OPEN` mais antigo em Issue `ON-GOING` (respeitando `depends-on`) → claim do Ticket → `{ issue, ticket }`.
+2. Senão, Issue `OPEN` mais antiga → claim → `{ issue }` (decompor).
+3. Senão, vazio sem side effect.
 
-1. Humano cria Issue (`OPEN`, TAG `Implement`, projeto `app`).
-2. IA `codex` roda `next --project app` → Issue `CLAIMED` por `codex`.
-3. IA implementa fora do sistema; ao final, status → `AWAITING` com texto descrevendo o feito.
-4. Humano, no comando de decisão, fecha com `concluido`.
-5. Issue permanece `CLOSED`; consultável por ID com histórico completo.
-
-### UC-02 — Rejeição humana
-
-1. Issue em `AWAITING`.
-2. Humano decide `OPEN` com comentário dos problemas.
-3. Issue volta à fila FIFO.
-4. Próximo `next` claima; a IA recebe problema, artefatos, critérios **e** todo o histórico (criação, AWAITING, rejeição).
-
-### UC-03 — IA cria Issue errada e cancela
-
-1. IA `pi` cria Issue (`OPEN`). Histórico ainda sem humano.
-2. IA fecha (`OPEN → CLOSED`, motivo `errado`) via comando de status.
-3. Sucesso: elegível porque não há ação humana na thread.
-
-### UC-04 — IA tenta fechar Issue tocada por humano
-
-1. Humano criou a Issue (ação humana no histórico).
-2. IA tenta `OPEN → CLOSED`.
-3. Sistema **rejeita**. Apenas humano pode fechar.
-
-### UC-05 — Tentativa inválida de cancelar em CLAIMED
-
-1. Issue `CLAIMED` por `cursor`.
-2. Qualquer ator tenta `CLAIMED → CLOSED`.
-3. Sistema **rejeita**.
-4. Caminho válido: humano reset → `OPEN`; depois `OPEN → CLOSED`.
-
-### UC-06 — IA tenta decidir AWAITING
-
-1. Issue `AWAITING`.
-2. IA chama comando de status para `CLOSED` ou `OPEN`.
-3. Sistema **rejeita**; só o comando humano de decisão é aceito.
-
-### UC-07 — Avanço de fase SDLC
-
-1. Issue TAG `Design` é `CLOSED` com `concluido`.
-2. Nova Issue é criada com TAG `Implement`, referenciando a anterior apenas em `artifacts`/texto (sistema **não** cria link estrutural).
-
-### UC-08 — Dois projetos na fila
-
-1. Existem Issues `OPEN` em `alpha` e `beta`.
-2. `next --project beta --agent cursor` retorna apenas a mais antiga `OPEN` de `beta`.
-3. Issues de `alpha` permanecem `OPEN`.
+Filtro opcional de projeto.
 
 ---
 
-## 8. Regras de negócio (resumo normativo)
+## 7. Requisitos funcionais — CLI / domínio
 
-1. Toda Issue nasce `OPEN` e com TAG definida.
-2. TAG nunca muda; ciclo de vida = fechar + criar outra.
-3. Projeto é obrigatório e único por Issue (um nome).
-4. Fila `next` = FIFO estrito entre `OPEN`, com filtro opcional de projeto.
-5. Claim registra IA (enum) + data; owner = último claim.
-6. Sem comentário sem mudança de status; claim é a única transição sem thread de comentário.
-7. Só humano: reset (`CLAIMED → OPEN`) e decisão (`AWAITING → OPEN|CLOSED`).
-8. `CLAIMED → CLOSED` e `CLOSED → *` são impossíveis.
-9. IA em `OPEN → CLOSED` somente se histórico sem ação humana.
-10. Sem delete físico; encerramento = `CLOSED` + motivo enum.
-11. Sistema não valida qualidade de texto nem liga Issues.
-12. Listagem não devolve corpos de comentário; get-by-id devolve thread completa.
+| ID | Capacidade |
+|----|------------|
+| RF-01 | Criar Issue (`type`, problema; artefatos/AC opcionais) |
+| RF-02 | `next` unificado (§6) |
+| RF-03 | Criar Ticket (Issue `CLAIMED`/`ON-GOING`); 1º → `ON-GOING` |
+| RF-04 | Status do Ticket pelo owner |
+| RF-05 | Decisão humana no Ticket |
+| RF-06 | Issue → `AWAITING` só com todos Tickets `CLOSED` |
+| RF-07 | Decisão humana na Issue |
+| RF-08 | Reset Issue `CLAIMED → OPEN` (não `ON-GOING`) |
+| RF-09 | Get/list Issues e Tickets |
+| RF-10 | Comment (com anexos), tags |
+| RF-11 | Preservar `human_presence`, sem delete, `CLOSED` imutável |
+| RF-12 | Infra: harness, loop, worktree, `init` (pack), web |
+
+Sintaxe canônica: `AGENTS.md` / `README.md` / `issues --help`.
 
 ---
 
-## 9. Exceções e erros (comportamento esperado)
+## 8. Requisitos funcionais — UI
 
-| Situação | Comportamento |
-|----------|----------------|
-| Campo obrigatório ausente na criação | Recusar |
-| TAG / motivo / IA fora do enum | Recusar |
-| `next` sem candidatos | Sem mutação; sinalizar vazio |
-| Transição inexistente na matriz | Recusar; status inalterado |
-| IA age em comando humano | Recusar |
-| Não-owner tenta `CLAIMED → AWAITING` | Recusar |
-| IA fecha `OPEN` com histórico humano | Recusar |
-| Operação em id inexistente | Recusar |
-| Comentário vazio em transição que exige thread | Recusar |
-| `CLOSED` sem motivo | Recusar |
+A UI é **só para o Humano**, desktop-first, mesma máquina, todos os projetos juntos. IAs usam a CLI. Sem drag-and-drop, sem polling; atualização manual + após ação da própria UI.
+
+### Quadro
+
+- Colunas: `OPEN` · `CLAIMED` · `ON-GOING` · `AWAITING` · `CLOSED` (contagem + cards mais antigos primeiro).
+- Card: título, projeto, **tipo da Issue**, owner, tempo no Status; clique abre detalhe.
+- Filtros: título, projeto, tipo; limpar filtros; botão Atualizar + hora da última leitura.
+
+### Detalhe da Issue
+
+- Metadados, problema, artefatos, AC, tags (com editor), thread, motivo de fechamento.
+- Lista de **Tickets** (tipo, status, objective/task, thread, ações).
+- Ações humanas válidas no Status atual: Decisão, Reset, fechar `OPEN`, criar Ticket quando `CLAIMED`/`ON-GOING`, claim/status de Ticket quando owner humano.
+- Voltar ao quadro preservando filtros/rolagem na sessão.
+
+### Criar Issue
+
+- Formulário humano: título, projeto, tipo, problema (+ opcionais); validação prévia; sucesso abre o detalhe.
+
+### Concorrência e estados
+
+- Respeitar matriz do domínio; conflito de save → 409, preservar rascunho, oferecer Atualizar.
+- Estados explícitos: loading, vazio, erro de leitura/validação, conflito, sucesso.
+- Confirmação explícita só em fechamentos irreversíveis.
+
+### Fora de escopo da UI
+
+Editar Issue existente, reabrir `CLOSED`, comentário sem transição, IA como usuária, remoto, mobile dedicado, prioridade manual.
+
+---
+
+## 9. Pack de skills
+
+- Camada 0: `AGENTS.md` → `sdlc-workflow`.
+- Camada 1: `*-phase` pelo tipo do Ticket.
+- `issues init` copia skills para `.agents/skills/` e liga `.cursor` / `.claude` / `.codex` / `.pi`.
+- Sem camada 2 de execução (YAGNI).
 
 ---
 
@@ -327,50 +250,38 @@ Comando **separado**, exclusivo de humano.
 
 | ID | Requisito |
 |----|-----------|
-| RNF-01 | Instalável de forma que os comandos básicos fiquem no PATH do Linux nesta máquina |
-| RNF-02 | Operação local apenas; sem requisito de rede |
-| RNF-03 | Single-user: sem modelo de permissões multi-usuário além das regras humano vs IA da matriz |
-| RNF-04 | Saída de `next` e get-by-id deve ser suficiente para uma IA consumir o trabalho sem outra UI |
-| RNF-05 | Listagem usável em terminal (leitura sequencial / paginada) |
+| RNF-01 | CLI no PATH (install/link/npx) |
+| RNF-02 | Operação local; web em `127.0.0.1` |
+| RNF-03 | Single-user |
+| RNF-04 | Saída de `next`/`get` suficiente para IA sem UI |
+| RNF-05 | UI desktop-first, acessibilidade básica, aparência escura/técnica |
+| RNF-06 | Terminologia de `CONTEXT.md` |
 
 ---
 
-## 11. Fora de escopo (explícito)
+## 11. Critérios de aceite do produto
 
-- Skill/prompts que ensinam a IA a escrever boas Issues ou bons critérios de aceite  
-- Definição do ritual diário do humano  
-- Relacionamento estrutural entre Issues  
-- Prioridade além de FIFO  
-- Sync, backup remoto, multi-máquina  
-- UI gráfica / integração nativa com GitHub  
-- Comentários neutros (sem mudança de status)  
-- Delete físico de Issues  
-
----
-
-## 12. Critérios de aceite do produto (v1)
-
-O v1 está aceito quando:
-
-1. É possível criar Issue com todos os campos obrigatórios e vê-la `OPEN`.
-2. `next` claima em FIFO, grava IA enum + data, e a Issue deixa de aparecer no `next` até voltar a `OPEN`.
-3. IA owner consegue `CLAIMED → AWAITING` com texto no histórico.
-4. Só o comando humano move `AWAITING` para `OPEN` ou `CLOSED` (com motivo).
-5. Humano consegue reset `CLAIMED → OPEN` com texto no histórico.
-6. `CLAIMED → CLOSED` e `CLOSED → OPEN` são sempre rejeitados.
-7. IA consegue `OPEN → CLOSED` só sem histórico humano; com histórico humano, é rejeitado.
-8. Get-by-id mostra thread completa; listagem mostra metadados + título + fases (status + timestamp) e filtra por status, projeto e título.
-9. Comandos básicos disponíveis no PATH após instalação.
+1. Ciclo Issue+Ticket até `CLOSED` via CLI e decisão humana.
+2. `next` prioriza Ticket de `ON-GOING` e devolve `{ issue, ticket? }`.
+3. Issue só `AWAITING` com todos Tickets `CLOSED`; Confirmation injeta quando cabível.
+4. Reset só em `CLAIMED`; matriz proibida rejeitada.
+5. UI: quadro com Status (incl. `ON-GOING`), detalhe com Tickets, Decisão/Reset/criação.
+6. Pack instalável; skills descobertas pelos harnesses após `init` / `skills:link`.
+7. Tags HITL impõem autonomy nos Tickets.
 
 ---
 
-## 13. Glossário
+## 12. Glossário (resumo)
 
 | Termo | Definição |
 |-------|-----------|
-| Claim | Transição `OPEN → CLAIMED` que reserva a Issue a uma IA |
-| Owner | IA do último claim; limpo no reset |
-| Thread | Histórico append-only de mudanças de status com comentário |
-| FIFO | Ordem da mais antiga `OPEN` para a mais nova |
-| TAG | Fase SDLC imutável da Issue |
-| Decisão humana | Único caminho de `AWAITING` para `OPEN` ou `CLOSED` |
+| Issue | Agregado tipado resolvido por Tickets |
+| Ticket | Fatia tipada SDLC dentro de uma Issue |
+| Claim | `OPEN → CLAIMED` |
+| Owner | Ator do último claim |
+| Thread | Histórico append-only com comentário |
+| Decisão | Único caminho humano de `AWAITING` → `OPEN`\|`CLOSED` |
+| ON-GOING | Issue com Tickets em andamento |
+| Fila | Tickets `OPEN` de `ON-GOING` primeiro; senão Issues `OPEN` |
+
+Glossário completo: `CONTEXT.md`.

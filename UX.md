@@ -257,4 +257,4 @@ Diretrizes:
 
 ## 10. Limites desta especificação
 
-Este documento não define framework, servidor local, API, acesso ao filesystem, processo de instalação ou estratégia de concorrência técnica. Também não autoriza novas transições de domínio. Essas decisões pertencem à fase técnica posterior e devem preservar o `PRD-UI.md` e o `PRD.md` vigente.
+Este documento não define framework, servidor local, API, acesso ao filesystem, processo de instalação ou estratégia de concorrência técnica. Também não autoriza novas transições de domínio. Essas decisões pertencem à fase técnica posterior e devem preservar o `PRD.md` vigente (§ UI).

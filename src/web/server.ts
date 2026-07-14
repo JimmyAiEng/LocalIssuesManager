@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { Queue } from "../domain/queue_repository.js";
 import { createApiHandler, type ApiHandler } from "./api.js";
 
 const HOST = "127.0.0.1";
@@ -12,6 +13,7 @@ export type WebServer = { server: Server; url: string };
 
 export function startWebServer(port = 0, root?: string): Promise<WebServer> {
   return new Promise((resolve, reject) => {
+    new Queue(root).purgeClosed(); // GC de CLOSED expirados no startup: cobre deployments só-web (sem loop)
     const api = createApiHandler(root);
     const server = createServer((request, response) => void handleRequest(api, request, response));
     server.once("error", reject);

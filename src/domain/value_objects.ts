@@ -15,6 +15,7 @@ export type TicketType = (typeof TICKET_TYPES)[number];
 export type IssueStatus = (typeof ISSUE_STATUSES)[number];
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
 export type Actor = "human" | AgentId;
+export type Decision = "OPEN" | "CLOSED";
 
 export const TAG_VALUES = {
   complexity: ["BAIXA", "MEDIA", "ALTA"],
@@ -53,8 +54,30 @@ export type Thread = {
   attachments?: AttachmentData[]; // ausente em threads antigas e em transições sem anexo
 };
 
+export function threadEntry(actor: Actor, timestamp: string, comment: string,
+  status: IssueStatus, closed_reason: ClosedReason | null): Thread {
+  return { actor, timestamp, comment, status, closed_reason };
+}
+
+// Guard de campo obrigatório, compartilhado pelos agregados.
+export function required(value: string, name: string): void {
+  if (!value.trim()) throw new DomainError(`${name} is required`);
+}
+
+// Regras comuns de uma decisão humana OPEN|CLOSED (Issue e Ticket).
+export function assertDecision(status: Decision, comment: string, reason: ClosedReason | undefined): void {
+  if (status === "OPEN") required(comment, "comment");
+  if (status === "CLOSED" && !reason) throw new DomainError("Closed reason is required");
+  if (status === "OPEN" && reason) throw new DomainError("OPEN cannot have a closed reason");
+}
+
 export function parseAgentId(value: string): AgentId {
   return parseEnum(AGENT_IDS, value, "IA");
+}
+
+// Actor a partir de string livre (CLI/API): "human" ou uma IA válida.
+export function parseActor(value: string): Actor {
+  return value === "human" ? "human" : parseAgentId(value);
 }
 
 export function parseClosedReason(value: string): ClosedReason {

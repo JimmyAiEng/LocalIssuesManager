@@ -1,9 +1,9 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { DomainError } from "./domain_error.js";
 import { Harness, type HarnessData } from "./harness.js";
 import { Loop, type LoopData } from "./loop.js";
+import { defaultRoot } from "./root.js";
 
 /** Repositório: persiste Harness (VO) e Loop (entidade) e o log de auditoria. */
 export class LoopStore {
@@ -62,8 +62,4 @@ export class LoopStore {
     delete data[name];
     this.#write(file, data);
   }
-}
-
-function defaultRoot(): string {
-  return process.env.ISSUES_ROOT ?? join(homedir(), "issues-manager");
 }

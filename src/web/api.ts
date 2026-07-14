@@ -13,6 +13,7 @@ import { ResetClaimUseCase } from "../app/reset_claim_use_case.js";
 import { StatusIssueUseCase } from "../app/status_issue_use_case.js";
 import { StatusTicketUseCase } from "../app/status_ticket_use_case.js";
 import { TagUseCase } from "../app/tag_use_case.js";
+import { ConflictError, DomainError, NotFoundError } from "../domain/domain_error.js";
 import { Queue } from "../domain/queue_repository.js";
 
 type Body = Record<string, unknown>;
@@ -215,13 +216,13 @@ function respond(response: ServerResponse, status: number, value: object | objec
 
 function respondError(response: ServerResponse, error: unknown): void {
   const message = error instanceof Error ? error.message : "Unexpected error";
-  const status = errorStatus(error, message);
+  const status = errorStatus(error);
   respond(response, status, { error: status === 500 ? "Internal server error" : message });
 }
 
-function errorStatus(error: unknown, message: string): number {
-  if (message.startsWith("Stale Issue save")) return 409;
-  if (message.startsWith("Issue not found")) return 404;
-  if (error instanceof RequestError || error instanceof Error && error.name === "DomainError") return 400;
+function errorStatus(error: unknown): number {
+  if (error instanceof ConflictError) return 409;
+  if (error instanceof NotFoundError) return 404;
+  if (error instanceof RequestError || error instanceof DomainError) return 400;
   return 500;
 }

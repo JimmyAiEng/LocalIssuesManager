@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Loop, type DrainResult, type LoopData, type PulledItem, type SpawnOutcome } from "../domain/loop.js";
 import { LoopStore } from "../domain/loop_store.js";
+import { Queue } from "../domain/queue_repository.js";
 import { NextIssueUseCase } from "./next_issue_use_case.js";
 
 export type LoopInput = { name: string; harness: string; project?: string; interval: string; concurrency?: number };
@@ -40,6 +41,7 @@ export class LoopUseCase {
 
   run(input: { name: string; clock?: () => Date }): Promise<DrainResult> {
     const loop = this.store.loop(input.name);
+    new Queue(this.store.root).purgeClosed(input.clock?.() ?? new Date()); // GC de CLOSED expirados: hook periódico, fora do caminho de escrita
     return loop.drain({
       pull: (agent, project) => this.#pull(agent, project),
       run: (argv) => spawnAsync(argv),

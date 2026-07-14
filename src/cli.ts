@@ -105,8 +105,7 @@ function ticket(sub: string | undefined, options: Options): Result {
 }
 
 function create(options: Options): Result {
-  if (options.human && options.agent) throw new Error("Choose --human or --agent");
-  const actor = options.human ? "human" : value(options, "agent");
+  const actor = actorFrom(options);
   return new CreateIssueUseCase().execute({ title: value(options, "title"),
     project: value(options, "project"), type: value(options, "type"),
     problem: value(options, "problem"), artifacts: optional(options, "artifacts"),
@@ -121,8 +120,7 @@ function next(options: Options): Result {
 }
 
 function comment(options: Options): Result {
-  if (options.human && options.agent) throw new Error("Choose --human or --agent");
-  const actor = options.human ? "human" : value(options, "agent");
+  const actor = actorFrom(options);
   return new CommentUseCase().execute({ issueId: value(options, "id"),
     comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor }).toJSON();
 }
@@ -171,8 +169,7 @@ function init(options: Options): Result {
 }
 
 function ticketCreate(options: Options): Result {
-  if (options.human && options.agent) throw new Error("Choose --human or --agent");
-  const actor = options.human ? "human" : value(options, "agent");
+  const actor = actorFrom(options);
   return new CreateTicketUseCase().execute({ issueId: value(options, "issue"),
     type: value(options, "type"), objective: value(options, "objective"), task: value(options, "task"),
     acceptance_criteria: value(options, "acceptance-criteria"), artifacts: optional(options, "artifacts"),
@@ -181,15 +178,13 @@ function ticketCreate(options: Options): Result {
 }
 
 function ticketClaim(options: Options): Result {
-  if (options.human && options.agent) throw new Error("Choose --human or --agent");
-  const actor = options.human ? "human" : value(options, "agent");
+  const actor = actorFrom(options);
   return new ClaimTicketUseCase().execute({ issueId: value(options, "issue"),
     ticketId: value(options, "id"), actor }).toJSON();
 }
 
 function ticketComment(options: Options): Result {
-  if (options.human && options.agent) throw new Error("Choose --human or --agent");
-  const actor = options.human ? "human" : value(options, "agent");
+  const actor = actorFrom(options);
   return new CommentUseCase().execute({ issueId: value(options, "issue"), ticketId: value(options, "id"),
     comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor }).toJSON();
 }
@@ -201,8 +196,7 @@ function ticketTag(options: Options): Result {
 }
 
 function ticketStatus(options: Options): Result {
-  if (options.human && options.agent) throw new Error("Choose --human or --agent");
-  const actor = options.human ? "human" : value(options, "agent");
+  const actor = actorFrom(options);
   return new StatusTicketUseCase().execute({ issueId: value(options, "issue"),
     ticketId: value(options, "id"), actor, status: value(options, "status"),
     comment: value(options, "comment"), closed_reason: optional(options, "reason") }).toJSON();
@@ -240,6 +234,11 @@ function parseOptions(args: string[]): Options {
 function readAttachments(options: Options): IncomingAttachment[] {
   const paths = Array.isArray(options.attach) ? options.attach : [];
   return paths.map(attachmentFromFile);
+}
+
+function actorFrom(options: Options): string {
+  if (options.human && options.agent) throw new Error("Choose --human or --agent");
+  return options.human ? "human" : value(options, "agent");
 }
 
 function value(options: Options, name: string): string {

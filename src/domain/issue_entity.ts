@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AttachmentData } from "./attachment_entity.js";
 import { DomainError } from "./domain_error.js";
 import { assertTicketAutonomy, Ticket, type CreateTicket, type TicketData } from "./ticket_entity.js";
-import { applyTags, type Actor, type AgentId, type ClosedReason, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type Thread, type Worktree } from "./value_objects.js";
+import { applyTags, assertDecision, required, threadEntry, type Actor, type AgentId, type ClosedReason, type Decision, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type Thread, type Worktree } from "./value_objects.js";
 
 export type Phase = { status: IssueStatus; timestamp: string };
 export type CreateIssue = {
@@ -15,10 +15,6 @@ export type IssueData = {
   closed_reason: ClosedReason | null; claimed_at: string | null; created_at: string;
   status_changed_at: string; human_presence: boolean; thread: Thread[]; phases: Phase[];
   tickets: TicketData[]; revision: number; tags: Tags; worktree: Worktree | null;
-};
-
-const required = (value: string, name: string) => {
-  if (!value.trim()) throw new DomainError(`${name} is required`);
 };
 
 export class Issue implements IssueData {
@@ -44,7 +40,7 @@ export class Issue implements IssueData {
   }
 
   static #initialData(input: CreateIssue, actor: Actor, timestamp: string): IssueData {
-    const entry = Issue.#entry(actor, timestamp, "Issue created", "OPEN", null);
+    const entry = threadEntry(actor, timestamp, "Issue created", "OPEN", null);
     return { ...input, artifacts: input.artifacts ?? "", acceptance_criteria: input.acceptance_criteria ?? "",
       id: randomUUID(), status: "OPEN", owner: null, closed_reason: null, claimed_at: null,
       created_at: timestamp, status_changed_at: timestamp, human_presence: actor === "human",
@@ -76,25 +72,25 @@ export class Issue implements IssueData {
     }
     this.tickets.push(ticket);
     if (this.status === "CLAIMED") this.#changeStatus("ON-GOING", now);
-    else this.#touch();
+    else this.#bumpRevision();
   }
 
   claimTicket(ticketId: string, actor: Actor, now = new Date()): void {
     this.#ticket(ticketId).claim(actor, now);
-    this.#touch();
+    this.#bumpRevision();
   }
 
   comment(actor: Actor, comment: string, attachments: AttachmentData[] = [], now = new Date()): void {
     if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
     if (!comment.trim() && attachments.length === 0) throw new DomainError("comment or attachment is required");
-    const entry = Issue.#entry(actor, now.toISOString(), comment, this.status, null);
+    const entry = threadEntry(actor, now.toISOString(), comment, this.status, null);
     this.thread.push({ ...entry, attachments });
-    this.#touch();
+    this.#bumpRevision();
   }
 
   commentTicket(ticketId: string, actor: Actor, comment: string, attachments: AttachmentData[] = [], now = new Date()): void {
     this.#ticket(ticketId).comment(actor, comment, attachments, now);
-    this.#touch();
+    this.#bumpRevision();
   }
 
   tag(updates: TagUpdates): void {
@@ -102,20 +98,20 @@ export class Issue implements IssueData {
     const tags = applyTags(this.tags, updates);
     for (const ticket of this.tickets) assertTicketAutonomy(tags.human_need, ticket.type, ticket.tags.human_need);
     this.tags = tags;
-    this.#touch();
+    this.#bumpRevision();
   }
 
   // Registra a worktree git da Issue; todos os Tickets resolvem para ela lendo issue.worktree.
   setWorktree(worktree: Worktree): void {
     if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
     this.worktree = worktree;
-    this.#touch();
+    this.#bumpRevision();
   }
 
   // Limpeza da worktree (após CLOSED, decisão humana); permitido em qualquer status.
   clearWorktree(): void {
     this.worktree = null;
-    this.#touch();
+    this.#bumpRevision();
   }
 
   tagTicket(ticketId: string, updates: TagUpdates): void {
@@ -123,20 +119,20 @@ export class Issue implements IssueData {
     const tags = applyTags(ticket.tags, updates);
     assertTicketAutonomy(this.tags.human_need, ticket.type, tags.human_need);
     ticket.tag(updates);
-    this.#touch();
+    this.#bumpRevision();
   }
 
   transitionTicket(ticketId: string, actor: Actor, status: TicketStatus, comment: string, reason?: ClosedReason, now = new Date()): void {
     const ticket = this.#ticket(ticketId);
     ticket.changeStatus(actor, status, comment, reason, now);
-    this.#touch();
+    this.#bumpRevision();
     this.#confirmWhenDone(ticket, actor, now);
   }
 
   decideTicket(ticketId: string, status: "OPEN" | "CLOSED", comment: string, reason?: ClosedReason, now = new Date()): void {
     const ticket = this.#ticket(ticketId);
     ticket.decide(status, comment, reason, now);
-    this.#touch();
+    this.#bumpRevision();
     this.#confirmWhenDone(ticket, "human", now);
   }
 
@@ -158,11 +154,9 @@ export class Issue implements IssueData {
     this.#transition("OPEN", "human", comment, null, now);
   }
 
-  decide(status: "OPEN" | "CLOSED", comment: string, reason?: ClosedReason, now = new Date()): void {
+  decide(status: Decision, comment: string, reason?: ClosedReason, now = new Date()): void {
     this.#expect("AWAITING");
-    if (status === "OPEN") required(comment, "comment");
-    if (status === "CLOSED" && !reason) throw new DomainError("Closed reason is required");
-    if (status === "OPEN" && reason) throw new DomainError("OPEN cannot have a closed reason");
+    assertDecision(status, comment, reason);
     if (status === "OPEN") this.#clearClaim();
     this.human_presence = true;
     this.#transition(status, "human", comment, reason ?? null, now);
@@ -200,7 +194,7 @@ export class Issue implements IssueData {
     if (this.status !== "ON-GOING" || closed.status !== "CLOSED") return;
     if (closed.type === "Confirmation") return;
     if (!this.tickets.every((ticket) => ticket.status === "CLOSED")) return;
-    this.tickets.push(Ticket.create(Issue.#confirmationTicket(this.id, actor), now)); // mesma operação do close: sem #touch extra
+    this.tickets.push(Ticket.create(Issue.#confirmationTicket(this.id, actor), now)); // mesma operação do close: sem #bumpRevision extra
   }
 
   static #confirmationTicket(issueId: string, actor: Actor): CreateTicket {
@@ -212,7 +206,7 @@ export class Issue implements IssueData {
 
   #transition(status: IssueStatus, actor: Actor, comment: string, reason: ClosedReason | null, now: Date): void {
     const timestamp = now.toISOString();
-    this.thread.push(Issue.#entry(actor, timestamp, comment, status, reason));
+    this.thread.push(threadEntry(actor, timestamp, comment, status, reason));
     this.closed_reason = reason;
     this.#changeStatus(status, now);
   }
@@ -222,10 +216,10 @@ export class Issue implements IssueData {
     this.status = status;
     this.status_changed_at = timestamp;
     this.phases.push({ status, timestamp });
-    this.#touch();
+    this.#bumpRevision();
   }
 
-  #touch(): void {
+  #bumpRevision(): void {
     this.revision++;
   }
 
@@ -236,10 +230,6 @@ export class Issue implements IssueData {
 
   #expect(status: IssueStatus): void {
     if (this.status !== status) throw new DomainError(`Expected ${status}, got ${this.status}`);
-  }
-
-  static #entry(actor: Actor, timestamp: string, comment: string, status: IssueStatus, closed_reason: ClosedReason | null): Thread {
-    return { actor, timestamp, comment, status, closed_reason };
   }
 
   toJSON(): IssueData {

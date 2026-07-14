@@ -7,7 +7,9 @@ import { CreateIssueUseCase } from "../../src/app/create_issue_use_case.js";
 import { HarnessUseCase } from "../../src/app/harness_use_case.js";
 import { LoopUseCase } from "../../src/app/loop_use_case.js";
 import { Harness } from "../../src/domain/harness.js";
+import { Issue } from "../../src/domain/issue_entity.js";
 import { type DrainIO, Loop, parseIntervalSeconds } from "../../src/domain/loop.js";
+import { Queue } from "../../src/domain/queue_repository.js";
 
 const root = () => mkdtempSync(join(tmpdir(), "issues-loop-"));
 const node = process.execPath;
@@ -88,6 +90,18 @@ test("run: fila vazia registra result=empty", async () => {
   const summary = await new LoopUseCase(r).run({ name: "l", clock });
   assert.equal(summary.result, "empty");
   assert.match(readFileSync(join(r, "loop", "l.log"), "utf8"), /loop=l result=empty/);
+});
+
+test("run: purga CLOSED expirado (manutenção periódica) antes de drenar", async () => {
+  const r = root();
+  const queue = new Queue(r);
+  const stale = Issue.create({ title: "t", project: "demo", type: "Feat", problem: "p" }, "human");
+  stale.closeByHuman("done", "concluido", new Date("2020-01-01"));
+  queue.save(stale);
+  new HarnessUseCase(r).add({ name: "pi", agent: "pi", command: `${node} -e 0 {prompt}` });
+  new LoopUseCase(r).add({ name: "l", harness: "pi", project: "demo", interval: "30m" });
+  await new LoopUseCase(r).run({ name: "l", clock });
+  assert.equal(queue.load(stale.id), null);
 });
 
 test("run: drena os itens reais despachando ao harness", async () => {

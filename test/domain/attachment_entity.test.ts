@@ -37,9 +37,9 @@ test("mapa mediaType <-> extensão é reversível para os formatos aceitos", () 
   assert.equal(mediaTypeForExt("exe"), null);
 });
 
-test("fromJSON e toJSON preservam o Attachment", () => {
+test("toJSON serializa um snapshot desacoplado da entidade", () => {
   const attachment = Attachment.create(input);
-  const clone = Attachment.fromJSON(attachment.toJSON());
-  assert.deepEqual(clone.toJSON(), attachment.toJSON());
-  assert.notEqual(clone, attachment);
+  const json = attachment.toJSON();
+  json.filename = "outro.png";
+  assert.equal(attachment.filename, input.filename); // mutar o JSON não afeta a entidade
 });

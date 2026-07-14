@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { ClaimTicketUseCase } from "../app/claim_ticket_use_case.js";
 import { CommentUseCase, type IncomingAttachment } from "../app/comment_use_case.js";
 import { CreateIssueUseCase } from "../app/create_issue_use_case.js";
 import { CreateTicketUseCase } from "../app/create_ticket_use_case.js";
@@ -11,6 +12,7 @@ import { ResetClaimUseCase } from "../app/reset_claim_use_case.js";
 import { StatusIssueUseCase } from "../app/status_issue_use_case.js";
 import { StatusTicketUseCase } from "../app/status_ticket_use_case.js";
 import { TagUseCase } from "../app/tag_use_case.js";
+import { ConflictError, DomainError, NotFoundError } from "../domain/domain_error.js";
 import { Queue } from "../domain/queue_repository.js";
 
 type Body = Record<string, unknown>;
@@ -67,7 +69,8 @@ function get(response: ServerResponse, id: string, root?: string): void {
 function create(response: ServerResponse, body: Body, root?: string): void {
   const issue = new CreateIssueUseCase(root).execute({ title: text(body, "title"), project: text(body, "project"),
     type: text(body, "type"), problem: text(body, "problem"), artifacts: optionalText(body, "artifacts") ?? "",
-    acceptance_criteria: optionalText(body, "acceptance_criteria") ?? "", actor: "human" });
+    acceptance_criteria: optionalText(body, "acceptance_criteria") ?? "", actor: "human",
+    complexity: optionalText(body, "complexity"), human_need: optionalText(body, "human_need"), risk: optionalText(body, "risk") });
   respond(response, 201, issue.toJSON());
 }
 
@@ -79,6 +82,7 @@ function createTicket(response: ServerResponse, id: string, body: Body, root?: s
 }
 
 function ticketAction(response: ServerResponse, route: string[], body: Body, root?: string): void {
+  if (route[3] === "claim") return claimTicket(response, route[0], route[2], root);
   if (route[3] === "status") return statusTicket(response, route[0], route[2], body, root);
   if (route[3] === "decision") return decideTicket(response, route[0], route[2], body, root);
   if (route[3] === "comment") return comment(response, route[0], route[2], body, root);
@@ -118,6 +122,11 @@ function serveAttachment(response: ServerResponse, id: string, root?: string): v
   const bytes = readFileSync(found.path);
   response.writeHead(200, { "content-type": found.mediaType, "content-length": bytes.length });
   response.end(bytes);
+}
+
+function claimTicket(response: ServerResponse, id: string, tid: string, root?: string): void {
+  const issue = new ClaimTicketUseCase(root).execute({ issueId: id, ticketId: tid, actor: "human" });
+  respond(response, 200, issue.toJSON());
 }
 
 function statusTicket(response: ServerResponse, id: string, tid: string, body: Body, root?: string): void {
@@ -195,13 +204,13 @@ function respond(response: ServerResponse, status: number, value: object | objec
 
 function respondError(response: ServerResponse, error: unknown): void {
   const message = error instanceof Error ? error.message : "Unexpected error";
-  const status = errorStatus(error, message);
+  const status = errorStatus(error);
   respond(response, status, { error: status === 500 ? "Internal server error" : message });
 }
 
-function errorStatus(error: unknown, message: string): number {
-  if (message.startsWith("Stale Issue save")) return 409;
-  if (message.startsWith("Issue not found")) return 404;
-  if (error instanceof RequestError || error instanceof Error && error.name === "DomainError") return 400;
+function errorStatus(error: unknown): number {
+  if (error instanceof ConflictError) return 409;
+  if (error instanceof NotFoundError) return 404;
+  if (error instanceof RequestError || error instanceof DomainError) return 400;
   return 500;
 }

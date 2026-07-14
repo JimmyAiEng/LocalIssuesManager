@@ -249,7 +249,7 @@ test("purgeClosed não toca itens não-CLOSED", () => {
   assert.equal(queue.load(open.id)?.status, "OPEN");
 });
 
-test("save dispara a purga de CLOSED expirado", () => {
+test("save não purga CLOSED expirado; purga é manutenção explícita, fora do caminho de escrita", () => {
   const dir = root();
   const queue = new Queue(dir);
   const closedDir = join(dir, "projects/p/closed");
@@ -259,6 +259,8 @@ test("save dispara a purga de CLOSED expirado", () => {
   stale.closeByAgent("pi", "done", "concluido", new Date("2020-01-01"));
   writeFileSync(join(closedDir, "stale.json"), JSON.stringify(stale));
   queue.save(Issue.create({ ...body, project: "p" }, "pi"));
+  assert.equal(existsSync(join(closedDir, "stale.json")), true); // save não varre CLOSED
+  queue.purgeClosed(); // a purga só ocorre quando chamada (loop periódico)
   assert.equal(existsSync(join(closedDir, "stale.json")), false);
 });
 

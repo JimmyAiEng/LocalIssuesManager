@@ -79,3 +79,17 @@ _Avoid_: created_by, human history scan, audit flag
 **--human**:
 Flag global da CLI que marca o comando como ação Humana; obrigatória nos comandos reservados ao Humano.
 _Avoid_: --actor human, --user
+
+## Loop autônomo
+
+**Harness**:
+Value Object que descreve como invocar um runner de código: uma IA (`agent`) e um template de comando com o placeholder `{prompt}`. Reutilizável entre Loops.
+_Avoid_: Runner, engine, executor, bot
+
+**Loop**:
+Entidade que agrupa um Harness a um Projeto e a um intervalo e executa o trabalho autônomo da fila em Ticks agendados. Identidade pelo nome.
+_Avoid_: Job, cron job, scheduler, daemon, worker
+
+**Tick**:
+Uma execução do Loop: puxa 1 item da fila (`next`), entrega-o ao Harness e registra o resultado (`empty` | `worked` | `error` | `timeout`). A repetição é do agendador do SO, não de um laço interno.
+_Avoid_: Iteration, cycle, poll, run (genérico)

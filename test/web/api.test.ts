@@ -43,6 +43,20 @@ test("API cria Ticket (Issue vira ON-GOING), transiciona status e decide", async
   assert.equal(ticketOf(decideRes.body, tid).status, "CLOSED");
 }));
 
+test("API deixa o Humano assumir um Ticket OPEN e então fechá-lo pela web", async () => withWeb(async (url, root) => {
+  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
+  new NextIssueUseCase(root).execute({ agent: "pi" });
+  const tid = ((await request(url, "POST", `/api/issues/${id}/tickets`, ticketInput)).body.tickets as { id: string }[])[0].id;
+  const claimed = await request(url, "POST", `/api/issues/${id}/tickets/${tid}/claim`, {});
+  assert.equal(claimed.status, 200);
+  const claimedTicket = (claimed.body.tickets as { id: string; status: string; owner: string }[]).find((t) => t.id === tid)!;
+  assert.equal(claimedTicket.status, "CLAIMED");
+  assert.equal(claimedTicket.owner, "human");
+  const closed = await request(url, "POST", `/api/issues/${id}/tickets/${tid}/status`, { status: "CLOSED", comment: "cancelado", closed_reason: "obsoleto" });
+  assert.equal(closed.status, 200);
+  assert.equal(ticketOf(closed.body, tid).status, "CLOSED");
+}));
+
 test("API rejeita criar Ticket em Issue não reivindicada", async () => withWeb(async (url) => {
   const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
   const result = await request(url, "POST", `/api/issues/${id}/tickets`, ticketInput);
@@ -104,15 +118,27 @@ test("API rejeita anexo com mediaType não suportado", async () => withWeb(async
 
 test("API grava tags em Issue e Ticket e rejeita valor inválido", async () => withWeb(async (url, root) => {
   const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
-  const tagged = await request(url, "POST", `/api/issues/${id}/tags`, { complexity: "ALTA", human_need: "HITL", risk: "MEDIO" });
+  const tagged = await request(url, "POST", `/api/issues/${id}/tags`, { complexity: "ALTA", human_need: "AFK", risk: "MEDIO" });
   assert.equal(tagged.status, 200);
-  assert.deepEqual(tagged.body.tags, { complexity: "ALTA", human_need: "HITL", risk: "MEDIO" });
+  assert.deepEqual(tagged.body.tags, { complexity: "ALTA", human_need: "AFK", risk: "MEDIO" });
   new NextIssueUseCase(root).execute({ agent: "pi" });
   const tid = ((await request(url, "POST", `/api/issues/${id}/tickets`, ticketInput)).body.tickets as { id: string }[])[0].id;
   const ticketTagged = await request(url, "POST", `/api/issues/${id}/tickets/${tid}/tags`, { risk: "ALTO" });
   assert.equal(ticketTagged.status, 200);
   assert.deepEqual((ticketTagged.body.tickets as { id: string; tags: object }[]).find((t) => t.id === tid)!.tags, { risk: "ALTO" });
   assert.equal((await request(url, "POST", `/api/issues/${id}/tags`, { complexity: "GIGANTE" })).status, 400);
+}));
+
+test("API cria Issue com tags no create, sem tags segue funcionando e rejeita valor inválido", async () => withWeb(async (url) => {
+  const withTags = await request(url, "POST", "/api/issues", { ...input, complexity: "ALTA", human_need: "AFK" });
+  assert.equal(withTags.status, 201);
+  assert.deepEqual(withTags.body.tags, { complexity: "ALTA", human_need: "AFK" });
+  const persisted = await request(url, "GET", `/api/issues/${withTags.body.id}`);
+  assert.deepEqual(persisted.body.tags, { complexity: "ALTA", human_need: "AFK" });
+  const noTags = await request(url, "POST", "/api/issues", input);
+  assert.equal(noTags.status, 201);
+  assert.deepEqual(noTags.body.tags, {});
+  assert.equal((await request(url, "POST", "/api/issues", { ...input, risk: "GIGANTE" })).status, 400);
 }));
 
 function ticketOf(issue: Record<string, unknown>, tid: string): { status: string } {

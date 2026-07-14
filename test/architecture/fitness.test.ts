@@ -5,6 +5,8 @@ import test from "node:test";
 import ts from "typescript";
 import { Issue } from "../../src/domain/issue_entity.js";
 import { Queue } from "../../src/domain/queue_repository.js";
+import { CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, TICKET_TYPES } from "../../src/domain/value_objects.js";
+import * as clientVm from "../../src/web/client/view_model.js";
 
 function files(directory: string): string[] {
   return readdirSync(directory).flatMap((name) => {
@@ -15,8 +17,8 @@ function files(directory: string): string[] {
 
 test("módulos expõem somente a API pública definida (FF-06)", () => {
   assert.deepEqual(publicMethods(Issue.prototype), [
-    "addTicket", "await", "claim", "claimTicket", "closeByAgent", "closeByHuman",
-    "comment", "commentTicket", "decide", "decideTicket", "dependenciesMet", "reset", "tag", "tagTicket", "toJSON", "transitionTicket",
+    "addTicket", "await", "claim", "claimTicket", "clearWorktree", "closeByAgent", "closeByHuman",
+    "comment", "commentTicket", "decide", "decideTicket", "dependenciesMet", "reset", "setWorktree", "tag", "tagTicket", "toJSON", "transitionTicket",
   ]);
   assert.deepEqual(publicMethods(Queue.prototype), [
     "findAttachment", "list", "load", "oldestOpen", "oldestOpenTicket", "purgeClosed", "save", "writeAttachment",
@@ -26,6 +28,13 @@ test("módulos expõem somente a API pública definida (FF-06)", () => {
 function publicMethods(prototype: object): string[] {
   return Object.getOwnPropertyNames(prototype).filter((name) => name !== "constructor").sort();
 }
+
+test("enums do client não divergem do domínio (Confirmation é interno ao sistema)", () => {
+  assert.deepEqual(clientVm.ISSUE_STATUSES, [...ISSUE_STATUSES]);
+  assert.deepEqual(clientVm.ISSUE_TYPES, [...ISSUE_TYPES]);
+  assert.deepEqual(clientVm.CLOSED_REASONS, [...CLOSED_REASONS]);
+  assert.deepEqual(clientVm.TICKET_TYPES, TICKET_TYPES.filter((type) => type !== "Confirmation"));
+});
 
 test("respeita limites de arquivos e dependências", () => {
   const source = files("src").filter((file) => file.endsWith(".ts"));

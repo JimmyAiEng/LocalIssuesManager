@@ -49,10 +49,6 @@ export class Attachment implements AttachmentData {
     });
   }
 
-  static fromJSON(data: AttachmentData): Attachment {
-    return new Attachment(structuredClone(data));
-  }
-
   toJSON(): AttachmentData {
     return structuredClone({ ...this });
   }

@@ -45,7 +45,7 @@ test("CLI --pretty mantém JSON legível", () => {
   run(createArgs, vars);
   run(createArgs, vars);
   const output = run(["list", "--project", "demo", "--limit", "1", "--offset", "1", "--pretty"], vars);
-  assert.match(output, /\n  \{/);
+  assert.match(output, /\n {2}\{/);
   assert.equal(JSON.parse(output).length, 1);
 });
 

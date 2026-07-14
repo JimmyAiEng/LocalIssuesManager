@@ -2,6 +2,7 @@ export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "ON-GOING", "AWAITING", "CLOSE
 export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"];
 export const TICKET_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy"];
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"];
+export const TAG_VALUES = { complexity: ["BAIXA", "MEDIA", "ALTA"], human_need: ["HITL", "AFK"], risk: ["BAIXO", "MEDIO", "ALTO"] };
 
 const CREATE_FIELDS = ["title", "project", "type", "problem"];
 const TICKET_FIELDS = ["objective", "task", "acceptance_criteria", "type"];
@@ -56,6 +57,11 @@ export function ticketHumanActions(ticket) {
 
 export function canCreateTicket(status) {
   return status === "CLAIMED" || status === "ON-GOING";
+}
+
+// Humano assume um Ticket OPEN para depois mudar seu status (owner). Espelha `issues ticket claim --human`.
+export function canClaimTicket(ticket) {
+  return ticket.status === "OPEN";
 }
 
 export function validateCreate(values) {

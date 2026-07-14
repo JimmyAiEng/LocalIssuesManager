@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { type AttachmentData, extForMediaType, type MediaType, mediaTypeForExt } from "./attachment_entity.js";
+import { ConflictError } from "./domain_error.js";
 import { Issue, type IssueData } from "./issue_entity.js";
+import { defaultRoot } from "./root.js";
 import type { TicketData } from "./ticket_entity.js";
 import type { IssueStatus, IssueType } from "./value_objects.js";
 
@@ -24,7 +25,6 @@ export class Queue {
     if (previous) this.#guard(previous, issue);
     if (previous && previous !== destination) renameSync(previous, destination);
     this.#write(destination, issue);
-    this.purgeClosed();
   }
 
   purgeClosed(now = new Date(), retentionDays = 7): string[] {
@@ -68,7 +68,7 @@ export class Queue {
   list(filter: ListFilter = {}): Issue[] {
     const projects = filter.project ? [projectSegment(filter.project)] : this.#projects();
     const statuses = filter.status ? [filter.status] : Object.keys(FOLDERS) as IssueStatus[];
-    return this.#readAll(projects, statuses).filter((issue) => matches(issue, filter));
+    return this.#readAll(projects, statuses).filter((issue) => matchesFilter(issue, filter));
   }
 
   oldestOpen(project?: string): Issue | null {
@@ -105,7 +105,7 @@ export class Queue {
   #guard(previous: string, issue: Issue): void {
     const disk = JSON.parse(readFileSync(previous, "utf8")) as IssueData;
     if (disk.revision !== issue.baseRevision || issue.revision === issue.baseRevision) {
-      throw new Error(`Stale Issue save: ${issue.id}`);
+      throw new ConflictError(`Stale Issue save: ${issue.id}`);
     }
   }
 
@@ -170,13 +170,9 @@ function projectSegment(project: string): string {
   return encoded === "." ? "%2E" : encoded === ".." ? "%2E%2E" : encoded;
 }
 
-function matches(issue: Issue, filter: ListFilter): boolean {
+function matchesFilter(issue: Issue, filter: ListFilter): boolean {
   if (filter.project && issue.project !== filter.project) return false;
   if (filter.status && issue.status !== filter.status) return false;
   if (filter.type && issue.type !== filter.type) return false;
   return !filter.title || issue.title.toLowerCase().includes(filter.title.toLowerCase());
-}
-
-function defaultRoot(): string {
-  return process.env.ISSUES_ROOT ?? join(homedir(), "issues-manager");
 }

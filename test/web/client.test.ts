@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   attachmentsMarkup,
+  canClaimTicket,
   canCreateTicket,
   classifyMutationError,
   filterIssues,
@@ -53,6 +54,13 @@ test("ações humanas de Ticket: decisão em AWAITING, status quando dono humano
   assert.deepEqual(ticketHumanActions({ status: "CLAIMED", owner: "pi" }), []);
   assert.deepEqual(ticketHumanActions({ status: "OPEN", owner: null }), []);
   assert.deepEqual(ticketHumanActions({ status: "CLOSED", owner: "pi" }), []);
+});
+
+test("Humano pode assumir só Ticket OPEN, habilitando mudança de status como Owner", () => {
+  assert.equal(canClaimTicket({ status: "OPEN", owner: null }), true);
+  assert.equal(canClaimTicket({ status: "CLAIMED", owner: "pi" }), false);
+  assert.equal(canClaimTicket({ status: "AWAITING", owner: null }), false);
+  assert.equal(canClaimTicket({ status: "CLOSED", owner: "pi" }), false);
 });
 
 test("criar Ticket só quando a Issue está CLAIMED ou ON-GOING", () => {

@@ -27,6 +27,7 @@ export const ISSUE_STATUSES: string[];
 export const ISSUE_TYPES: string[];
 export const TICKET_TYPES: string[];
 export const CLOSED_REASONS: string[];
+export const TAG_VALUES: { complexity: string[]; human_need: string[]; risk: string[] };
 export function filterIssues(issues: IssueCard[], filters: { title: string; project: string; type: string }): IssueCard[];
 export function groupIssues(issues: IssueCard[]): Record<string, IssueCard[]>;
 export function statusAge(issue: IssueCard, now?: Date): string;
@@ -35,6 +36,7 @@ export function options(issues: IssueCard[], property: "project" | "type"): stri
 export function humanActions(status: string): string[];
 export function ticketHumanActions(ticket: TicketCard): string[];
 export function canCreateTicket(status: string): boolean;
+export function canClaimTicket(ticket: TicketCard): boolean;
 export function validateCreate(values: CreateValues): ValidationResult<CreateValues>;
 export function validateCreateTicket(values: CreateTicketValues): ValidationResult<CreateTicketValues>;
 export function validateClose(values: TransitionValues): ValidationResult<TransitionValues>;

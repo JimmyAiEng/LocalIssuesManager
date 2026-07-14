@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { AttachmentData } from "./attachment_entity.js";
 import { DomainError } from "./domain_error.js";
-import { Ticket, type CreateTicket, type TicketData } from "./ticket_entity.js";
-import { applyTags, type Actor, type AgentId, type ClosedReason, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type Thread } from "./value_objects.js";
+import { assertTicketAutonomy, Ticket, type CreateTicket, type TicketData } from "./ticket_entity.js";
+import { applyTags, type Actor, type AgentId, type ClosedReason, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type Thread, type Worktree } from "./value_objects.js";
 
 export type Phase = { status: IssueStatus; timestamp: string };
 export type CreateIssue = {
@@ -11,10 +11,10 @@ export type CreateIssue = {
 };
 export type IssueData = {
   id: string; title: string; project: string; type: IssueType; problem: string;
-  artifacts: string; acceptance_criteria: string; status: IssueStatus; owner: AgentId | null;
+  artifacts: string; acceptance_criteria: string; status: IssueStatus; owner: Actor | null;
   closed_reason: ClosedReason | null; claimed_at: string | null; created_at: string;
   status_changed_at: string; human_presence: boolean; thread: Thread[]; phases: Phase[];
-  tickets: TicketData[]; revision: number; tags: Tags;
+  tickets: TicketData[]; revision: number; tags: Tags; worktree: Worktree | null;
 };
 
 const required = (value: string, name: string) => {
@@ -24,15 +24,16 @@ const required = (value: string, name: string) => {
 export class Issue implements IssueData {
   id!: string; title!: string; project!: string; type!: IssueType;
   problem!: string; artifacts!: string; acceptance_criteria!: string;
-  status!: IssueStatus; owner!: AgentId | null; closed_reason!: ClosedReason | null;
+  status!: IssueStatus; owner!: Actor | null; closed_reason!: ClosedReason | null;
   claimed_at!: string | null; created_at!: string; status_changed_at!: string;
   human_presence!: boolean; thread!: Thread[]; phases!: Phase[];
-  tickets!: Ticket[]; revision!: number; tags!: Tags; baseRevision!: number;
+  tickets!: Ticket[]; revision!: number; tags!: Tags; worktree!: Worktree | null; baseRevision!: number;
 
   private constructor(data: IssueData) {
     Object.assign(this, data);
     this.tickets = data.tickets.map((ticket) => Ticket.fromJSON(ticket));
     this.tags = data.tags ?? {};
+    this.worktree = data.worktree ?? null; // ausente em Issues antigas
     this.baseRevision = data.revision;
   }
 
@@ -47,16 +48,17 @@ export class Issue implements IssueData {
     return { ...input, artifacts: input.artifacts ?? "", acceptance_criteria: input.acceptance_criteria ?? "",
       id: randomUUID(), status: "OPEN", owner: null, closed_reason: null, claimed_at: null,
       created_at: timestamp, status_changed_at: timestamp, human_presence: actor === "human",
-      thread: [entry], phases: [{ status: "OPEN", timestamp }], tickets: [], revision: 0, tags: {} };
+      thread: [entry], phases: [{ status: "OPEN", timestamp }], tickets: [], revision: 0, tags: {}, worktree: null };
   }
 
   static fromJSON(data: IssueData): Issue {
     return new Issue(structuredClone(data));
   }
 
-  claim(agent: AgentId, now = new Date()): void {
+  claim(actor: Actor, now = new Date()): void {
     this.#expect("OPEN");
-    this.owner = agent;
+    this.owner = actor;
+    if (actor === "human") this.human_presence = true;
     this.claimed_at = now.toISOString();
     this.#changeStatus("CLAIMED", now);
   }
@@ -66,6 +68,7 @@ export class Issue implements IssueData {
       throw new DomainError(`Expected CLAIMED or ON-GOING, got ${this.status}`);
     }
     if (ticket.issue_id !== this.id) throw new DomainError("Ticket belongs to another Issue");
+    assertTicketAutonomy(this.tags.human_need, ticket.type, ticket.tags.human_need);
     for (const depId of ticket.depends_on) {
       if (!this.tickets.some((candidate) => candidate.id === depId)) {
         throw new DomainError(`Dependency not found: ${depId}`);
@@ -100,8 +103,23 @@ export class Issue implements IssueData {
     this.#touch();
   }
 
+  // Registra a worktree git da Issue; todos os Tickets resolvem para ela lendo issue.worktree.
+  setWorktree(worktree: Worktree): void {
+    if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
+    this.worktree = worktree;
+    this.#touch();
+  }
+
+  // Limpeza da worktree (após CLOSED, decisão humana); permitido em qualquer status.
+  clearWorktree(): void {
+    this.worktree = null;
+    this.#touch();
+  }
+
   tagTicket(ticketId: string, updates: TagUpdates): void {
-    this.#ticket(ticketId).tag(updates);
+    const ticket = this.#ticket(ticketId);
+    ticket.tag(updates);
+    assertTicketAutonomy(this.tags.human_need, ticket.type, ticket.tags.human_need);
     this.#touch();
   }
 

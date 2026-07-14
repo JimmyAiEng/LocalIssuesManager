@@ -1,6 +1,8 @@
 node_modules/
 dist/
 *.log
+pi-loop/*.log.detail
+pi-loop/cron.out
 plan.md
 reports/
 .stryker-tmp/

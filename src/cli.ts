@@ -6,7 +6,9 @@ import { DecideIssueUseCase } from "./app/decide_issue_use_case.js";
 import { DecideTicketUseCase } from "./app/decide_ticket_use_case.js";
 import { GetIssueUseCase } from "./app/get_issue_use_case.js";
 import { GetTicketUseCase } from "./app/get_ticket_use_case.js";
+import { HarnessUseCase } from "./app/harness_use_case.js";
 import { InitPackUseCase } from "./app/init_pack_use_case.js";
+import { LoopUseCase } from "./app/loop_use_case.js";
 import { ListIssuesUseCase } from "./app/list_issues_use_case.js";
 import { ListTicketsUseCase } from "./app/list_tickets_use_case.js";
 import { NextIssueUseCase } from "./app/next_issue_use_case.js";
@@ -14,6 +16,7 @@ import { ResetClaimUseCase } from "./app/reset_claim_use_case.js";
 import { StatusIssueUseCase } from "./app/status_issue_use_case.js";
 import { StatusTicketUseCase } from "./app/status_ticket_use_case.js";
 import { TagUseCase } from "./app/tag_use_case.js";
+import { WorktreeUseCase } from "./app/worktree_use_case.js";
 import { openBrowser, startWebServer } from "./web/server.js";
 
 type Options = Record<string, string | boolean | string[]>;
@@ -23,6 +26,9 @@ export function main(argv = process.argv.slice(2)): void {
   try {
     const [command, ...raw] = argv;
     if (command === "ticket") return void runTicket(raw);
+    if (command === "harness") return void runGroup(raw, harness);
+    if (command === "worktree") return void runGroup(raw, worktree);
+    if (command === "loop") return void runLoop(raw);
     const options = parseOptions(raw);
     if (command === "web") return void launchWeb(options);
     print(execute(command, options), Boolean(options.pretty));
@@ -36,6 +42,42 @@ function runTicket(raw: string[]): void {
   print(ticket(raw[0], options), Boolean(options.pretty));
 }
 
+function runGroup(raw: string[], route: (sub: string | undefined, options: Options) => Result): void {
+  const options = parseOptions(raw.slice(1));
+  print(route(raw[0], options), Boolean(options.pretty));
+}
+
+function harness(sub: string | undefined, options: Options): Result {
+  if (sub === "add") return new HarnessUseCase().add({ name: value(options, "name"),
+    agent: value(options, "agent"), command: value(options, "command") });
+  if (sub === "list") return new HarnessUseCase().list();
+  if (sub === "remove") return new HarnessUseCase().remove(value(options, "name"));
+  throw new Error("Usage: issues harness <add|list|remove> [flags]");
+}
+
+function worktree(sub: string | undefined, options: Options): Result {
+  if (sub === "add") return new WorktreeUseCase().add({ issueId: value(options, "id"), path: optional(options, "path") }).toJSON();
+  if (sub === "remove") return new WorktreeUseCase().remove({ issueId: value(options, "id") }).toJSON();
+  throw new Error("Usage: issues worktree <add|remove> --id <issueId> [--path <p>]");
+}
+
+function runLoop(raw: string[]): void {
+  const options = parseOptions(raw.slice(1));
+  loop(raw[0], options).then((result) => print(result, Boolean(options.pretty)), reportError);
+}
+
+async function loop(sub: string | undefined, options: Options): Promise<Result> {
+  if (sub === "add") return new LoopUseCase().add({ name: value(options, "name"),
+    harness: value(options, "harness"), project: optional(options, "project"),
+    interval: value(options, "interval"), concurrency: optionalNumber(options, "concurrency") });
+  if (sub === "list") return new LoopUseCase().list();
+  if (sub === "remove") return new LoopUseCase().remove(value(options, "name"));
+  if (sub === "install") return new LoopUseCase().install({ name: value(options, "name"),
+    cron: Boolean(options.cron), now: Boolean(options.now) });
+  if (sub === "run") return new LoopUseCase().run({ name: value(options, "name") });
+  throw new Error("Usage: issues loop <add|list|remove|install|run> [flags]");
+}
+
 function execute(command: string | undefined, options: Options): Result {
   if (command === "create") return create(options);
   if (command === "next") return next(options);
@@ -47,7 +89,7 @@ function execute(command: string | undefined, options: Options): Result {
   if (command === "get") return get(options);
   if (command === "list") return list(options);
   if (command === "init") return init(options);
-  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|get|list|ticket|web|init> [flags]");
+  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|get|list|ticket|harness|loop|web|init> [flags]");
 }
 
 function ticket(sub: string | undefined, options: Options): Result {
@@ -73,7 +115,7 @@ function create(options: Options): Result {
 
 function next(options: Options): Result {
   const result = new NextIssueUseCase().execute({ agent: value(options, "agent"),
-    project: optional(options, "project") });
+    project: value(options, "project") });
   if (!result) return null;
   return { issue: result.issue.toJSON(), ticket: result.ticket?.toJSON() ?? null };
 }
@@ -131,7 +173,8 @@ function ticketCreate(options: Options): Result {
   return new CreateTicketUseCase().execute({ issueId: value(options, "issue"),
     type: value(options, "type"), objective: value(options, "objective"), task: value(options, "task"),
     acceptance_criteria: value(options, "acceptance-criteria"), artifacts: optional(options, "artifacts"),
-    references: optional(options, "references"), depends_on: optionalList(options, "depends-on"), actor }).toJSON();
+    references: optional(options, "references"), depends_on: optionalList(options, "depends-on"),
+    human_need: optional(options, "human-need"), actor }).toJSON();
 }
 
 function ticketClaim(options: Options): Result {
@@ -184,7 +227,7 @@ function parseOptions(args: string[]): Options {
     const key = args[index];
     if (!key.startsWith("--")) throw new Error(`Unexpected argument: ${key}`);
     const name = key.slice(2);
-    if (name === "human" || name === "pretty" || name === "no-open" || name === "force") options[name] = true;
+    if (["human", "pretty", "no-open", "force", "cron", "now"].includes(name)) options[name] = true;
     else if (name === "attach") (options.attach = (options.attach as string[] | undefined) ?? []).push(args[++index] ?? "");
     else options[name] = args[++index] ?? "";
   }

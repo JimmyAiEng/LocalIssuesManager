@@ -25,6 +25,7 @@ export const TAG_VALUES = {
 export type TagCategory = keyof typeof TAG_VALUES;
 export type Tags = { [K in TagCategory]?: (typeof TAG_VALUES)[K][number] };
 export type TagUpdates = Partial<Record<TagCategory, string>>;
+export type HumanNeed = (typeof TAG_VALUES)["human_need"][number];
 
 export function applyTags(current: Tags, updates: TagUpdates): Tags {
   const result: Tags = { ...current };
@@ -39,6 +40,9 @@ export function applyTags(current: Tags, updates: TagUpdates): Tags {
   if (!changed) throw new DomainError("At least one tag is required");
   return result;
 }
+
+// Worktree git isolada por Issue: path absoluto do worktree e branch criada.
+export type Worktree = { path: string; branch: string };
 
 export type Thread = {
   actor: Actor;
@@ -71,6 +75,10 @@ export function parseIssueStatus(value: string): IssueStatus {
 
 export function parseTicketStatus(value: string): TicketStatus {
   return parseEnum(TICKET_STATUSES, value, "ticket status");
+}
+
+export function parseHumanNeed(value: string): HumanNeed {
+  return parseEnum(TAG_VALUES.human_need, value, "human_need");
 }
 
 function parseEnum<const Values extends readonly string[]>(

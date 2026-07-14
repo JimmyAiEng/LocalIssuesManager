@@ -301,9 +301,9 @@ test("purgeClosed remove os anexos das Issues purgadas", () => {
   assert.equal(existsSync(join(dir, "projects/p/closed/withatt.json")), false);
 });
 
-function claim(dir: string, agent: string): Promise<{ owner: string } | null> {
+function claim(dir: string, agent: string, project = "p"): Promise<{ owner: string } | null> {
   return new Promise((resolve) => {
-    execFile("bin/issues", ["next", "--agent", agent],
+    execFile("bin/issues", ["next", "--agent", agent, "--project", project],
       { env: { ...process.env, ISSUES_ROOT: dir }, encoding: "utf8" }, (error, stdout) => {
         resolve(error || stdout.trim() === "null" ? null : JSON.parse(stdout).issue);
       });

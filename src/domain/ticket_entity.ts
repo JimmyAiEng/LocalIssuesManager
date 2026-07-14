@@ -1,12 +1,24 @@
 import { randomUUID } from "node:crypto";
 import type { AttachmentData } from "./attachment_entity.js";
 import { DomainError } from "./domain_error.js";
-import { applyTags, type Actor, type ClosedReason, type Tags, type TagUpdates, type Thread, type TicketStatus, type TicketType } from "./value_objects.js";
+import { applyTags, type Actor, type ClosedReason, type HumanNeed, type Tags, type TagUpdates, type Thread, type TicketStatus, type TicketType } from "./value_objects.js";
 
 export type CreateTicket = {
   issue_id: string; objective: string; task: string; acceptance_criteria: string;
-  type: TicketType; artifacts?: string; references?: string; depends_on?: string[]; actor: Actor;
+  type: TicketType; artifacts?: string; references?: string; depends_on?: string[]; actor: Actor; human_need?: HumanNeed;
 };
+
+// Grau de autonomia: numa Issue HITL todo Ticket precisa da tag human_need,
+// e os de Planning/Design são obrigatoriamente HITL (não podem ser AFK).
+// Issue AFK ou sem tag não impõe restrição. Choke point único usado na
+// criação (addTicket) e na marcação (tagTicket) do Ticket.
+export function assertTicketAutonomy(issueHumanNeed: HumanNeed | undefined, type: TicketType, humanNeed: HumanNeed | undefined): void {
+  if (issueHumanNeed !== "HITL") return;
+  if (!humanNeed) throw new DomainError("Issue HITL: todo Ticket precisa da tag de autonomia (human_need)");
+  if ((type === "Planning" || type === "Design") && humanNeed !== "HITL") {
+    throw new DomainError(`Issue HITL: Ticket de ${type} deve ser HITL, não pode ser AFK`);
+  }
+}
 export type TicketData = {
   id: string; issue_id: string; objective: string; task: string;
   acceptance_criteria: string; type: TicketType; status: TicketStatus;
@@ -45,7 +57,7 @@ export class Ticket implements TicketData {
       task: input.task, acceptance_criteria: input.acceptance_criteria, type: input.type,
       status: "OPEN", owner: null, closed_reason: null, artifacts: input.artifacts ?? "",
       references: input.references ?? "", depends_on: input.depends_on ?? [], created_at: timestamp, status_changed_at: timestamp,
-      thread: [entry], tags: {} };
+      thread: [entry], tags: input.human_need ? { human_need: input.human_need } : {} };
   }
 
   static fromJSON(data: TicketData): Ticket {

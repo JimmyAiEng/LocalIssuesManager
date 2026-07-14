@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { ClaimIssueUseCase } from "../app/claim_issue_use_case.js";
+import { ClaimTicketUseCase } from "../app/claim_ticket_use_case.js";
 import { CommentUseCase, type IncomingAttachment } from "../app/comment_use_case.js";
 import { CreateIssueUseCase } from "../app/create_issue_use_case.js";
 import { CreateTicketUseCase } from "../app/create_ticket_use_case.js";
@@ -46,6 +48,11 @@ async function dispatch(request: IncomingMessage, response: ServerResponse, root
   if (route.length === 2 && route[1] === "tags") return tag(response, route[0], undefined, body, root);
   if (route.length === 2 && route[1] === "tickets") return createTicket(response, route[0], body, root);
   if (route.length === 4 && route[1] === "tickets") return ticketAction(response, route, body, root);
+  return issueAction(response, route, body, root);
+}
+
+function issueAction(response: ServerResponse, route: string[], body: Body, root?: string): void {
+  if (route[1] === "claim") return claimIssue(response, route[0], root);
   if (route[1] === "close") return close(response, route[0], body, root);
   if (route[1] === "decision") return decide(response, route[0], body, root);
   if (route[1] === "reset") return reset(response, route[0], body, root);
@@ -67,18 +74,26 @@ function get(response: ServerResponse, id: string, root?: string): void {
 function create(response: ServerResponse, body: Body, root?: string): void {
   const issue = new CreateIssueUseCase(root).execute({ title: text(body, "title"), project: text(body, "project"),
     type: text(body, "type"), problem: text(body, "problem"), artifacts: optionalText(body, "artifacts") ?? "",
-    acceptance_criteria: optionalText(body, "acceptance_criteria") ?? "", actor: "human" });
+    acceptance_criteria: optionalText(body, "acceptance_criteria") ?? "", actor: "human",
+    complexity: optionalText(body, "complexity"), human_need: optionalText(body, "human_need"), risk: optionalText(body, "risk") });
   respond(response, 201, issue.toJSON());
 }
 
 function createTicket(response: ServerResponse, id: string, body: Body, root?: string): void {
   const issue = new CreateTicketUseCase(root).execute({ issueId: id, type: text(body, "type"),
     objective: text(body, "objective"), task: text(body, "task"), acceptance_criteria: text(body, "acceptance_criteria"),
-    artifacts: optionalText(body, "artifacts"), references: optionalText(body, "references"), actor: "human" });
+    artifacts: optionalText(body, "artifacts"), references: optionalText(body, "references"),
+    human_need: optionalText(body, "human_need"), actor: "human" });
   respond(response, 201, issue.toJSON());
 }
 
+function claimIssue(response: ServerResponse, id: string, root?: string): void {
+  const issue = new ClaimIssueUseCase(root).execute({ id });
+  respond(response, 200, issue.toJSON());
+}
+
 function ticketAction(response: ServerResponse, route: string[], body: Body, root?: string): void {
+  if (route[3] === "claim") return claimTicket(response, route[0], route[2], root);
   if (route[3] === "status") return statusTicket(response, route[0], route[2], body, root);
   if (route[3] === "decision") return decideTicket(response, route[0], route[2], body, root);
   if (route[3] === "comment") return comment(response, route[0], route[2], body, root);
@@ -118,6 +133,11 @@ function serveAttachment(response: ServerResponse, id: string, root?: string): v
   const bytes = readFileSync(found.path);
   response.writeHead(200, { "content-type": found.mediaType, "content-length": bytes.length });
   response.end(bytes);
+}
+
+function claimTicket(response: ServerResponse, id: string, tid: string, root?: string): void {
+  const issue = new ClaimTicketUseCase(root).execute({ issueId: id, ticketId: tid, actor: "human" });
+  respond(response, 200, issue.toJSON());
 }
 
 function statusTicket(response: ServerResponse, id: string, tid: string, body: Body, root?: string): void {

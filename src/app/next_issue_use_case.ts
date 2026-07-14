@@ -9,7 +9,8 @@ export class NextIssueUseCase {
   private readonly queue: Queue;
   constructor(root?: string) { this.queue = new Queue(root); }
 
-  execute(input: { agent: string; project?: string; now?: Date }): NextResult | null {
+  execute(input: { agent: string; project: string; now?: Date }): NextResult | null {
+    if (!input.project?.trim()) throw new Error("project is required");
     const agent = parseAgentId(input.agent);
     const target = this.queue.oldestOpenTicket(input.project);
     if (target) return this.#claimTicket(target, agent, input.now);

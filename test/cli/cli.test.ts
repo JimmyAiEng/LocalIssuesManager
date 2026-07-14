@@ -34,7 +34,7 @@ test("CLI retorna JSON por padrão e next devolve { issue, ticket }", () => {
 test("CLI exige --human em comandos humanos e devolve erro claro", () => {
   const vars = env();
   const created = JSON.parse(run(createArgs, vars));
-  run(["next", "--agent", "pi"], vars);
+  run(["next", "--agent", "pi", "--project", "demo"], vars);
   const result = spawnSync(bin, ["reset", "--id", created.id, "--comment", "x"], { env: vars, encoding: "utf8" });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /human/i);

@@ -50,90 +50,137 @@ Dados ficam em `~/issues-manager` (ou no caminho de `ISSUES_ROOT`):
 
 ---
 
-## Comandos
+## Referência de Comandos — Issues
 
-### `create` — criar Issue
+| Comando | Função | Obrigatório | Opcional |
+|---------|--------|-------------|----------|
+| **create** | Criar Issue | `--title` `--project` `--type` `--problem` `--acceptance-criteria` + (`--human` \| `--agent`) | `--artifacts` |
+| **next** | Claimar próxima OPEN (FIFO) | `--agent` | `--project` |
+| **comment** | Adicionar comentário | `--id` + (`--human` \| `--agent`) | `--comment` `--attach` |
+| **tag** | Adicionar tags | `--id` | `--complexity` `--human-need` `--risk` |
+| **status** | Mudar status | `--id` `--status` `--comment` + (`--human` \| `--agent`) | `--reason` |
+| **decide** | Decisão humana (AWAITING) | `--id` `--status` `--comment` `--human` | `--reason` |
+| **reset** | Liberar claim (CLAIMED→OPEN) | `--id` `--comment` `--human` | — |
+| **get** | Detalhe completo | `--id` | — |
+| **list** | Listar Issues | — | `--status` `--project` `--title` `--type` `--limit` `--offset` |
 
-Obrigatório: `--title`, `--project`, `--tag`, `--problem`, `--artifacts`, `--acceptance-criteria` e **um** de `--human` ou `--agent <id>`.
-
-```bash
-issues create \
-  --title "Implementar login" \
-  --project "app" \
-  --tag Implement \
-  --problem "Usuário não autentica" \
-  --artifacts "src/auth" \
-  --acceptance-criteria "Login com email e senha" \
-  --human
-
-# ou criada por IA:
-issues create ... --agent pi
-```
-
-### `next` — claimar próxima OPEN (FIFO)
+### Exemplos — Issues
 
 ```bash
-issues next --agent codex
-issues next --agent codex --project app   # filtra por projeto
-```
+# Create
+issues create --title "Implementar login" --project "app" --type Implement \
+  --problem "Usuário não autentica" --acceptance-criteria "Email + senha" --human
 
-Retorna a Issue claimada ou `null` se a fila estiver vazia.
+# Workflow
+issues next --agent codex --project app                    # Claimar
+issues status --id <uuid> --agent codex --status AWAITING --comment "Pronto"
+issues decide --id <uuid> --human --status CLOSED --comment "Aceito" --reason concluido
 
-### `status` — transições de status
-
-**IA** (owner em `CLAIMED` → `AWAITING`):
-
-```bash
-issues status --id <uuid> --agent codex --status AWAITING --comment "Pronto para review"
-```
-
-**IA** (fechar `OPEN` sem presença humana):
-
-```bash
-issues status --id <uuid> --agent pi --status CLOSED --comment "Issue incorreta" --reason errado
-```
-
-**Humano** (fechar `OPEN`):
-
-```bash
-issues status --id <uuid> --human --status CLOSED --comment "Não faz sentido" --reason obsoleto
-```
-
-### `decide` — decisão humana em `AWAITING`
-
-Sempre com `--human`.
-
-```bash
-# rejeitar → volta a OPEN (libera claim)
+# Rejeitar
 issues decide --id <uuid> --human --status OPEN --comment "Corrigir testes"
 
-# aceitar → CLOSED
-issues decide --id <uuid> --human --status CLOSED --comment "Aceito" --reason concluido
-```
+# Liberar travada
+issues reset --id <uuid> --human --comment "IA travou"
 
-### `reset` — liberar claim (`CLAIMED` → `OPEN`)
-
-Só humano:
-
-```bash
-issues reset --id <uuid> --human --comment "IA travou; liberar fila"
-```
-
-### `get` — detalhe completo
-
-```bash
-issues get --id <uuid>
+# Consulta
 issues get --id <uuid> --pretty
+issues list --project app --status OPEN --pretty
 ```
 
-### `list` — listagem resumida
+---
 
-Filtros opcionais: `--status`, `--project`, `--title`, `--limit`, `--offset`.
+## Referência de Comandos — Tickets
+
+| Comando | Função | Obrigatório | Opcional |
+|---------|--------|-------------|----------|
+| **ticket create** | Criar Ticket (subtarefa de Issue) | `--issue` `--type` `--objective` `--task` `--acceptance-criteria` + (`--human` \| `--agent`) | `--artifacts` `--references` `--depends-on` `--human-need` |
+| **ticket claim** | Claimar Ticket | `--issue` `--id` + (`--human` \| `--agent`) | — |
+| **ticket comment** | Comentário em Ticket | `--issue` `--id` + (`--human` \| `--agent`) | `--comment` `--attach` |
+| **ticket tag** | Tags em Ticket | `--issue` `--id` | `--complexity` `--human-need` `--risk` |
+| **ticket status** | Mudar status Ticket | `--issue` `--id` `--status` `--comment` + (`--human` \| `--agent`) | `--reason` |
+| **ticket decide** | Decisão em Ticket AWAITING | `--issue` `--id` `--status` `--comment` `--human` | `--reason` |
+| **ticket get** | Detalhe Ticket | `--issue` `--id` | — |
+| **ticket list** | Listar Tickets da Issue | `--issue` | `--type` `--status` |
+
+---
+
+## Referência de Comandos — Infraestrutura
+
+**Harness** (conectar CLI a editores/agentes):
 
 ```bash
-issues list --project app --status OPEN
-issues list --title login --limit 10 --offset 0 --pretty
+issues harness add --name codex --agent codex --command "codex <args>"
+issues harness list
+issues harness remove --name codex
 ```
+
+**Worktree** (clonar repo para Issue):
+
+```bash
+issues worktree add --id <uuid> [--path <p>]
+issues worktree remove --id <uuid>
+```
+
+**Loop** (automação recorrente):
+
+```bash
+issues loop add --name "daily-qa" --harness codex --interval "0 9 * * *" [--project <p>] [--concurrency <n>]
+issues loop list
+issues loop install --name "daily-qa" [--cron] [--now]
+issues loop run --name "daily-qa"
+issues loop remove --name "daily-qa"
+```
+
+**Web** (UI local):
+
+```bash
+issues web [--port <n>] [--no-open]
+```
+
+**Init** (scaffold projeto consumidor):
+
+```bash
+issues init [--harness claude-code|cursor|codex|pi|all] [--target <dir>] [--force]
+```
+
+---
+
+## Regras de Validação
+
+| Regra | Efeito |
+|-------|--------|
+| `--human` XOR `--agent` | Comandos que precisam de ator: escolha um, nunca ambos |
+| `--limit`, `--offset`, `--concurrency` | Devem ser inteiros ≥ 0 |
+| `--id` (UUID) | Identifica Issue ou Ticket |
+| `--reason` (fechamento) | Valores: `obsoleto` \| `duplicado` \| `concluido` \| `errado` |
+| `--status` (Issue) | Valores: `OPEN` \| `CLAIMED` \| `AWAITING` \| `CLOSED` |
+| `--status` (Ticket) | Valores: `OPEN` \| `CLAIMED` \| `AWAITING` \| `CLOSED` |
+| `--type` (Issue) | Valores: `Planning` \| `Design` \| `Implement` \| `QA` \| `Deployment` \| `Maintenance` |
+| `--type` (Ticket) | Customizável por projeto |
+| `--complexity`, `--human-need`, `--risk` | Tags opcionais; strings livres |
+| `--depends-on` (Ticket) | CSV de UUIDs; bloqueia `next` até `AWAITING` ou `CLOSED` |
+| `human_presence` | Se Issue criada/tocada por humano, IA não pode fechá-la de `OPEN` sozinha |
+
+---
+
+## Fluxo Típico
+
+```
+Humano:  create (--human)
+  ↓
+IA:      next (--agent …)                    → CLAIMED
+  ↓
+IA:      status … --status AWAITING          → AWAITING
+  ↓
+Humano:  decide --status OPEN (retrabalho)  → OPEN → IA: next de novo
+   ou    decide --status CLOSED               → CLOSED
+```
+
+**Atalhos:**
+
+- Claim travada → `reset --human`
+- Issue errada em OPEN → `status --human --status CLOSED --reason …`
+- Mudar fase SDLC → fechar Issue atual e **criar nova** com novo `--type`
 
 ---
 

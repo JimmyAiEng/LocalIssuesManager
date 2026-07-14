@@ -26,6 +26,15 @@ export function statusAge(issue, now = new Date()) {
   return `há ${days} dia${days === 1 ? "" : "s"}`;
 }
 
+export function parseChecklist(text) {
+  const items = [];
+  for (const line of String(text ?? "").split("\n")) {
+    const match = line.match(/^\s*\[([ xX])\]\s?(.*)$/);
+    if (match) items.push({ done: match[1].toLowerCase() === "x", label: match[2].trim() });
+  }
+  return items;
+}
+
 export function options(issues, property) {
   return [...new Set(issues.map((issue) => issue[property]))].sort();
 }
@@ -47,19 +56,19 @@ export function validateCreate(values) {
 }
 
 export function validateClose(values) {
-  return validateCommentAndReason(values, true);
+  return validateCommentAndReason(values, { requireComment: false, requireReason: true });
 }
 
 export function validateReset(values) {
-  return validateCommentAndReason(values, false);
+  return validateCommentAndReason(values, { requireComment: true, requireReason: false });
 }
 
 export function validateDecide(values) {
   if (values.status === "OPEN") {
-    const result = validateCommentAndReason({ comment: values.comment }, false);
+    const result = validateCommentAndReason({ comment: values.comment }, { requireComment: true, requireReason: false });
     return { ok: result.ok, values, errors: result.errors };
   }
-  return validateCommentAndReason(values, true);
+  return validateCommentAndReason(values, { requireComment: false, requireReason: true });
 }
 
 export function classifyMutationError(status, message) {
@@ -69,9 +78,9 @@ export function classifyMutationError(status, message) {
   return { kind: "error", message };
 }
 
-function validateCommentAndReason(values, requireReason) {
+function validateCommentAndReason(values, { requireComment, requireReason }) {
   const errors = {};
-  if (!String(values.comment ?? "").trim()) errors.comment = "Campo obrigatório";
+  if (requireComment && !String(values.comment ?? "").trim()) errors.comment = "Campo obrigatório";
   if (requireReason) {
     if (!String(values.closed_reason ?? "").trim()) errors.closed_reason = "Motivo obrigatório";
     else if (!CLOSED_REASONS.includes(values.closed_reason)) errors.closed_reason = "Motivo inválido";

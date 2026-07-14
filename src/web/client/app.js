@@ -1,11 +1,11 @@
 import {
   CLOSED_REASONS, STATUSES, TAGS, classifyMutationError, filterIssues, groupIssues,
-  humanActions, options, statusAge, validateClose, validateCreate, validateDecide, validateReset,
+  humanActions, options, parseChecklist, statusAge, validateClose, validateCreate, validateDecide, validateReset,
 } from "./view_model.js";
 
 const state = {
   issues: [], filters: loadFilters(), refreshedAt: null,
-  issue: null, draft: emptyDraft(), panel: null, confirm: false,
+  issue: null, draft: emptyDraft(), panel: null,
   feedback: null, errors: {}, busy: false,
 };
 
@@ -14,7 +14,6 @@ document.addEventListener("click", handleClick);
 document.addEventListener("input", handleInput);
 document.addEventListener("change", handleInput);
 document.addEventListener("submit", handleSubmit);
-document.addEventListener("keydown", handleKey);
 refresh();
 
 async function refresh() {
@@ -54,8 +53,8 @@ function column(status, issues) {
 }
 
 function card(issue) {
-  const owner = issue.owner ? `<span>Owner: ${escape(issue.owner)}</span>` : "";
-  return `<a class="card" href="/issues/${issue.id}" data-issue-id="${issue.id}"><strong>${escape(issue.title)}</strong><span>${escape(issue.project)} · ${escape(issue.tag)}</span>${owner}<time title="${escape(issue.phases?.at(-1)?.timestamp ?? issue.created_at)}">${statusAge(issue)}</time></a>`;
+  const owner = issue.owner ? `<span class="owner">${escape(issue.owner)}</span>` : "";
+  return `<a class="card status-${issue.status}" href="/issues/${issue.id}" data-issue-id="${issue.id}"><strong>${escape(issue.title)}</strong><span>${escape(issue.project)} · ${escape(issue.tag)}</span>${owner}<time title="${escape(issue.phases?.at(-1)?.timestamp ?? issue.created_at)}">${statusAge(issue)}</time></a>`;
 }
 
 async function loadDetail(id) {
@@ -74,8 +73,9 @@ function renderDetail() {
   const issue = state.issue;
   document.title = `${issue.title} · Issues`;
   const owner = issue.owner ? `Owner: ${escape(issue.owner)}` : "Sem Owner";
-  const closed = issue.closed_reason ? `<p>Motivo de fechamento: ${escape(issue.closed_reason)}</p>` : "";
-  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><section><p class="status">${issue.status}</p><h1>${escape(issue.title)}</h1><p>Projeto: ${escape(issue.project)} · TAG: ${escape(issue.tag)} · ${owner}</p><p>ID: <code>${escape(issue.id)}</code> · No Status ${statusAge(issue)}</p>${closed}${field("Problema", issue.problem)}${field("Artefatos", issue.artifacts)}${field("Critérios de aceite", issue.acceptance_criteria)}${thread(issue.thread)}</section><aside><h2>Ações</h2>${actionsPanel(issue)}${dates(issue)}</aside></main>${confirmDialog(issue)}`;
+  const closed = issue.closed_reason ? `<section class="box"><h2>Motivo de fechamento</h2><p class="preserve">${escape(issue.closed_reason)}</p></section>` : "";
+  const actions = humanActions(issue.status).length ? `<section class="actionbar"><h2>Ações</h2>${actionsPanel(issue)}</section>` : "";
+  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escape(issue.title)}</h1><p class="meta">Projeto: ${escape(issue.project)} · TAG: ${escape(issue.tag)} · ${owner}</p><p class="meta">ID: <code>${escape(issue.id)}</code> · No Status ${statusAge(issue)}</p></header>${closed}${field("Problema", issue.problem)}${field("Artefatos", issue.artifacts)}${criteriaField(issue.acceptance_criteria)}${dates(issue)}${thread(issue.thread)}${actions}</main>`;
 }
 
 function actionsPanel(issue) {
@@ -94,12 +94,6 @@ function actionForm(issue) {
     return `<form id="action-form" class="form">${summaryError()}${commentField()}<button ${state.busy ? "disabled" : ""}>Confirmar devolução</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
   }
   return `<form id="action-form" class="form">${summaryError()}${commentField()}${reasonField()}<button ${state.busy ? "disabled" : ""}>Fechar Issue</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
-}
-
-function confirmDialog(issue) {
-  if (!state.confirm) return "";
-  const reason = escape(state.draft.closed_reason ?? "");
-  return `<dialog id="confirm-close" open><form method="dialog" class="form"><h2>Fechar “${escape(issue.title)}”?</h2><p>Esta ação moverá a Issue para CLOSED e não poderá ser desfeita. Motivo: ${reason}.</p><menu><button type="button" data-cancel-confirm>Cancelar</button><button type="button" data-confirm-close ${state.busy ? "disabled" : ""}>Fechar definitivamente</button></menu></form></dialog>`;
 }
 
 function renderNewIssue() {
@@ -157,15 +151,30 @@ function feedback() {
 }
 
 function field(title, value) {
-  return `<section><h2>${title}</h2><p class="preserve">${escape(value)}</p></section>`;
+  return `<section class="box"><h2>${title}</h2><p class="preserve">${escape(value)}</p></section>`;
+}
+
+function criteriaField(value) {
+  const items = parseChecklist(value);
+  const body = items.length
+    ? `<ul class="checklist">${items.map((item) => `<li class="${item.done ? "done" : ""}">${escape(item.label)}</li>`).join("")}</ul>`
+    : `<p class="preserve">${escape(value)}</p>`;
+  return `<section class="box"><h2>Critérios de aceite</h2>${body}</section>`;
 }
 
 function thread(entries) {
-  return `<section><h2>Thread</h2><ol>${entries.map((entry) => `<li><strong>${escape(entry.actor)} · ${entry.status}</strong> <time>${date(entry.timestamp)}</time><p class="preserve">${escape(entry.comment)}</p></li>`).join("")}</ol></section>`;
+  return `<section class="box"><h2>Thread</h2><ol class="thread">${entries.map(message).join("")}</ol></section>`;
+}
+
+function message(entry) {
+  const kind = entry.actor === "human" ? "human" : "agent";
+  const reason = entry.closed_reason ? ` · ${escape(entry.closed_reason)}` : "";
+  return `<li class="msg msg--${kind}"><div class="msg-head"><span class="msg-who">${escape(entry.actor)}</span><time>${date(entry.timestamp)}</time></div><p class="msg-status">${entry.status}${reason}</p><p class="preserve">${escape(entry.comment)}</p></li>`;
 }
 
 function dates(issue) {
-  return `<h2>Datas</h2><p>Criada: ${date(issue.created_at)}</p><p>Mudança: ${date(issue.status_changed_at)}</p>`;
+  const claimed = issue.claimed_at ? `<p>Claim: ${date(issue.claimed_at)}</p>` : "";
+  return `<section class="box"><h2>Datas</h2><p>Criada: ${date(issue.created_at)}</p>${claimed}<p>Última mudança: ${date(issue.status_changed_at)}</p></section>`;
 }
 
 function renderLoading() { root().innerHTML = `<p class="loading" aria-live="polite">Carregando quadro…</p>`; }
@@ -195,7 +204,7 @@ function loadFilters() { return JSON.parse(sessionStorage.getItem("issues.filter
 function saveFilters() { sessionStorage.setItem("issues.filters", JSON.stringify(state.filters)); }
 function restoreScroll() { setTimeout(() => window.scrollTo(0, Number(sessionStorage.getItem("issues.scroll") ?? 0))); }
 function emptyDraft() { return { title: "", project: "", tag: "", problem: "", artifacts: "", acceptance_criteria: "", comment: "", closed_reason: "" }; }
-function clearActionState() { state.panel = null; state.confirm = false; state.errors = {}; state.feedback = null; state.busy = false; }
+function clearActionState() { state.panel = null; state.errors = {}; state.feedback = null; state.busy = false; }
 function actionLabel(action) {
   return { close: "Fechar Issue", reset: "Fazer Reset", "decide-open": "Devolver para OPEN", "decide-close": "Fechar Issue" }[action];
 }
@@ -210,14 +219,11 @@ function handleClick(event) {
   if (target.id === "clear") { state.filters = { title: "", project: "", tag: "" }; saveFilters(); return renderBoard(); }
   if (target.dataset.openPanel) {
     state.panel = target.dataset.openPanel;
-    state.confirm = false;
     state.errors = {};
     state.draft = { ...state.draft, comment: state.draft.comment ?? "", closed_reason: state.draft.closed_reason ?? "" };
     return renderDetail();
   }
-  if (target.dataset.cancelPanel) { state.panel = null; state.confirm = false; state.errors = {}; return renderDetail(); }
-  if (target.dataset.cancelConfirm) { state.confirm = false; return renderDetail(); }
-  if (target.dataset.confirmClose) return submitCloseConfirmed();
+  if (target.dataset.cancelPanel) { state.panel = null; state.errors = {}; return renderDetail(); }
   if (target.dataset.issueId || target.dataset.back || target.getAttribute("href") === "/issues/new") {
     if (target.dataset.back || target.getAttribute("href") === "/") {
       state.draft = emptyDraft();
@@ -248,13 +254,6 @@ function readForm(form) {
   for (const [key, value] of new FormData(form).entries()) state.draft[key] = String(value);
 }
 
-function handleKey(event) {
-  if (event.key === "Escape" && state.confirm) {
-    state.confirm = false;
-    renderDetail();
-  }
-}
-
 async function submitCreate() {
   const result = validateCreate(state.draft);
   state.errors = result.errors;
@@ -282,19 +281,14 @@ async function submitCreate() {
 async function submitAction() {
   if (state.panel === "reset") return submitReset();
   if (state.panel === "decide-open") return submitDecide("OPEN");
-  if (state.panel === "decide-close" || state.panel === "close") return prepareClose();
+  if (state.panel === "decide-close" || state.panel === "close") return submitClose();
 }
 
-function prepareClose() {
+async function submitClose() {
   const values = { comment: state.draft.comment, closed_reason: state.draft.closed_reason };
   const result = state.panel === "close" ? validateClose(values) : validateDecide({ ...values, status: "CLOSED" });
   state.errors = result.errors;
   if (!result.ok) return renderDetail();
-  state.confirm = true;
-  renderDetail();
-}
-
-async function submitCloseConfirmed() {
   state.busy = true;
   renderDetail();
   const path = state.panel === "close"
@@ -331,7 +325,6 @@ async function mutate(path, body, successMessage) {
     await reloadIssues();
     state.issue = fresh;
     state.panel = null;
-    state.confirm = false;
     state.draft = emptyDraft();
     state.errors = {};
     state.feedback = { kind: "success", message: successMessage };
@@ -339,7 +332,6 @@ async function mutate(path, body, successMessage) {
     renderDetail();
   } catch (error) {
     state.busy = false;
-    state.confirm = false;
     state.feedback = classifyMutationError(error.status ?? 500, error.message);
     renderDetail();
   }
@@ -357,7 +349,6 @@ async function refreshIssue() {
     state.issue = await api(`/api/issues/${state.issue.id}`);
     state.draft = draft;
     state.panel = humanActions(state.issue.status).includes(panel) ? panel : null;
-    state.confirm = false;
     state.feedback = state.feedback?.kind === "conflict" ? null : state.feedback;
     renderDetail();
   } catch (error) { renderError(error); }

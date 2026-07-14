@@ -5,6 +5,7 @@ import {
   filterIssues,
   groupIssues,
   humanActions,
+  parseChecklist,
   statusAge,
   validateClose,
   validateCreate,
@@ -52,10 +53,11 @@ test("criar Issue aceita formulário completo com TAG do enum", () => {
   assert.deepEqual(validateCreate(draft), { ok: true, values: draft, errors: {} });
 });
 
-test("fechar e reset exigem comentário; fechamento exige Motivo válido", () => {
-  assert.match(validateClose({ comment: "", closed_reason: "" }).errors.comment, /obrigat/i);
+test("fechar exige apenas Motivo válido (comentário opcional); reset exige comentário", () => {
+  assert.equal(validateClose({ comment: "", closed_reason: "concluido" }).ok, true);
+  assert.equal(validateClose({ comment: "", closed_reason: "" }).errors.comment, undefined);
+  assert.match(validateClose({ comment: "", closed_reason: "" }).errors.closed_reason, /Motivo/);
   assert.match(validateClose({ comment: "x", closed_reason: "x" }).errors.closed_reason, /Motivo/);
-  assert.equal(validateClose({ comment: "feito", closed_reason: "concluido" }).ok, true);
   assert.equal(validateReset({ comment: "liberar" }).ok, true);
   assert.match(validateReset({ comment: "  " }).errors.comment, /obrigat/i);
 });
@@ -64,7 +66,19 @@ test("Decisão AWAITING: OPEN só com comentário; CLOSED com Motivo", () => {
   assert.equal(validateDecide({ status: "OPEN", comment: "voltar" }).ok, true);
   assert.match(validateDecide({ status: "OPEN", comment: "", closed_reason: "concluido" }).errors.comment, /obrigat/i);
   assert.equal(validateDecide({ status: "CLOSED", comment: "fim", closed_reason: "concluido" }).ok, true);
+  assert.equal(validateDecide({ status: "CLOSED", comment: "", closed_reason: "concluido" }).ok, true);
   assert.match(validateDecide({ status: "CLOSED", comment: "fim", closed_reason: "" }).errors.closed_reason, /Motivo/);
+});
+
+test("critérios '[ ]'/'[x]' viram checklist; texto sem sintaxe não vira itens", () => {
+  const items = parseChecklist("[ ] pendente\n[x] feito\n[X] outro feito\ntexto solto");
+  assert.deepEqual(items, [
+    { done: false, label: "pendente" },
+    { done: true, label: "feito" },
+    { done: true, label: "outro feito" },
+  ]);
+  assert.deepEqual(parseChecklist("apenas texto\nsem colchetes"), []);
+  assert.deepEqual(parseChecklist(""), []);
 });
 
 test("409 é conflito; demais falhas preservam mensagem de erro", () => {

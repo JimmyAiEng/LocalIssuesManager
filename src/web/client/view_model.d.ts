@@ -20,6 +20,7 @@ export const CLOSED_REASONS: string[];
 export function filterIssues(issues: IssueCard[], filters: { title: string; project: string; tag: string }): IssueCard[];
 export function groupIssues(issues: IssueCard[]): Record<string, IssueCard[]>;
 export function statusAge(issue: IssueCard, now?: Date): string;
+export function parseChecklist(text: string): { done: boolean; label: string }[];
 export function options(issues: IssueCard[], property: "project" | "tag"): string[];
 export function humanActions(status: string): string[];
 export function validateCreate(values: CreateValues): ValidationResult<CreateValues>;

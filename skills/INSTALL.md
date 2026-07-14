@@ -40,4 +40,4 @@ Rode o `init` de novo com a versão nova do pacote.
 
 1. Abrir o projeto no harness e confirmar que `AGENTS.md` está no contexto.
 2. `issues list --pretty` responde (CLI no PATH via `npx` ou install global).
-3. Claimar uma Issue (`issues next --agent <ia>`) e ver a skill `*-phase` da TAG ser lida.
+3. Reivindicar trabalho (`issues next --agent <ia>`) e ver a skill `*-phase` do tipo do Ticket ser lida.

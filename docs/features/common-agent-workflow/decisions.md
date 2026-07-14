@@ -25,6 +25,13 @@ Artefato de debate: `.lavish/common-agent-workflow-debate.html`
 | D16 | Escopo desta Issue | Especificar workflow + catálogo; **não** implementar AGENTS.md nem skills |
 | D17 | Progressive disclosure | Camada 0 `sdlc-workflow` sempre no contexto (via AGENTS.md); camada 1 `*-phase` por TAG faz disclosure; camada 2 = skills concretas obtidas sob demanda até completar a Issue |
 
+## Revisões posteriores
+
+| Data | Decisão |
+|---|---|
+| 2026-07-13 | YAGNI no pack: camada 2 (skills de execução) removida por decisão do humano. Supersede D14 e a parte de camada 2 de D17. O pack passa a ter só `sdlc-workflow` (camada 0) + 5 skills `*-phase` (camada 1); o **como** executar cada fase é decisão do agente. |
+| v3 (Issues + Tickets) | Modelo Issue-agregado + Ticket. A fase SDLC deixa de ser TAG da Issue e vira o **tipo do Ticket** (`Planning` · `Design` · `Implement` · `QA` · `Deploy`); o roteamento de fase (D11, D17) passa a ser por **tipo do Ticket**, não por TAG da Issue. `Deployment` renomeado para `Deploy`; `Maintenance` (D15) deixa de ser fase e vira Issue de tipo `Fix`/`Refactor`. Ver `PRD_v3.md`/`DESIGN_v3.md`. |
+
 ## Rejeitado / corrigido
 
 | Item | Motivo |

@@ -18,22 +18,21 @@ Camada 0: estágios, gates, paralelismo, Review≠QA. **Não** carregue o catál
 
 ---
 
-## Ao claimar uma Issue (camada 1)
+## Ao claimar trabalho (camada 1)
 
-1. Claim via issues-local (tabela abaixo).
-2. Leia a **TAG** da Issue claimada.
-3. Acione **somente** a skill de fase correspondente:
+1. Claim via `issues next` (tabela abaixo); o retorno é `{ issue, ticket? }`.
+2. **Se veio um `ticket`:** leia o **tipo do Ticket** e acione **somente** a skill de fase correspondente.
+3. **Se veio só a `issue`** (sem `ticket`): a Issue foi reivindicada para **decompor**; crie os Tickets do agregado (`issues ticket create …`) conforme o tipo da Issue e os requisitos.
 
-| TAG | Skill de fase |
+| Tipo do Ticket | Skill de fase |
 |---|---|
 | `Planning` | `planning-phase` |
 | `Design` | `design-phase` |
 | `Implement` | `implement-phase` |
 | `QA` | `qa-phase` |
-| `Deployment` | `deployment-phase` |
-| `Maintenance` | Fora deste workflow |
+| `Deploy` | `deployment-phase` |
 
-4. A fase faz o **disclosure** das skills concretas (camada 2). Obtenha só as necessárias para **esta** Issue.
+4. A skill de fase diz o que a fase entrega e como fechá-la; o **como** executar é decisão do agente.
 5. Skills de outras fases ficam fora do contexto.
 
 ---
@@ -42,38 +41,53 @@ Camada 0: estágios, gates, paralelismo, Review≠QA. **Não** carregue o catál
 
 Dados em `~/issues-manager` (ou `ISSUES_ROOT`). Saída JSON; use `--pretty` se precisar ler.
 
+Issue:
+
 | Comando | Quem | Efeito |
 |---|---|---|
-| `issues next --agent <ia>` | IA | Claim FIFO → `CLAIMED` |
-| `issues next --agent <ia> --project <p>` | IA | Idem, filtrado por projeto |
-| `issues get --id <uuid>` | qualquer | Detalhe completo |
-| `issues list [--status|--project|--title|--tag|--limit|--offset]` | qualquer | Listagem |
-| `issues status --id <uuid> --agent <ia> --status AWAITING --comment "…"` | owner | `CLAIMED` → `AWAITING` |
-| `issues status --id <uuid> --agent <ia> --status CLOSED --reason <motivo> --comment "…"` | IA | Fecha `OPEN` **sem** human_presence |
-| `issues create … --human` \| `--agent <ia>` | humano/IA | Nova Issue |
+| `issues next --agent <ia> [--project <p>]` | IA | Claim da fila → `{ issue, ticket? }` |
+| `issues get --id <uuid>` | qualquer | Detalhe da Issue **+ seus Tickets** |
+| `issues list [--status|--project|--title|--type|--limit|--offset]` | qualquer | Listagem de Issues |
+| `issues create --title --project --type <T> --problem [--artifacts] [--acceptance-criteria] (--human\|--agent <ia>)` | humano/IA | Nova Issue |
+| `issues status --id <uuid> --agent <ia> --status AWAITING --comment "…"` | IA | `ON-GOING` → `AWAITING` (exige **todos** os Tickets `CLOSED`) |
 | `issues decide --id <uuid> --human --status OPEN\|CLOSED --comment "…" [--reason …]` | humano | Decisão em `AWAITING` |
-| `issues reset --id <uuid> --human --comment "…"` | humano | `CLAIMED` → `OPEN` |
+| `issues reset --id <uuid> --human --comment "…"` | humano | `CLAIMED` → `OPEN` (não há reset de `ON-GOING`) |
+
+Ticket (grupo `ticket`; um Ticket pertence a exatamente uma Issue):
+
+| Comando | Quem | Efeito |
+|---|---|---|
+| `issues ticket create --issue <id> --type <T> --objective "…" --task "…" --acceptance-criteria "…" [--artifacts "…"] [--references "…"] (--human\|--agent <ia>)` | IA/humano | Novo Ticket `OPEN`; o **1º** move a Issue `CLAIMED` → `ON-GOING` |
+| `issues ticket claim --issue <id> --id <tid> (--human\|--agent <ia>)` | IA/humano | `OPEN` → `CLAIMED` (IA normalmente via `next`) |
+| `issues ticket status --issue <id> --id <tid> (--human\|--agent <ia>) --status AWAITING\|OPEN\|CLOSED --comment "…" [--reason …]` | owner | Transição a partir de `CLAIMED` |
+| `issues ticket decide --issue <id> --id <tid> --human --status OPEN\|CLOSED --comment "…" [--reason …]` | humano | Decisão em `AWAITING` |
+| `issues ticket get --issue <id> --id <tid>` | qualquer | Detalhe do Ticket |
+| `issues ticket list --issue <id> [--type <T>] [--status <S>]` | qualquer | Tickets da Issue |
 
 Agentes: `cursor` · `claude-code` · `codex` · `pi`  
 Motivos: `obsoleto` · `duplicado` · `concluido` · `errado`  
-TAGs (imutáveis): `Planning` · `Design` · `Implement` · `QA` · `Deployment` · `Maintenance`
+Tipo da Issue (imutável): `Fix` · `Feat` · `Research` · `Refactor`  
+Tipo do Ticket: `Planning` · `Design` · `Implement` · `QA` · `Deploy`
 
 ```text
 humano: create (--human)
-IA:     next --agent <ia>     → CLAIMED
-IA:     status … AWAITING     → AWAITING
+IA:     next --agent <ia>            → { issue, ticket? }
+IA:     ticket create …             → Issue vai a ON-GOING (no 1º)
+IA:     ticket status … AWAITING    → Ticket AWAITING
+humano: ticket decide OPEN|CLOSED
+IA:     status … AWAITING           → Issue AWAITING (todos Tickets CLOSED)
 humano: decide OPEN|CLOSED
 ```
 
-`next` é **FIFO** (`status_changed_at` entre OPENs). Não há claim por `--id`.
+`next` prioriza Tickets `OPEN` de Issues `ON-GOING` (FIFO por Ticket); se não houver, reivindica a Issue `OPEN` mais antiga para decompor. Claim explícito de Ticket por `--id` via `ticket claim`.
 
 ---
 
 ## Regras rápidas
 
-- Issues **independentes**; paralelo ok; Issue grande fecha **criando** continuações.
-- Gate humano = fechar Issue(s) da TAG atual e abrir a(s) da próxima.
-- Review interno (Implement) **≠** QA (TAG=`QA`).
-- Manutenção / bugfix: outro workflow — não use `*-phase` deste pack.
-- Camadas 0+1 (discovery) e camada 2 (Planning → Deployment) estão neste pack, todas no mesmo diretório de skills. Obtenha concretas só via a skill `*-phase` da TAG.
+- Issue = agregado tipado; um ou mais **Tickets** tipados a resolvem; Tickets independentes, paralelo ok.
+- A Issue só avança para `AWAITING` quando **todos** os seus Tickets estão `CLOSED`.
+- Review interno (Ticket `Implement`) **≠** QA (Ticket `QA`).
+- Manutenção / bugfix não é fase: vira Issue de tipo `Fix` ou `Refactor`, resolvida pelos Tickets adequados.
+- O pack tem só camadas 0+1 (discovery): `sdlc-workflow` + uma skill por fase, todas no mesmo diretório de skills.
 - Esta tabela de comandos é a **fonte única** da sintaxe da CLI no pack; em dúvida, rode `issues --help`.

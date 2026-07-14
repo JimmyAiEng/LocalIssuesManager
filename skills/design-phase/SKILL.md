@@ -1,39 +1,33 @@
 ---
 name: design-phase
 description: >-
-  Disclosure da fase Design: E/Proto opcionais, Spec obrigatória, skills
-  permitidas. Use ao claimar Issue com TAG=Design.
+  Fase Design do workflow: explorar desenho/prototipar se preciso, congelar a
+  spec, fatiar Tickets independentes e pedir o gate G2. Use quando o Ticket
+  claimado tem type=Design.
 ---
 
 # design-phase (camada 1)
 
-Acionada só quando a Issue claimada tem **TAG=`Design`**.
+Acionada quando o Ticket claimado tem **type=`Design`**.
 
 ## Objetivo
 
-Congelar spec e fatiar trabalho em Issues **independentes**. Gate **G2**: humano aceita → fecha Design → abre Implement.
+Congelar a spec e fatiar o trabalho em Tickets **independentes**.
+Gate **G2**: humano aceita → fecha Design → abre Implement.
 
-## Skills permitidas (camada 2) — obter sob demanda
+## Heurísticas
 
-| Skill | Quando obter |
-|---|---|
-| `codebase-design` | Requisitos **não** bastam para especificar; seams / trade-offs estruturais |
-| `prototype` | Validar pergunta de desenho com artefato **descartável** em worktree |
-| `to-spec` | Sintetizar alinhamento em spec |
-| `to-tickets` | Fatiar em Issues independentes (sem grafo de dependência obrigatória) |
-
-Se alguma skill acima estiver ausente no projeto, registre a lacuna em `AWAITING`.
-
-## Heurísticas E / Proto
-
-- **E:** só se requisitos forem insuficientes para Spec; depois, gate de **direção** (humano escolhe) antes de Spec.
-- **Proto:** worktree; antes e/ou depois do gate de direção; throwaway — não vira produto.
-- Se requisitos bastam → `to-spec` / `to-tickets`.
+- **Explorar desenho** (opcional): só se os requisitos não bastarem para especificar; apresente opções + trade-offs e peça o gate de **direção** (humano escolhe) antes da spec.
+- **Prototipar** (opcional): artefato **descartável** em worktree, antes e/ou depois do gate de direção; não vira produto.
+- Se os requisitos bastam, vá direto para spec + fatiamento.
+- Tickets fatiados são independentes, sem grafo de dependência obrigatória; paralelo ok.
+- **Como** desenhar e especificar é decisão do agente.
 
 ## Saídas
 
-Spec aceita; Issues Implement (e outras se preciso) via issues-local, paralelizáveis.
+Spec pronta para aceite; Tickets Implement (e outros se preciso) criados via `issues ticket create`.
 
 ## Encerramento
 
-`issues status --id <uuid> --agent <ia> --status AWAITING --comment "…"`.
+Mova o **Ticket** para `AWAITING`:
+`issues ticket status --issue <id> --id <tid> --agent <ia> --status AWAITING --comment "…"`.

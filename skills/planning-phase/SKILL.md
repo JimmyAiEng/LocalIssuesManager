@@ -1,40 +1,31 @@
 ---
 name: planning-phase
 description: >-
-  Disclosure da fase Planning: skills concretas permitidas e entregáveis.
-  Use ao claimar Issue com TAG=Planning.
+  Fase Planning do workflow: alinhar problema, requisitos e domínio, e pedir o
+  gate G1. Use quando o Ticket claimado tem type=Planning.
 ---
 
 # planning-phase (camada 1)
 
-Acionada só quando a Issue claimada tem **TAG=`Planning`**.
+Acionada quando o Ticket claimado tem **type=`Planning`**.
 
 ## Objetivo
 
-Alinhar problema, requisitos e domínio. Gate **G1**: humano aceita → fecha Planning → abre Design.
-
-## Skills permitidas (camada 2) — obter sob demanda
-
-| Skill | Quando obter |
-|---|---|
-| `wayfinder` | Escopo grande demais para uma sessão; mapear Issues de decisão |
-| `research` | Precisa de fontes confiáveis citadas |
-| `domain-modeling` | Afiar linguagem ubíqua / ADRs / `CONTEXT.md` do projeto |
-| `teach` | Humano pediu ensino do conceito em sessões |
-| `handoff` | Troca de harness/sessão no meio do trabalho |
-
-Obtenha só as concretas necessárias a **esta** Issue.
-Se alguma skill acima estiver ausente no projeto, registre a lacuna em `AWAITING`.
+Alinhar problema, requisitos (RF/RNF) e domínio.
+Gate **G1**: humano aceita → fecha Planning → abre Design.
 
 ## Heurísticas
 
-- Preferir fatias revisáveis; mapa grande → `wayfinder` e/ou continuações.
-- TAG é imutável; avanço de fase = fechar + criar Issue nova.
+- Escopo grande demais para uma sessão → **criar** Tickets de continuação.
+- Preferir fatias revisáveis pelo humano.
+- O tipo do Ticket é imutável; avanço de fase = **novo Ticket** do tipo seguinte.
+- **Como** planejar (pesquisa, glossário, ADRs, etc.) é decisão do agente.
 
 ## Saídas
 
-Problema/requisitos aceitos; `CONTEXT.md`/ADRs se necessário; handoff se houve troca de agente.
+Problema e requisitos registrados na Issue, prontos para o humano decidir G1.
 
 ## Encerramento
 
-`issues status --id <uuid> --agent <ia> --status AWAITING --comment "…"`.
+Mova o **Ticket** para `AWAITING`:
+`issues ticket status --issue <id> --id <tid> --agent <ia> --status AWAITING --comment "…"`.

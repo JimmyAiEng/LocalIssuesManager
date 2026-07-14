@@ -5,20 +5,32 @@ Contexto único: gerenciador local de Issues via CLI, single-user, sem orquestra
 ## Language
 
 **Issue**:
-Unidade de trabalho persistida com título, projeto, TAG, corpo (problema, artefatos, critérios) e status.
-_Avoid_: Ticket, task, card, item
+Agregado de trabalho persistido com título, projeto, TAG (tipo), problema e status; nasce de uma ideia/problema e é resolvido por um ou mais Tickets. Artefatos e critérios de aceite são opcionais na Issue.
+_Avoid_: task, card, item
+
+**Ticket**:
+Fatia de solução dentro de uma Issue (pertence a exatamente uma); tem objetivo, tarefa, critérios de aceite obrigatórios, um tipo SDLC (`Planning` | `Design` | `Implement` | `QA` | `Deploy`) e status próprio. O tipo do Ticket roteia a skill de fase.
+_Avoid_: Subtask, story, subissue, card
+
+**Objective / Task**:
+Campos obrigatórios do Ticket: **Objective** = o que a fatia busca alcançar; **Task** = o trabalho a executar para alcançá-lo.
+_Avoid_: goal/todo livre, descrição única
 
 **Projeto**:
 Nome livre obrigatório que agrupa Issues; exatamente um por Issue.
 _Avoid_: Workspace, repo, namespace
 
 **TAG**:
-Fase SDLC imutável da Issue (`Planning` | `Design` | `Implement` | `QA` | `Deployment` | `Maintenance`). Avanço de ciclo = fechar + criar outra.
-_Avoid_: Label, phase, stage, sprint
+Tipo imutável da Issue (`Fix` | `Feat` | `Research` | `Refactor`); classifica a intenção, não a fase. A fase/tipo de trabalho SDLC deixou de ser propriedade da Issue e passou a ser propriedade do **Ticket** (`type`).
+_Avoid_: Label, phase, stage, sprint, Maintenance
 
 **Status**:
-Estado operacional da Issue: `OPEN` | `CLAIMED` | `AWAITING` | `CLOSED`.
+Estado operacional da Issue: `OPEN` | `CLAIMED` | `ON-GOING` | `AWAITING` | `CLOSED`. Ticket usa o mesmo enum **sem** `ON-GOING`.
 _Avoid_: State, workflow step
+
+**ON-GOING**:
+Status exclusivo da Issue: agregado com Tickets já criados, em andamento. A Issue entra em `ON-GOING` ao criar o 1º Ticket e só avança a `AWAITING` quando **todos** os Tickets estão `CLOSED`. Não há reset de `ON-GOING`.
+_Avoid_: IN_PROGRESS, WIP, ACTIVE
 
 **Claim**:
 Transição `OPEN → CLAIMED` que reserva a Issue a uma IA (FIFO); não gera entrada na Thread.
@@ -53,11 +65,11 @@ Enum obrigatório em `CLOSED`: `obsoleto` | `duplicado` | `concluido` | `errado`
 _Avoid_: Close reason livre, resolution
 
 **Fila**:
-Ordenação FIFO estrita das Issues `OPEN` (mais antiga primeiro), com filtro opcional de Projeto.
+Seleção do `next`: prioriza o Ticket `OPEN` mais antigo (FIFO) de Issues `ON-GOING`; se não houver, devolve a Issue `OPEN` mais antiga para decompor. Retorno `{ issue, ticket? }`, com filtro opcional de Projeto.
 _Avoid_: Priority queue, backlog ranking
 
 **Queue**:
-Repositório concreto de Issues no domínio: persiste no filesystem (comandos Linux), lista e devolve a Issue `OPEN` mais antiga (FIFO). Não é Port/interface.
+Repositório concreto de Issues no domínio: persiste no filesystem, lista e seleciona o próximo trabalho (Ticket de Issue `ON-GOING` primeiro, senão Issue `OPEN` mais antiga). Não é Port/interface.
 _Avoid_: IssueStore, FifoQueue, IssueRepository, FsQueueRepository
 
 **Human presence**:

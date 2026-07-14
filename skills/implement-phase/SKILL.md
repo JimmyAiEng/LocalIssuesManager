@@ -1,33 +1,26 @@
 ---
 name: implement-phase
 description: >-
-  Disclosure da fase Implement: TDD, review interno, skills permitidas.
-  Use ao claimar Issue com TAG=Implement.
+  Fase Implement do workflow: entregar fatia funcional com testes e review
+  interno, e pedir revisão da fatia. Use quando o Ticket claimado tem type=Implement.
 ---
 
 # implement-phase (camada 1)
 
-Acionada só quando a Issue claimada tem **TAG=`Implement`**.
+Acionada quando o Ticket claimado tem **type=`Implement`**.
 
 ## Objetivo
 
-Entregar fatia **funcional/integrável** via TDD e review interno. Humano revisa a fatia. Quando o conjunto Implement acordado estiver feito, abre-se Issue(s) **QA**.
-
-## Skills permitidas (camada 2) — obter sob demanda
-
-| Skill | Quando obter |
-|---|---|
-| `implement` | Orquestrar a fatia (TDD + review) conforme spec/ticket |
-| `tdd` | Red-green-refactor — **sem** gate humano entre red e green |
-| `code-review` | Review **interno** (standards + fidelidade à spec) — **≠** QA |
-
-Se alguma skill acima estiver ausente no projeto, registre a lacuna em `AWAITING`.
+Entregar fatia **funcional/integrável** conforme a spec, com testes e review interno.
+Humano revisa a fatia.
+Quando o conjunto Implement acordado estiver feito, abre-se Ticket(s) **QA**.
 
 ## Heurísticas
 
-- Cada Issue = código integrável, revisável pelo humano.
-- Issue grande → fecha **criando** continuações; paralelo ok.
-- `code-review` não substitui Issue TAG=`QA`.
+- Cada Ticket = código integrável, revisável pelo humano.
+- Fatia grande → fecha **criando** Tickets de continuação; paralelo ok.
+- Review interno **não** substitui um Ticket tipo `QA`.
+- **Como** implementar (TDD, ferramentas, review) é decisão do agente.
 
 ## Saídas
 
@@ -35,4 +28,5 @@ Código + testes da fatia; achados de review tratados ou registrados.
 
 ## Encerramento
 
-`issues status --id <uuid> --agent <ia> --status AWAITING --comment "…"`.
+Mova o **Ticket** para `AWAITING`:
+`issues ticket status --issue <id> --id <tid> --agent <ia> --status AWAITING --comment "…"`.

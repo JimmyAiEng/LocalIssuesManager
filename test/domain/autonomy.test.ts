@@ -82,7 +82,7 @@ test("Confirmation automático herda human_need numa Issue HITL", () => {
   issue.addTicket(ticket(issue.id, "Implement", "AFK"));
   const t = issue.tickets.at(-1)!;
   issue.claimTicket(t.id, "pi");
-  issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido");
+  issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido", true);
   const confirmation = issue.tickets.at(-1)!;
   assert.equal(confirmation.type, "Confirmation");
   assert.equal(confirmation.tags.human_need, "HITL"); // antes nascia sem tag → inválido numa Issue HITL
@@ -93,7 +93,7 @@ test("Issue HITL: humano decidindo o Confirmation AWAITING destrava a Issue (→
   issue.addTicket(ticket(issue.id, "Implement", "AFK"));
   const t = issue.tickets.at(-1)!;
   issue.claimTicket(t.id, "pi");
-  issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido");
+  issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido", true);
   const confirmation = issue.tickets.at(-1)!; // HITL: IA não fecha, só manda para AWAITING
   issue.claimTicket(confirmation.id, "pi");
   issue.transitionTicket(confirmation.id, "pi", "AWAITING", "para decisão humana");
@@ -107,7 +107,7 @@ test("Confirmation automático numa Issue sem autonomia não recebe tag", () => 
   issue.addTicket(ticket(issue.id, "Implement"));
   const t = issue.tickets.at(-1)!;
   issue.claimTicket(t.id, "pi");
-  issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido");
+  issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido", true);
   const confirmation = issue.tickets.at(-1)!;
   assert.equal(confirmation.type, "Confirmation");
   assert.equal(confirmation.tags.human_need, undefined);

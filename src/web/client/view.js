@@ -1,6 +1,6 @@
 import {
   CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, TAG_VALUES, TICKET_TYPES, attachmentsMarkup, canClaimTicket, canCreateTicket,
-  filterIssues, groupIssues, humanActions, options, parseChecklist, statusAge, ticketHumanActions,
+  escapeHtml, filterIssues, groupIssues, humanActions, options, parseChecklist, statusAge, ticketHumanActions,
 } from "./view_model.js";
 import { state } from "./state.js";
 
@@ -48,7 +48,12 @@ function commentSection(issue) {
 
 function commentForm(ticketId) {
   const idAttr = ticketId ? ` data-ticket-id="${ticketId}"` : "";
-  return `<form id="comment-form" class="form"${idAttr}>${summaryError()}<label>Comentário<textarea name="comment" rows="3">${escapeHtml(state.commentDraft.comment ?? "")}</textarea></label><label>Anexos (imagem/vídeo)<input type="file" name="attachments" multiple accept="image/*,video/*"></label><div class="form-actions"><button ${state.busy ? "disabled" : ""}>Enviar comentário</button><button type="button" data-cancel-comment>Cancelar</button></div></form>`;
+  return `<form id="comment-form" class="form"${idAttr}>${summaryError()}<label>Comentário<textarea name="comment" rows="3">${escapeHtml(state.commentDraft.comment ?? "")}</textarea></label>${attachmentField()}<div class="form-actions"><button ${state.busy ? "disabled" : ""}>Enviar comentário</button><button type="button" data-cancel-comment>Cancelar</button></div></form>`;
+}
+
+// Componente único de input de anexo (imagem/vídeo), reutilizado em comentário, criação e devolução para OPEN.
+function attachmentField() {
+  return `<label>Anexos (imagem/vídeo)<input type="file" name="attachments" multiple accept="image/*,video/*"></label>`;
 }
 
 function actionsPanel(issue) {
@@ -64,10 +69,10 @@ function actionsPanel(issue) {
 function actionForm(issue) {
   if (!state.panel || !humanActions(issue.status).includes(state.panel)) return "";
   if (state.panel === "reset") {
-    return `<form id="action-form" class="form">${summaryError()}<p class="hint">A Issue voltará para OPEN e o Owner será removido.</p>${commentField()}<button ${state.busy ? "disabled" : ""}>Fazer Reset</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
+    return `<form id="action-form" class="form">${summaryError()}<p class="hint">A Issue voltará para OPEN e o Owner será removido.</p>${commentField()}${attachmentField()}<button ${state.busy ? "disabled" : ""}>Fazer Reset</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
   }
   if (state.panel === "decide-open") {
-    return `<form id="action-form" class="form">${summaryError()}${commentField()}<button ${state.busy ? "disabled" : ""}>Confirmar devolução</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
+    return `<form id="action-form" class="form">${summaryError()}${commentField()}${attachmentField()}<button ${state.busy ? "disabled" : ""}>Confirmar devolução</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
   }
   return `<form id="action-form" class="form">${summaryError()}${commentField()}${reasonField()}<button ${state.busy ? "disabled" : ""}>Fechar Issue</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
 }
@@ -116,7 +121,8 @@ function ticketActionForm(ticket) {
   if (state.ticketPanel?.ticketId !== ticket.id) return "";
   const action = state.ticketPanel.action;
   const reason = action.endsWith("-close") ? reasonField() : "";
-  return `<form id="ticket-action-form" class="form" data-ticket-id="${ticket.id}">${summaryError()}${commentField()}${reason}<button ${state.busy ? "disabled" : ""}>${ticketActionLabel(action)}</button><button type="button" data-cancel-ticket-panel>Cancelar</button></form>`;
+  const attach = action.endsWith("-open") || action === "ticket-reopen" ? attachmentField() : ""; // devolução para OPEN
+  return `<form id="ticket-action-form" class="form" data-ticket-id="${ticket.id}">${summaryError()}${commentField()}${reason}${attach}<button ${state.busy ? "disabled" : ""}>${ticketActionLabel(action)}</button><button type="button" data-cancel-ticket-panel>Cancelar</button></form>`;
 }
 
 function ticketCreate(issue) {
@@ -131,6 +137,7 @@ function ticketCreate(issue) {
     ${areaInput("artifacts", "Artefatos (opcional)", draft.artifacts)}
     ${areaInput("references", "Referências (opcional)", draft.references)}
     ${selectInput("human_need", `${tagLabels.human_need} (opcional)`, TAG_VALUES.human_need, draft.human_need)}
+    ${attachmentField()}
     <div class="form-actions"><button ${state.busy ? "disabled" : ""}>Criar Ticket</button><button type="button" id="toggle-ticket-form">Cancelar</button></div>
   </form>`;
 }
@@ -149,6 +156,7 @@ export function renderNewIssue() {
     ${selectInput("complexity", `${tagLabels.complexity} (opcional)`, TAG_VALUES.complexity, draft.complexity)}
     ${selectInput("human_need", `${tagLabels.human_need} (opcional)`, TAG_VALUES.human_need, draft.human_need)}
     ${selectInput("risk", `${tagLabels.risk} (opcional)`, TAG_VALUES.risk, draft.risk)}
+    ${attachmentField()}
     <div class="form-actions"><button ${state.busy ? "disabled" : ""}>Salvar Issue</button><a class="button" href="/" data-back>Cancelar</a></div>
   </form></main>`;
 }
@@ -232,7 +240,6 @@ function tagsMarkup(tags) {
 }
 
 function date(value) { return new Date(value).toLocaleString(); }
-function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" })[character]); }
 function hasFilters() { return Object.values(state.filters).some(Boolean); }
 function selectOptions(values, selected, empty) { return `<option value="">${empty}</option>${values.map((value) => `<option ${value === selected ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}`; }
 function restoreScroll() { setTimeout(() => window.scrollTo(0, Number(sessionStorage.getItem("issues.scroll") ?? 0))); }

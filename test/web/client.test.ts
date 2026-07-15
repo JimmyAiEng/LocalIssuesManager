@@ -80,7 +80,6 @@ test("criar Issue exige campos obrigatórios e Tipo válido; artefatos/critério
   const draft = { title: "", project: "app", type: "Nope", problem: "p", artifacts: "", acceptance_criteria: "" };
   const result = validateCreate(draft);
   assert.equal(result.ok, false);
-  assert.equal(result.values, draft);
   assert.match(result.errors.title, /obrigat/i);
   assert.match(result.errors.type, /Tipo/);
   assert.equal(result.errors.artifacts, undefined);
@@ -89,7 +88,7 @@ test("criar Issue exige campos obrigatórios e Tipo válido; artefatos/critério
 
 test("criar Issue aceita apenas obrigatórios com Tipo do enum", () => {
   const draft = { title: "Nova", project: "app", type: "Feat", problem: "p", artifacts: "", acceptance_criteria: "" };
-  assert.deepEqual(validateCreate(draft), { ok: true, values: draft, errors: {} });
+  assert.deepEqual(validateCreate(draft), { ok: true, errors: {} });
 });
 
 test("criar Ticket exige objetivo, tarefa, critérios e Tipo válido", () => {
@@ -99,7 +98,7 @@ test("criar Ticket exige objetivo, tarefa, critérios e Tipo válido", () => {
   assert.match(result.errors.objective, /obrigat/i);
   assert.match(result.errors.type, /Tipo/);
   const ok = { objective: "o", task: "t", acceptance_criteria: "c", type: "Implement", artifacts: "", references: "" };
-  assert.deepEqual(validateCreateTicket(ok), { ok: true, values: ok, errors: {} });
+  assert.deepEqual(validateCreateTicket(ok), { ok: true, errors: {} });
 });
 
 test("status de Ticket: comentário sempre; CLOSED também exige Motivo", () => {

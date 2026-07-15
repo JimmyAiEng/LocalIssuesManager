@@ -7,7 +7,7 @@ import { applyTags, assertDecision, required, threadEntry, TICKET_TYPES, type Ac
 export type Phase = { status: IssueStatus; timestamp: string };
 export type CreateIssue = {
   title: string; project: string; type: IssueType; problem: string;
-  artifacts?: string; acceptance_criteria?: string;
+  artifacts?: string; acceptance_criteria?: string; attachments?: AttachmentData[];
 };
 export type IssueData = {
   id: string; title: string; project: string; type: IssueType; problem: string;
@@ -40,8 +40,10 @@ export class Issue implements IssueData {
   }
 
   static #initialData(input: CreateIssue, actor: Actor, timestamp: string): IssueData {
-    const entry = threadEntry(actor, timestamp, "Issue created", "OPEN", null);
-    return { ...input, artifacts: input.artifacts ?? "", acceptance_criteria: input.acceptance_criteria ?? "",
+    const { attachments, ...fields } = input;
+    const base = threadEntry(actor, timestamp, "Issue created", "OPEN", null);
+    const entry = attachments?.length ? { ...base, attachments } : base;
+    return { ...fields, artifacts: input.artifacts ?? "", acceptance_criteria: input.acceptance_criteria ?? "",
       id: randomUUID(), status: "OPEN", owner: null, closed_reason: null, claimed_at: null,
       created_at: timestamp, status_changed_at: timestamp, human_presence: actor === "human",
       thread: [entry], phases: [{ status: "OPEN", timestamp }], tickets: [], revision: 0, tags: {}, worktree: null };
@@ -80,7 +82,7 @@ export class Issue implements IssueData {
   }
 
   claimTicket(ticketId: string, actor: Actor, now = new Date()): void {
-    this.#ticket(ticketId).claim(actor, now);
+    this.ticket(ticketId).claim(actor, now);
     this.#bumpRevision();
   }
 
@@ -93,7 +95,7 @@ export class Issue implements IssueData {
   }
 
   commentTicket(ticketId: string, actor: Actor, comment: string, attachments: AttachmentData[] = [], now = new Date()): void {
-    this.#ticket(ticketId).comment(actor, comment, attachments, now);
+    this.ticket(ticketId).comment(actor, comment, attachments, now);
     this.#bumpRevision();
   }
 
@@ -119,41 +121,41 @@ export class Issue implements IssueData {
   }
 
   tagTicket(ticketId: string, updates: TagUpdates): void {
-    const ticket = this.#ticket(ticketId);
+    const ticket = this.ticket(ticketId);
     const tags = applyTags(ticket.tags, updates);
     assertTicketAutonomy(this.tags.human_need, ticket.type, tags.human_need);
     ticket.tag(updates);
     this.#bumpRevision();
   }
 
-  transitionTicket(ticketId: string, actor: Actor, status: TicketStatus, comment: string, reason?: ClosedReason, now = new Date()): void {
-    const ticket = this.#ticket(ticketId);
-    ticket.changeStatus(actor, status, comment, reason, now);
+  transitionTicket(ticketId: string, actor: Actor, status: TicketStatus, comment: string, reason?: ClosedReason, last = false, now = new Date(), attachments: AttachmentData[] = []): void {
+    const ticket = this.ticket(ticketId);
+    ticket.changeStatus(actor, status, comment, reason, last, now, attachments);
     this.#bumpRevision();
     this.#confirmWhenDone(ticket, actor, now);
   }
 
-  decideTicket(ticketId: string, status: "OPEN" | "CLOSED", comment: string, reason?: ClosedReason, now = new Date()): void {
-    const ticket = this.#ticket(ticketId);
-    ticket.decide(status, comment, reason, now);
+  decideTicket(ticketId: string, status: "OPEN" | "CLOSED", comment: string, reason?: ClosedReason, last = false, now = new Date(), attachments: AttachmentData[] = []): void {
+    const ticket = this.ticket(ticketId);
+    ticket.decide(status, comment, reason, last, now, attachments);
     this.#bumpRevision();
     this.#confirmWhenDone(ticket, "human", now);
   }
 
-  reset(comment: string, now = new Date()): void {
+  reset(comment: string, now = new Date(), attachments: AttachmentData[] = []): void {
     this.#expect("CLAIMED");
     required(comment, "comment");
     this.#clearClaim();
     this.human_presence = true;
-    this.#transition("OPEN", "human", comment, null, now);
+    this.#transition("OPEN", "human", comment, null, now, attachments);
   }
 
-  decide(status: Decision, comment: string, reason?: ClosedReason, now = new Date()): void {
+  decide(status: Decision, comment: string, reason?: ClosedReason, now = new Date(), attachments: AttachmentData[] = []): void {
     this.#expect("AWAITING");
     assertDecision(status, comment, reason);
     if (status === "OPEN") this.#clearClaim();
     this.human_presence = true;
-    this.#transition(status, "human", comment, reason ?? null, now);
+    this.#transition(status, "human", comment, reason ?? null, now, attachments);
   }
 
   closeByAgent(agent: AgentId, comment: string, reason: ClosedReason, now = new Date()): void {
@@ -176,14 +178,29 @@ export class Issue implements IssueData {
     return this.tickets.find((ticket) => ticket.status !== "CLOSED" && TICKET_TYPES.indexOf(ticket.type) < rank) ?? null;
   }
 
+  // Tickets OPEN prontos para a fila: dependências satisfeitas e fase anterior concluída, ordenados FIFO.
+  readyTickets(): Ticket[] {
+    return this.tickets
+      .filter((ticket) => ticket.status === "OPEN" && this.dependenciesMet(ticket.id) && !this.phaseBlocker(ticket.type))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+  }
+
   dependenciesMet(ticketId: string): boolean {
-    return this.#ticket(ticketId).depends_on.every((depId) => {
+    return this.ticket(ticketId).depends_on.every((depId) => {
       const dep = this.tickets.find((candidate) => candidate.id === depId);
       return dep != null && (dep.status === "AWAITING" || dep.status === "CLOSED");
     });
   }
 
-  #ticket(ticketId: string): Ticket {
+  // Storage key do Artefato .md: o próprio Ticket (se ticketId) ou a Issue. Guarda CLOSED-imutável
+  // nas duas dimensões; não muta nem faz bump de revisão (o setArtifact não persiste o JSON).
+  artifactOwnerId(ticketId?: string): string {
+    const target = ticketId ? this.ticket(ticketId) : this;
+    if (target.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
+    return ticketId ?? this.id;
+  }
+
+  ticket(ticketId: string): Ticket {
     const ticket = this.tickets.find((candidate) => candidate.id === ticketId);
     if (!ticket) throw new DomainError(`Ticket not found: ${ticketId}`);
     return ticket;
@@ -199,6 +216,7 @@ export class Issue implements IssueData {
       this.#transition("AWAITING", actor, "Confirmação concluída", null, now);
       return;
     }
+    if (!closed.last) return; // só a fase final (marcada --last) dispara o Confirmation
     // Herdar human_need da Issue mantém o Confirmation válido numa Issue HITL (assertTicketAutonomy exige tag em todo Ticket).
     this.tickets.push(Ticket.create(Issue.#confirmationTicket(this.id, actor, this.tags.human_need), now)); // mesma operação do close: sem #bumpRevision extra
   }
@@ -210,9 +228,10 @@ export class Issue implements IssueData {
       acceptance_criteria: "Issue movida para AWAITING com o resumo da verificação, ou novos Tickets cobrindo o trabalho restante." };
   }
 
-  #transition(status: IssueStatus, actor: Actor, comment: string, reason: ClosedReason | null, now: Date): void {
-    const timestamp = now.toISOString();
-    this.thread.push(threadEntry(actor, timestamp, comment, status, reason));
+  #transition(status: IssueStatus, actor: Actor, comment: string, reason: ClosedReason | null, now: Date,
+    attachments: AttachmentData[] = []): void {
+    const base = threadEntry(actor, now.toISOString(), comment, status, reason);
+    this.thread.push(attachments.length ? { ...base, attachments } : base);
     this.closed_reason = reason;
     this.#changeStatus(status, now);
   }

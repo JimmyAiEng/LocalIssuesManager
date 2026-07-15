@@ -78,7 +78,7 @@ Dados ficam em `~/issues-manager` (ou `ISSUES_ROOT`):
 | **decide** | Decisão humana (AWAITING) | `--id` `--status` `--comment` `--human` | `--reason` |
 | **reset** | Liberar claim (CLAIMED→OPEN) | `--id` `--comment` `--human` | — |
 | **get** | Detalhe + Tickets | `--id` | — |
-| **list** | Listar Issues | — | `--status` `--project` `--title` `--type` `--limit` `--offset` |
+| **list** | Listar Issues | — | `--status` `--project` `--title` `--type` |
 
 ### Exemplos — Issues
 
@@ -118,32 +118,12 @@ issues list --project app --status OPEN --pretty
 
 ## Referência de Comandos — Infraestrutura
 
-**Harness** (registrar runner para o loop):
-
-```bash
-issues harness add --name pi --agent pi --command 'pi -p {prompt} --no-session'
-issues harness list
-issues harness remove --name pi
-```
-
-**Worktree** (sandbox git por Issue; manual — o loop ainda não muda o cwd automaticamente):
+**Worktree** (sandbox git por Issue):
 
 ```bash
 issues worktree add --id <uuid> [--path <p>]
 issues worktree remove --id <uuid>
 ```
-
-**Loop** (dreno periódico da fila via SO — systemd/cron):
-
-```bash
-issues loop add --name "pi-dev" --harness pi --interval "1h" [--project <p>] [--concurrency <n>]
-issues loop list
-issues loop install --name "pi-dev" [--cron] [--now]
-issues loop run --name "pi-dev"
-issues loop remove --name "pi-dev"
-```
-
-Detalhes: `docs/loop.md`.
 
 **Web** (UI local):
 
@@ -165,7 +145,6 @@ issues init --dogfood   # só no pack source: liga skills/ → paths dos harness
 | Regra | Efeito |
 |-------|--------|
 | `--human` XOR `--agent` | Comandos com ator: escolha um |
-| `--limit`, `--offset`, `--concurrency` | Inteiros ≥ 0 |
 | `--reason` (fechamento) | `obsoleto` \| `duplicado` \| `concluido` \| `errado` |
 | `--status` (Issue) | `OPEN` \| `CLAIMED` \| `ON-GOING` \| `AWAITING` \| `CLOSED` |
 | `--status` (Ticket) | `OPEN` \| `CLAIMED` \| `AWAITING` \| `CLOSED` |

@@ -27,5 +27,5 @@ PR e/ou nota de entrega; pedido explícito de G4 no comentário.
 
 ## Encerramento
 
-Mova o **Ticket** para `AWAITING`:
-`issues ticket status --issue <id> --id <tid> --agent <ia> --status AWAITING --comment "…"`.
+Mova o **Ticket** para `AWAITING` com `--last` (Deploy é a fase final; a flag é sticky e dispara o Confirmation quando o Ticket for fechado):
+`issues ticket status --issue <id> --id <tid> --agent <ia> --status AWAITING --comment "…" --last`.

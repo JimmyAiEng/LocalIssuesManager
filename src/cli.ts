@@ -1,22 +1,12 @@
-import { ClaimTicketUseCase } from "./app/claim_ticket_use_case.js";
-import { attachmentFromFile, CommentUseCase, type IncomingAttachment } from "./app/comment_use_case.js";
-import { CreateIssueUseCase } from "./app/create_issue_use_case.js";
-import { CreateTicketUseCase } from "./app/create_ticket_use_case.js";
-import { DecideIssueUseCase } from "./app/decide_issue_use_case.js";
-import { DecideTicketUseCase } from "./app/decide_ticket_use_case.js";
-import { GetIssueUseCase } from "./app/get_issue_use_case.js";
-import { GetTicketUseCase } from "./app/get_ticket_use_case.js";
-import { HarnessUseCase } from "./app/harness_use_case.js";
-import { InitPackUseCase, linkPackSkillsForDogfood } from "./app/init_pack_use_case.js";
-import { LoopUseCase } from "./app/loop_use_case.js";
-import { ListIssuesUseCase } from "./app/list_issues_use_case.js";
-import { ListTicketsUseCase } from "./app/list_tickets_use_case.js";
-import { NextIssueUseCase } from "./app/next_issue_use_case.js";
-import { ResetClaimUseCase } from "./app/reset_claim_use_case.js";
-import { StatusIssueUseCase } from "./app/status_issue_use_case.js";
-import { StatusTicketUseCase } from "./app/status_ticket_use_case.js";
-import { TagUseCase } from "./app/tag_use_case.js";
-import { WorktreeUseCase } from "./app/worktree_use_case.js";
+import { initPack, linkPackSkillsForDogfood } from "./app/init_pack_use_case.js";
+import {
+  addComment, addWorktree, artifactFromFile, attachmentFromFile, createIssue, decideIssue, getIssue,
+  type IncomingAttachment, listIssues, nextIssue, type NextResult, removeWorktree, resetClaim,
+  setArtifact, statusIssue, updateTags,
+} from "./app/issue_use_cases.js";
+import { composePrompt } from "./app/prompt_composition.js";
+import { getRequirements, setRequirements } from "./app/requirements_use_cases.js";
+import { claimTicket, createTicket, decideTicket, getTicket, listTickets, statusTicket } from "./app/ticket_use_cases.js";
 import { openBrowser, startWebServer } from "./web/server.js";
 
 type Options = Record<string, string | boolean | string[]>;
@@ -26,11 +16,11 @@ export function main(argv = process.argv.slice(2)): void {
   try {
     const [command, ...raw] = argv;
     if (command === "ticket") return void runTicket(raw);
-    if (command === "harness") return void runGroup(raw, harness);
-    if (command === "worktree") return void runGroup(raw, worktree);
-    if (command === "loop") return void runLoop(raw);
+    if (command === "worktree") return void runWorktree(raw);
+    if (command === "requirements") return void runRequirements(raw);
     const options = parseOptions(raw);
     if (command === "web") return void launchWeb(options);
+    if (command === "next" && options.prompt) return void nextPrompt(options);
     print(execute(command, options), Boolean(options.pretty));
   } catch (error) {
     reportError(error);
@@ -42,40 +32,25 @@ function runTicket(raw: string[]): void {
   print(ticket(raw[0], options), Boolean(options.pretty));
 }
 
-function runGroup(raw: string[], route: (sub: string | undefined, options: Options) => Result): void {
+function runWorktree(raw: string[]): void {
   const options = parseOptions(raw.slice(1));
-  print(route(raw[0], options), Boolean(options.pretty));
-}
-
-function harness(sub: string | undefined, options: Options): Result {
-  if (sub === "add") return new HarnessUseCase().add({ name: value(options, "name"),
-    agent: value(options, "agent"), command: value(options, "command") });
-  if (sub === "list") return new HarnessUseCase().list();
-  if (sub === "remove") return new HarnessUseCase().remove(value(options, "name"));
-  throw new Error("Usage: issues harness <add|list|remove> [flags]");
+  print(worktree(raw[0], options), Boolean(options.pretty));
 }
 
 function worktree(sub: string | undefined, options: Options): Result {
-  if (sub === "add") return new WorktreeUseCase().add({ issueId: value(options, "id"), path: optional(options, "path") }).toJSON();
-  if (sub === "remove") return new WorktreeUseCase().remove({ issueId: value(options, "id") }).toJSON();
+  if (sub === "add") return addWorktree({ issueId: value(options, "id"), path: optional(options, "path") }).toJSON();
+  if (sub === "remove") return removeWorktree({ issueId: value(options, "id") }).toJSON();
   throw new Error("Usage: issues worktree <add|remove> --id <issueId> [--path <p>]");
 }
 
-function runLoop(raw: string[]): void {
+function runRequirements(raw: string[]): void {
   const options = parseOptions(raw.slice(1));
-  loop(raw[0], options).then((result) => print(result, Boolean(options.pretty)), reportError);
+  print(requirements(raw[0], options), Boolean(options.pretty));
 }
 
-async function loop(sub: string | undefined, options: Options): Promise<Result> {
-  if (sub === "add") return new LoopUseCase().add({ name: value(options, "name"),
-    harness: value(options, "harness"), project: optional(options, "project"),
-    interval: value(options, "interval"), concurrency: optionalNumber(options, "concurrency") });
-  if (sub === "list") return new LoopUseCase().list();
-  if (sub === "remove") return new LoopUseCase().remove(value(options, "name"));
-  if (sub === "install") return new LoopUseCase().install({ name: value(options, "name"),
-    cron: Boolean(options.cron), now: Boolean(options.now) });
-  if (sub === "run") return new LoopUseCase().run({ name: value(options, "name") });
-  throw new Error("Usage: issues loop <add|list|remove|install|run> [flags]");
+function requirements(sub: string | undefined, options: Options): Result {
+  if (sub === "set") return setRequirements({ issueId: value(options, "id"), file: value(options, "file") });
+  throw new Error("Usage: issues requirements set --id <issueId> --file <req.json>");
 }
 
 function execute(command: string | undefined, options: Options): Result {
@@ -88,8 +63,9 @@ function execute(command: string | undefined, options: Options): Result {
   if (command === "reset") return reset(options);
   if (command === "get") return get(options);
   if (command === "list") return list(options);
+  if (command === "artifact") return issueArtifact(options);
   if (command === "init") return init(options);
-  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|get|list|ticket|harness|loop|web|init> [flags]");
+  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|get|list|artifact|requirements|ticket|worktree|web|init> [flags]");
 }
 
 function ticket(sub: string | undefined, options: Options): Result {
@@ -101,32 +77,59 @@ function ticket(sub: string | undefined, options: Options): Result {
   if (sub === "decide") return ticketDecide(options);
   if (sub === "get") return ticketGet(options);
   if (sub === "list") return ticketList(options);
-  throw new Error("Usage: issues ticket <create|claim|comment|tag|status|decide|get|list> [flags]");
+  if (sub === "artifact") return ticketArtifact(options);
+  throw new Error("Usage: issues ticket <create|claim|comment|tag|status|decide|get|list|artifact> [flags]");
 }
 
 function create(options: Options): Result {
   const actor = actorFrom(options);
-  return new CreateIssueUseCase().execute({ title: value(options, "title"),
+  return createIssue({ title: value(options, "title"),
     project: value(options, "project"), type: value(options, "type"),
     problem: value(options, "problem"), artifacts: optional(options, "artifacts"),
-    acceptance_criteria: optional(options, "acceptance-criteria"), actor }).toJSON();
+    acceptance_criteria: optional(options, "acceptance-criteria"), artifact: artifactFile(options), actor }).toJSON();
+}
+
+function issueArtifact(options: Options): Result {
+  const id = value(options, "id");
+  setArtifact({ issueId: id, content: artifactFromFile(value(options, "file")) });
+  return { ok: true, id };
+}
+
+function ticketArtifact(options: Options): Result {
+  const id = value(options, "id");
+  setArtifact({ issueId: value(options, "issue"), ticketId: id, content: artifactFromFile(value(options, "file")) });
+  return { ok: true, id };
+}
+
+// Lê o conteúdo do Artefato .md de --artifact-file (nome distinto de --artifacts legado, string livre).
+function artifactFile(options: Options): string | undefined {
+  const path = optional(options, "artifact-file");
+  return path ? artifactFromFile(path) : undefined;
 }
 
 function next(options: Options): Result {
-  const result = new NextIssueUseCase().execute({ agent: value(options, "agent"),
-    project: value(options, "project") });
-  if (!result) return null;
-  return { issue: result.issue.toJSON(), ticket: result.ticket?.toJSON() ?? null };
+  return claimNext(options); // views prontas (issue+ticket com artefatos); só imprime
+}
+
+function claimNext(options: Options): NextResult | null {
+  const id = optional(options, "id");
+  const project = id ? optional(options, "project") : value(options, "project");
+  return nextIssue({ agent: value(options, "agent"), project, id });
+}
+
+function nextPrompt(options: Options): void {
+  const result = claimNext(options);
+  process.stdout.write(result ? `${composePrompt(result.issue, result.ticket)}\n` : "");
 }
 
 function comment(options: Options): Result {
   const actor = actorFrom(options);
-  return new CommentUseCase().execute({ issueId: value(options, "id"),
+  return addComment({ issueId: value(options, "id"),
     comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor }).toJSON();
 }
 
 function tag(options: Options): Result {
-  return new TagUseCase().execute({ issueId: value(options, "id"),
+  return updateTags({ issueId: value(options, "id"),
     complexity: optional(options, "complexity"), human_need: optional(options, "human-need"),
     risk: optional(options, "risk") }).toJSON();
 }
@@ -134,87 +137,86 @@ function tag(options: Options): Result {
 function status(options: Options): Result {
   if (options.human && options.agent) throw new Error("Choose --human or --agent");
   const agent = options.human ? undefined : value(options, "agent");
-  return new StatusIssueUseCase().execute({ id: value(options, "id"), agent,
+  return statusIssue({ id: value(options, "id"), agent,
     human: Boolean(options.human), status: value(options, "status"),
     comment: value(options, "comment"), closed_reason: optional(options, "reason") }).toJSON();
 }
 
 function decide(options: Options): Result {
-  return new DecideIssueUseCase().execute({ id: value(options, "id"),
+  return decideIssue({ id: value(options, "id"),
     human: Boolean(options.human), status: value(options, "status"),
     comment: value(options, "comment"), closed_reason: optional(options, "reason") }).toJSON();
 }
 
 function reset(options: Options): Result {
-  return new ResetClaimUseCase().execute({ id: value(options, "id"),
+  return resetClaim({ id: value(options, "id"),
     human: Boolean(options.human), comment: value(options, "comment") }).toJSON();
 }
 
 function get(options: Options): Result {
-  return new GetIssueUseCase().execute(value(options, "id")).toJSON();
+  const id = value(options, "id");
+  if (optional(options, "target") === "REQUIREMENTS") return getRequirements({ issueId: id });
+  return getIssue(id); // IssueView pronta (com artifact)
 }
 
 function list(options: Options): Result {
-  return new ListIssuesUseCase().execute({ status: optional(options, "status"),
-    project: optional(options, "project"), title: optional(options, "title"), type: optional(options, "type"),
-    limit: optionalNumber(options, "limit"), offset: optionalNumber(options, "offset") });
+  return listIssues({ status: optional(options, "status"),
+    project: optional(options, "project"), title: optional(options, "title"), type: optional(options, "type") });
 }
 
 function init(options: Options): Result {
   if (options.dogfood) {
     return { linked: linkPackSkillsForDogfood(optional(options, "target")) };
   }
-  return new InitPackUseCase().execute({ harness: optional(options, "harness"),
+  return initPack({ harness: optional(options, "harness"),
     target: optional(options, "target"), force: Boolean(options.force) });
 }
 
 function ticketCreate(options: Options): Result {
   const actor = actorFrom(options);
-  return new CreateTicketUseCase().execute({ issueId: value(options, "issue"),
+  return createTicket({ issueId: value(options, "issue"),
     type: value(options, "type"), objective: value(options, "objective"), task: value(options, "task"),
     acceptance_criteria: value(options, "acceptance-criteria"), artifacts: optional(options, "artifacts"),
     references: optional(options, "references"), depends_on: optionalList(options, "depends-on"),
-    human_need: optional(options, "human-need"), actor }).toJSON();
+    human_need: optional(options, "human-need"), artifact: artifactFile(options), actor }).toJSON();
 }
 
 function ticketClaim(options: Options): Result {
   const actor = actorFrom(options);
-  return new ClaimTicketUseCase().execute({ issueId: value(options, "issue"),
-    ticketId: value(options, "id"), actor }).toJSON();
+  return claimTicket({ issueId: value(options, "issue"), ticketId: value(options, "id"), actor }).toJSON();
 }
 
 function ticketComment(options: Options): Result {
   const actor = actorFrom(options);
-  return new CommentUseCase().execute({ issueId: value(options, "issue"), ticketId: value(options, "id"),
+  return addComment({ issueId: value(options, "issue"), ticketId: value(options, "id"),
     comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor }).toJSON();
 }
 
 function ticketTag(options: Options): Result {
-  return new TagUseCase().execute({ issueId: value(options, "issue"), ticketId: value(options, "id"),
+  return updateTags({ issueId: value(options, "issue"), ticketId: value(options, "id"),
     complexity: optional(options, "complexity"), human_need: optional(options, "human-need"),
     risk: optional(options, "risk") }).toJSON();
 }
 
 function ticketStatus(options: Options): Result {
   const actor = actorFrom(options);
-  return new StatusTicketUseCase().execute({ issueId: value(options, "issue"),
+  return statusTicket({ issueId: value(options, "issue"),
     ticketId: value(options, "id"), actor, status: value(options, "status"),
-    comment: value(options, "comment"), closed_reason: optional(options, "reason") }).toJSON();
+    comment: value(options, "comment"), closed_reason: optional(options, "reason"), last: Boolean(options.last) }).toJSON();
 }
 
 function ticketDecide(options: Options): Result {
-  return new DecideTicketUseCase().execute({ issueId: value(options, "issue"),
+  return decideTicket({ issueId: value(options, "issue"),
     ticketId: value(options, "id"), human: Boolean(options.human), status: value(options, "status"),
-    comment: value(options, "comment"), closed_reason: optional(options, "reason") }).toJSON();
+    comment: value(options, "comment"), closed_reason: optional(options, "reason"), last: Boolean(options.last) }).toJSON();
 }
 
 function ticketGet(options: Options): Result {
-  return new GetTicketUseCase().execute({ issueId: value(options, "issue"),
-    ticketId: value(options, "id") }).toJSON();
+  return getTicket({ issueId: value(options, "issue"), ticketId: value(options, "id") }); // TicketView pronta
 }
 
 function ticketList(options: Options): Result {
-  return new ListTicketsUseCase().execute({ issueId: value(options, "issue"),
+  return listTickets({ issueId: value(options, "issue"),
     type: optional(options, "type"), status: optional(options, "status") });
 }
 
@@ -224,7 +226,7 @@ function parseOptions(args: string[]): Options {
     const key = args[index];
     if (!key.startsWith("--")) throw new Error(`Unexpected argument: ${key}`);
     const name = key.slice(2);
-    if (["human", "pretty", "no-open", "force", "cron", "now", "dogfood"].includes(name)) options[name] = true;
+    if (["human", "pretty", "no-open", "force", "dogfood", "last", "prompt"].includes(name)) options[name] = true;
     else if (name === "attach") {
       options.attach = (options.attach as string[] | undefined) ?? [];
       (options.attach as string[]).push(args[++index] ?? "");

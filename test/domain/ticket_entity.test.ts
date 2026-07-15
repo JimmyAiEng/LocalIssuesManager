@@ -60,7 +60,7 @@ test("changeStatus exige owner e comentário e respeita a matriz", () => {
 
 test("changeStatus para AWAITING mantém owner e registra a thread", () => {
   const ticket = claimed();
-  ticket.changeStatus("pi", "AWAITING", "revisar", undefined, new Date("2026-01-02T00:00:00Z"));
+  ticket.changeStatus("pi", "AWAITING", "revisar", undefined, false, new Date("2026-01-02T00:00:00Z"));
   assert.equal(ticket.status, "AWAITING");
   assert.equal(ticket.owner, "pi");
   assert.equal(ticket.thread.at(-1)?.comment, "revisar");
@@ -131,4 +131,33 @@ test("fromJSON e toJSON preservam o Ticket", () => {
   const clone = Ticket.fromJSON(ticket.toJSON());
   assert.deepEqual(clone.toJSON(), ticket.toJSON());
   assert.notEqual(clone, ticket);
+});
+
+test("last nasce false e é serializado por toJSON", () => {
+  const ticket = Ticket.create(input);
+  assert.equal(ticket.last, false);
+  assert.equal(ticket.toJSON().last, false);
+});
+
+test("changeStatus com last=true marca a flag; é sticky (||=) e não regride", () => {
+  const marked = claimed();
+  marked.changeStatus("pi", "AWAITING", "pronto", undefined, true);
+  assert.equal(marked.last, true);
+  // uma transição posterior sem last não apaga a marca
+  marked.decide("OPEN", "revisar");
+  assert.equal(marked.last, true);
+});
+
+test("last sobrevive AWAITING → decide, e decide pode marcá-la", () => {
+  const ticket = claimed();
+  ticket.changeStatus("pi", "AWAITING", "pronto");
+  assert.equal(ticket.last, false);
+  ticket.decide("CLOSED", "", "concluido", true);
+  assert.equal(ticket.last, true);
+});
+
+test("Ticket legado sem last hidrata como false", () => {
+  const { last, ...legacy } = Ticket.create(input).toJSON();
+  const ticket = Ticket.fromJSON(legacy as never);
+  assert.equal(ticket.last, false);
 });

@@ -138,26 +138,46 @@ test("operações de Ticket inexistente falham identificando o id", () => {
 test("fechar o Confirmation avança a Issue para AWAITING (destrava)", () => {
   const { issue, ticket } = ongoing();
   issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
   assert.equal(issue.status, "ON-GOING"); // Confirmation ainda OPEN
   closeConfirmation(issue);
   assert.equal(issue.status, "AWAITING");
 });
 
-test("fechar o último Ticket injeta um Confirmation OPEN e destrava a Issue", () => {
+test("fechar o último Ticket marcado --last injeta um Confirmation OPEN e destrava a Issue", () => {
   const { issue, ticket } = ongoing();
   issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
   const confirmation = issue.tickets.find((candidate) => candidate.type === "Confirmation");
   assert.ok(confirmation, "Confirmation deve ser criado ao fechar o último Ticket");
   assert.equal(confirmation?.status, "OPEN");
   assert.equal(issue.tickets.length, 2);
 });
 
+test("fechar o último Ticket SEM --last não injeta Confirmation (Issue segue ON-GOING)", () => {
+  const { issue, ticket } = ongoing();
+  issue.claimTicket(ticket.id, "pi");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido"); // last=false
+  assert.equal(issue.tickets.some((candidate) => candidate.type === "Confirmation"), false);
+  assert.equal(issue.tickets.length, 1);
+  assert.equal(issue.status, "ON-GOING");
+});
+
+test("last persiste por AWAITING → decide(CLOSED) e só então injeta o Confirmation", () => {
+  const { issue, ticket } = ongoing();
+  issue.claimTicket(ticket.id, "pi");
+  issue.transitionTicket(ticket.id, "pi", "AWAITING", "pronto", undefined, true); // marca --last cedo
+  assert.equal(issue.tickets.some((candidate) => candidate.type === "Confirmation"), false);
+  issue.decideTicket(ticket.id, "CLOSED", "aceito", "concluido"); // decide sem repassar last
+  const confirmation = issue.tickets.find((candidate) => candidate.type === "Confirmation");
+  assert.ok(confirmation, "last sticky deve sobreviver ao decide e disparar o Confirmation");
+  assert.equal(confirmation?.status, "OPEN");
+});
+
 test("fechar o próprio Confirmation não gera outro (quebra o loop)", () => {
   const { issue, ticket } = ongoing();
   issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
   closeConfirmation(issue);
   assert.equal(issue.tickets.filter((candidate) => candidate.type === "Confirmation").length, 1);
 });
@@ -186,7 +206,7 @@ test("reset só age em CLAIMED e nunca em ON-GOING", () => {
 test("decisão humana fecha a Issue AWAITING com motivo", () => {
   const { issue, ticket } = ongoing();
   issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
   closeConfirmation(issue); // avança a Issue para AWAITING
   issue.decide("CLOSED", "aceito", "concluido");
   assert.equal(issue.status, "CLOSED");
@@ -269,6 +289,27 @@ test("tagTicket delega ao Ticket; CLOSED é imutável para tags", () => {
   const closed = Issue.create(input, "pi");
   closed.closeByAgent("pi", "errada", "errado");
   assert.throws(() => closed.tag({ risk: "ALTO" }), /CLOSED aggregate is immutable/);
+});
+
+test("artifactOwnerId retorna a Issue sem ticketId e o Ticket com ticketId válido", () => {
+  const { issue, ticket } = ongoing();
+  assert.equal(issue.artifactOwnerId(), issue.id);
+  assert.equal(issue.artifactOwnerId(ticket.id), ticket.id);
+  assert.throws(() => issue.artifactOwnerId("nope"), /Ticket not found: nope/);
+});
+
+test("artifactOwnerId guarda CLOSED-imutável na Issue e no Ticket", () => {
+  const closedIssue = Issue.create(input, "pi");
+  closedIssue.closeByAgent("pi", "errada", "errado");
+  assert.throws(() => closedIssue.artifactOwnerId(), /CLOSED aggregate is immutable/);
+
+  const { issue, ticket } = ongoing();
+  issue.claimTicket(ticket.id, "pi");
+  issue.transitionTicket(ticket.id, "pi", "AWAITING", "pronto");
+  issue.decideTicket(ticket.id, "CLOSED", "aceito", "concluido");
+  assert.equal(issue.tickets[0].status, "CLOSED");
+  assert.throws(() => issue.artifactOwnerId(ticket.id), /CLOSED aggregate is immutable/);
+  assert.equal(issue.artifactOwnerId(), issue.id); // Issue segue mutável
 });
 
 test("fromJSON hidrata Tickets como entidades e toJSON os serializa", () => {

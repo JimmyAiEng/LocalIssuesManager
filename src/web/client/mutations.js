@@ -10,14 +10,15 @@ export function readForm(form, target) {
   for (const [key, value] of new FormData(form).entries()) target[key] = String(value);
 }
 
-export async function submitCreate() {
+export async function submitCreate(form) {
   const result = validateCreate(state.draft);
   state.errors = result.errors;
   if (!result.ok) return renderNewIssue();
+  const attachments = await readAttachments(form); // lê antes do re-render, que destrói o <input> e perde a seleção
   state.busy = true;
   renderNewIssue();
   try {
-    const created = await api("/api/issues", { method: "POST", body: createPayload(state.draft) });
+    const created = await api("/api/issues", { method: "POST", body: createPayload(state.draft, attachments) });
     const fresh = await api(`/api/issues/${created.id}`);
     await reloadIssues();
     state.draft = emptyDraft();
@@ -34,13 +35,15 @@ export async function submitCreate() {
   }
 }
 
-export async function submitCreateTicket() {
+export async function submitCreateTicket(form) {
   const result = validateCreateTicket(state.ticketDraft);
   state.errors = result.errors;
   if (!result.ok) return renderDetail();
+  const attachments = await readAttachments(form); // lê antes do re-render, que destrói o <input>
   state.busy = true;
   renderDetail();
   const body = { ...state.ticketDraft };
+  if (attachments.length) body.attachments = attachments;
   try {
     await api(`/api/issues/${state.issue.id}/tickets`, { method: "POST", body });
     state.ticketDraft = emptyTicketDraft();
@@ -65,21 +68,28 @@ export async function submitTags(form) {
 export async function submitComment(form) {
   const ticketId = form.dataset.ticketId;
   const comment = String(state.commentDraft.comment ?? "").trim();
-  const files = [...form.querySelector("input[type=file]").files];
-  if (!comment && !files.length) {
+  // lê os arquivos antes do re-render, que destrói o <input> e perde a seleção
+  const attachments = await readAttachments(form);
+  if (!comment && !attachments.length) {
     state.errors = { comment: "Escreva um comentário ou anexe um arquivo" };
     return renderDetail();
   }
-  // lê os arquivos antes do re-render, que destrói o <input> e perde a seleção
-  const attachments = await Promise.all(files.map(async (file) => ({
-    filename: file.name, mediaType: file.type, data: await fileToBase64(file),
-  })));
   state.errors = {};
   state.busy = true;
   renderDetail();
   const base = `/api/issues/${state.issue.id}`;
   const path = ticketId ? `${base}/tickets/${ticketId}/comment` : `${base}/comment`;
   await mutate(path, { comment, attachments }, "Comentário adicionado");
+}
+
+// Lê os <input type=file> de um form como anexos base64 (formato aceito pela API). Reutilizado por
+// comentário, criação de Issue/Ticket e devolução para OPEN. Chame antes de qualquer re-render.
+async function readAttachments(form) {
+  const input = form?.querySelector("input[type=file]");
+  const files = input ? [...input.files] : [];
+  return Promise.all(files.map(async (file) => ({
+    filename: file.name, mediaType: file.type, data: await fileToBase64(file),
+  })));
 }
 
 function fileToBase64(file) {
@@ -91,9 +101,9 @@ function fileToBase64(file) {
   });
 }
 
-export async function submitAction() {
-  if (state.panel === "reset") return submitReset();
-  if (state.panel === "decide-open") return submitDecide("OPEN");
+export async function submitAction(form) {
+  if (state.panel === "reset") return submitReset(form);
+  if (state.panel === "decide-open") return submitDecide("OPEN", form);
   if (state.panel === "decide-close" || state.panel === "close") return submitClose();
 }
 
@@ -113,22 +123,28 @@ async function submitClose() {
   await mutate(path, body, "Issue fechada");
 }
 
-async function submitReset() {
+async function submitReset(form) {
   const result = validateReset({ comment: state.draft.comment });
   state.errors = result.errors;
   if (!result.ok) return renderDetail();
+  const attachments = await readAttachments(form); // lê antes do re-render, que destrói o <input>
   state.busy = true;
   renderDetail();
-  await mutate(`/api/issues/${state.issue.id}/reset`, { comment: state.draft.comment }, "Issue devolvida para OPEN");
+  const body = { comment: state.draft.comment };
+  if (attachments.length) body.attachments = attachments;
+  await mutate(`/api/issues/${state.issue.id}/reset`, body, "Issue devolvida para OPEN");
 }
 
-async function submitDecide(status) {
+async function submitDecide(status, form) {
   const result = validateDecide({ status, comment: state.draft.comment });
   state.errors = result.errors;
   if (!result.ok) return renderDetail();
+  const attachments = await readAttachments(form); // lê antes do re-render, que destrói o <input>
   state.busy = true;
   renderDetail();
-  await mutate(`/api/issues/${state.issue.id}/decision`, { status, comment: state.draft.comment }, "Issue devolvida para OPEN");
+  const body = { status, comment: state.draft.comment };
+  if (attachments.length) body.attachments = attachments;
+  await mutate(`/api/issues/${state.issue.id}/decision`, body, "Issue devolvida para OPEN");
 }
 
 export async function claimIssue() {
@@ -145,16 +161,18 @@ export async function claimTicket(ticketId) {
   await mutate(`/api/issues/${state.issue.id}/tickets/${ticketId}/claim`, {}, "Ticket assumido");
 }
 
-export async function submitTicketAction() {
+export async function submitTicketAction(form) {
   const { ticketId, action } = state.ticketPanel;
   const plan = ticketActionPlan(action);
   const result = plan.validate({ status: plan.status, comment: state.draft.comment, closed_reason: state.draft.closed_reason });
   state.errors = result.errors;
   if (!result.ok) return renderDetail();
+  const attachments = await readAttachments(form); // lê antes do re-render, que destrói o <input>
   state.busy = true;
   renderDetail();
   const base = `/api/issues/${state.issue.id}/tickets/${ticketId}`;
   const body = { status: plan.status, comment: state.draft.comment, closed_reason: state.draft.closed_reason || undefined };
+  if (attachments.length) body.attachments = attachments;
   await mutate(`${base}/${plan.route}`, body, plan.message);
 }
 
@@ -228,11 +246,12 @@ function ticketStillOpen(ticketPanel) {
   return Boolean(ticket && ticketHumanActions(ticket).includes(ticketPanel.action));
 }
 
-function createPayload(draft) {
+function createPayload(draft, attachments = []) {
   const payload = {
     title: draft.title, project: draft.project, type: draft.type, problem: draft.problem,
     artifacts: draft.artifacts, acceptance_criteria: draft.acceptance_criteria,
   };
   for (const tag of ["complexity", "human_need", "risk"]) if (draft[tag]) payload[tag] = draft[tag]; // só envia tags escolhidas
+  if (attachments.length) payload.attachments = attachments;
   return payload;
 }

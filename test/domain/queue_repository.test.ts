@@ -178,7 +178,7 @@ test("pastas AWAITING e CLOSED preservam a separação por status", () => {
   const queue = new Queue(dir);
   const { issue, ticket } = ongoingIssue(queue, "p", "awaiting", new Date("2026-01-01"));
   issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
   closeConfirmation(issue); // avança a Issue para AWAITING
   queue.save(issue);
   const closed = Issue.create({ ...body, project: "p", title: "closed" }, "pi");
@@ -293,7 +293,7 @@ test("blob de anexo é gravado fora das pastas de status e sobrevive à transiç
 
   // move a Issue de ongoing -> awaiting (renomeia a pasta do JSON)
   issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
   closeConfirmation(issue); // avança a Issue para AWAITING
   queue.save(issue);
 
@@ -320,6 +320,48 @@ test("purgeClosed remove os anexos das Issues purgadas", () => {
   assert.deepEqual(queue.purgeClosed(new Date("2026-07-14")), ["withatt"]);
   assert.equal(existsSync(blob), false);
   assert.equal(existsSync(join(dir, "projects/p/closed/withatt.json")), false);
+});
+
+test("Artefato .md faz round-trip write/read e devolve null quando inexistente", () => {
+  const dir = root();
+  const queue = new Queue(dir);
+  assert.equal(queue.readArtifact("space / project", "owner"), null);
+  const content = "# Exploração\n\ncontexto & critérios";
+  queue.writeArtifact("space / project", "owner", content);
+  assert.equal(queue.readArtifact("space / project", "owner"), content);
+  const segment = encodeURIComponent("space / project");
+  assert.equal(existsSync(join(dir, "projects", segment, "artifacts", "owner.md")), true);
+});
+
+test("Artefato .md é sobrescrito por completo na reescrita (nunca append)", () => {
+  const queue = new Queue(root());
+  queue.writeArtifact("p", "owner", "primeiro");
+  queue.writeArtifact("p", "owner", "segundo");
+  assert.equal(queue.readArtifact("p", "owner"), "segundo");
+});
+
+test("purgeClosed remove os Artefatos .md da Issue e de cada Ticket purgado", () => {
+  const dir = root();
+  const queue = new Queue(dir);
+  const issue = Issue.create({ ...body, project: "p" }, "pi");
+  issue.id = "witharti";
+  issue.claim("pi");
+  const ticket = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
+    acceptance_criteria: "c", type: "Implement", actor: "pi" });
+  issue.addTicket(ticket);
+  queue.writeArtifact("p", issue.id, "# artefato da issue");
+  queue.writeArtifact("p", ticket.id, "# artefato do ticket");
+  issue.status = "CLOSED"; // força o estado terminal no JSON (o purge lê status do disco)
+  issue.status_changed_at = "2026-01-01T00:00:00.000Z";
+  mkdirSync(join(dir, "projects/p/closed"), { recursive: true });
+  writeFileSync(join(dir, "projects/p/closed/witharti.json"), JSON.stringify(issue));
+  const issueMd = join(dir, "projects/p/artifacts", `${issue.id}.md`);
+  const ticketMd = join(dir, "projects/p/artifacts", `${ticket.id}.md`);
+  assert.equal(existsSync(issueMd), true);
+  assert.equal(existsSync(ticketMd), true);
+  assert.deepEqual(queue.purgeClosed(new Date("2026-07-14")), ["witharti"]);
+  assert.equal(existsSync(issueMd), false);
+  assert.equal(existsSync(ticketMd), false);
 });
 
 function claim(dir: string, agent: string, project = "p"): Promise<{ owner: string } | null> {

@@ -98,10 +98,10 @@ export async function handleSubmit(event) {
   if (form.id === "comment-form") return submitComment(form);
   if (form.dataset.tagScope) return submitTags(form);
   readForm(form, form.id === "ticket-create-form" ? state.ticketDraft : state.draft);
-  if (form.id === "create-form") return submitCreate();
-  if (form.id === "action-form") return submitAction();
-  if (form.id === "ticket-create-form") return submitCreateTicket();
-  if (form.id === "ticket-action-form") return submitTicketAction();
+  if (form.id === "create-form") return submitCreate(form);
+  if (form.id === "action-form") return submitAction(form);
+  if (form.id === "ticket-create-form") return submitCreateTicket(form);
+  if (form.id === "ticket-action-form") return submitTicketAction(form);
 }
 
 function navigate(event, path) {

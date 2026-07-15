@@ -12,6 +12,10 @@ _Avoid_: task, card, item
 Fatia de solução dentro de uma Issue (pertence a exatamente uma); tem objetivo, tarefa, critérios de aceite obrigatórios, um tipo SDLC (`Planning` | `Design` | `Implement` | `QA` | `Deploy`) e status próprio. O tipo do Ticket roteia a skill de fase.
 _Avoid_: Subtask, story, subissue, card
 
+**Artefato**:
+Documento Markdown de contexto/exploração persistido em arquivo `.md` separado (não no JSON do agregado), existente no nível Issue (compartilhado por todos os Tickets) e no nível Ticket (local); devolvido automaticamente por `next`/`get`.
+_Avoid_: attachment (anexo binário imagem/vídeo), campo `artifacts` legado, documento, anexo
+
 **Objective / Task**:
 Campos obrigatórios do Ticket: **Objective** = o que a fatia busca alcançar; **Task** = o trabalho a executar para alcançá-lo.
 _Avoid_: goal/todo livre, descrição única

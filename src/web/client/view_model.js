@@ -11,6 +11,13 @@ export function tagRoute(issueId, scope, ticketId) {
 const CREATE_FIELDS = ["title", "project", "type", "problem"];
 const TICKET_FIELDS = ["objective", "task", "acceptance_criteria", "type"];
 
+/** @typedef {{ id: string, title: string, project: string, type: string, status: string, created_at: string, status_changed_at?: string, phases?: { timestamp: string }[] }} IssueCard */
+/** @typedef {{ ok: boolean, errors: Record<string, string> }} ValidationResult */
+
+/**
+ * @param {IssueCard[]} issues
+ * @param {{ title: string, project: string, type: string }} filters
+ */
 export function filterIssues(issues, filters) {
   const title = filters.title.trim().toLowerCase();
   return issues.filter((issue) => (!title || issue.title.toLowerCase().includes(title))
@@ -18,6 +25,10 @@ export function filterIssues(issues, filters) {
     && (!filters.type || issue.type === filters.type));
 }
 
+/**
+ * @param {IssueCard[]} issues
+ * @returns {Record<string, IssueCard[]>}
+ */
 export function groupIssues(issues) {
   return Object.fromEntries(ISSUE_STATUSES.map((status) => [status, issues
     .filter((issue) => issue.status === status)
@@ -68,22 +79,24 @@ export function canClaimTicket(ticket) {
   return ticket.status === "OPEN";
 }
 
+/** @returns {ValidationResult} */
 export function validateCreate(values) {
   const errors = {};
   for (const field of CREATE_FIELDS) {
     if (!String(values[field] ?? "").trim()) errors[field] = "Campo obrigatório";
   }
   if (values.type?.trim() && !ISSUE_TYPES.includes(values.type)) errors.type = "Tipo inválido";
-  return { ok: Object.keys(errors).length === 0, values, errors };
+  return { ok: Object.keys(errors).length === 0, errors };
 }
 
+/** @returns {ValidationResult} */
 export function validateCreateTicket(values) {
   const errors = {};
   for (const field of TICKET_FIELDS) {
     if (!String(values[field] ?? "").trim()) errors[field] = "Campo obrigatório";
   }
   if (values.type?.trim() && !TICKET_TYPES.includes(values.type)) errors.type = "Tipo inválido";
-  return { ok: Object.keys(errors).length === 0, values, errors };
+  return { ok: Object.keys(errors).length === 0, errors };
 }
 
 export function validateClose(values) {
@@ -95,17 +108,12 @@ export function validateReset(values) {
 }
 
 export function validateDecide(values) {
-  if (values.status === "OPEN") {
-    const result = validateCommentAndReason({ comment: values.comment }, { requireComment: true, requireReason: false });
-    return { ok: result.ok, values, errors: result.errors };
-  }
+  if (values.status === "OPEN") return validateCommentAndReason(values, { requireComment: true, requireReason: false });
   return validateCommentAndReason(values, { requireComment: false, requireReason: true });
 }
 
 export function validateTicketStatus(values) {
-  const requireReason = values.status === "CLOSED";
-  const result = validateCommentAndReason(values, { requireComment: true, requireReason });
-  return { ok: result.ok, values, errors: result.errors };
+  return validateCommentAndReason(values, { requireComment: true, requireReason: values.status === "CLOSED" });
 }
 
 export function attachmentsMarkup(attachments) {
@@ -113,7 +121,7 @@ export function attachmentsMarkup(attachments) {
   const tags = attachments.map((att) => {
     const src = `/api/attachments/${encodeURIComponent(att.id)}`;
     if (att.kind === "video") return `<video class="attachment" controls src="${src}"></video>`;
-    return `<a class="attachment" href="${src}" target="_blank" rel="noopener"><img src="${src}" alt="${escapeAttr(att.filename)}" loading="lazy"></a>`;
+    return `<a class="attachment" href="${src}" target="_blank" rel="noopener"><img src="${src}" alt="${escapeHtml(att.filename)}" loading="lazy"></a>`;
   }).join("");
   return `<div class="attachments">${tags}</div>`;
 }
@@ -125,11 +133,12 @@ export function classifyMutationError(status, message) {
   return { kind: "error", message };
 }
 
-function escapeAttr(value) {
+export function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]);
 }
 
+/** @returns {ValidationResult} */
 function validateCommentAndReason(values, { requireComment, requireReason }) {
   const errors = {};
   if (requireComment && !String(values.comment ?? "").trim()) errors.comment = "Campo obrigatório";

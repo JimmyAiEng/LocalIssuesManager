@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type AttachmentData, extForMediaType, type MediaType, mediaTypeForExt } from "./attachment_entity.js";
-import { ConflictError } from "./domain_error.js";
+import { ConflictError, NotFoundError } from "./domain_error.js";
 import { Issue, type IssueData } from "./issue_entity.js";
 import { defaultRoot } from "./root.js";
 import type { TicketData } from "./ticket_entity.js";
@@ -35,6 +35,8 @@ export class Queue {
         const issue = this.#read(file);
         if (Date.parse(issue.status_changed_at) <= cutoff) {
           this.#purgeAttachments(issue);
+          this.#purgeArtifacts(issue);
+          rmSync(this.#requirementsPath(issue.project, issue.id), { force: true });
           rmSync(file, { force: true }); // corrida entre closes concorrentes: ignora arquivo já removido
           purged.push(issue.id);
         }
@@ -54,6 +56,44 @@ export class Queue {
     }
   }
 
+  // Artefatos .md são flat (fora das pastas de status, como attachments): keyed pelo id do dono.
+  #purgeArtifacts(issue: Issue): void {
+    for (const ownerId of [issue.id, ...issue.tickets.map((ticket) => ticket.id)]) {
+      rmSync(this.#artifactPath(issue.project, ownerId), { force: true });
+    }
+  }
+
+  #artifactPath(project: string, ownerId: string): string {
+    return join(this.#root, "projects", projectSegment(project), "artifacts", `${ownerId}.md`);
+  }
+
+  writeArtifact(project: string, ownerId: string, content: string): void {
+    const directory = join(this.#root, "projects", projectSegment(project), "artifacts");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, `${ownerId}.md`), content, "utf8");
+  }
+
+  readArtifact(project: string, ownerId: string): string | null {
+    const path = this.#artifactPath(project, ownerId);
+    return existsSync(path) ? readFileSync(path, "utf8") : null;
+  }
+
+  // Requirements: JSON Gherkin da Issue, flat em requirements/<issueId>.json (keyed pela Issue).
+  #requirementsPath(project: string, issueId: string): string {
+    return join(this.#root, "projects", projectSegment(project), "requirements", `${issueId}.json`);
+  }
+
+  writeRequirements(project: string, issueId: string, content: string): void {
+    const directory = join(this.#root, "projects", projectSegment(project), "requirements");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, `${issueId}.json`), content, "utf8");
+  }
+
+  readRequirements(project: string, issueId: string): string | null {
+    const path = this.#requirementsPath(project, issueId);
+    return existsSync(path) ? readFileSync(path, "utf8") : null;
+  }
+
   #attachmentPath(project: string, attachment: AttachmentData): string {
     return join(this.#root, "projects", projectSegment(project), "attachments",
       `${attachment.id}.${extForMediaType(attachment.mediaType)}`);
@@ -65,6 +105,12 @@ export class Queue {
     return Issue.fromJSON(JSON.parse(readFileSync(file, "utf8")) as IssueData);
   }
 
+  loadRequired(id: string): Issue {
+    const issue = this.load(id);
+    if (!issue) throw new NotFoundError(`Issue not found: ${id}`);
+    return issue;
+  }
+
   list(filter: ListFilter = {}): Issue[] {
     const projects = filter.project ? [projectSegment(filter.project)] : this.#projects();
     const statuses = filter.status ? [filter.status] : Object.keys(FOLDERS) as IssueStatus[];
@@ -73,15 +119,14 @@ export class Queue {
 
   oldestOpen(project?: string): Issue | null {
     const issues = this.list({ status: "OPEN", project });
-    issues.sort((a, b) => openOrder(a, b));
+    issues.sort((a, b) => a.status_changed_at.localeCompare(b.status_changed_at) || a.id.localeCompare(b.id));
     return issues[0] ?? null;
   }
 
   oldestOpenTicket(project?: string): TicketTarget | null {
     const targets = this.list({ status: "ON-GOING", project }).flatMap((issue) =>
-      issue.tickets.filter((ticket) => ticket.status === "OPEN" && issue.dependenciesMet(ticket.id) && !issue.phaseBlocker(ticket.type))
-        .map((ticket) => ({ issue, ticket: ticket.toJSON() })));
-    targets.sort((a, b) => ticketOrder(a.ticket, b.ticket));
+      issue.readyTickets().map((ticket) => ({ issue, ticket: ticket.toJSON() })));
+    targets.sort((a, b) => a.ticket.created_at.localeCompare(b.ticket.created_at) || a.ticket.id.localeCompare(b.ticket.id));
     return targets[0] ?? null;
   }
 
@@ -156,16 +201,7 @@ export class Queue {
   }
 }
 
-function openOrder(left: Issue, right: Issue): number {
-  const timestamp = left.status_changed_at.localeCompare(right.status_changed_at);
-  return timestamp || left.id.localeCompare(right.id);
-}
-
-function ticketOrder(left: TicketData, right: TicketData): number {
-  return left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id);
-}
-
-function projectSegment(project: string): string {
+export function projectSegment(project: string): string {
   const encoded = encodeURIComponent(project);
   return encoded === "." ? "%2E" : encoded === ".." ? "%2E%2E" : encoded;
 }

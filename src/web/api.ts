@@ -1,18 +1,13 @@
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { ClaimIssueUseCase } from "../app/claim_issue_use_case.js";
-import { ClaimTicketUseCase } from "../app/claim_ticket_use_case.js";
-import { CommentUseCase, type IncomingAttachment } from "../app/comment_use_case.js";
-import { CreateIssueUseCase } from "../app/create_issue_use_case.js";
-import { CreateTicketUseCase } from "../app/create_ticket_use_case.js";
-import { DecideIssueUseCase } from "../app/decide_issue_use_case.js";
-import { DecideTicketUseCase } from "../app/decide_ticket_use_case.js";
-import { GetIssueUseCase } from "../app/get_issue_use_case.js";
-import { ListIssuesUseCase } from "../app/list_issues_use_case.js";
-import { ResetClaimUseCase } from "../app/reset_claim_use_case.js";
-import { StatusIssueUseCase } from "../app/status_issue_use_case.js";
-import { StatusTicketUseCase } from "../app/status_ticket_use_case.js";
-import { TagUseCase } from "../app/tag_use_case.js";
+import {
+  addComment, claimIssue as claimIssueCase, createIssue, decideIssue, getIssue, type IncomingAttachment,
+  listIssues, resetClaim, statusIssue, updateTags,
+} from "../app/issue_use_cases.js";
+import {
+  claimTicket as claimTicketCase, createTicket as createTicketCase,
+  decideTicket as decideTicketCase, statusTicket as statusTicketCase,
+} from "../app/ticket_use_cases.js";
 import { ConflictError, DomainError, NotFoundError } from "../domain/domain_error.js";
 import { Queue } from "../domain/queue_repository.js";
 
@@ -62,35 +57,35 @@ function issueAction(response: ServerResponse, route: string[], body: Body, root
 
 function list(response: ServerResponse, url: URL, root?: string): void {
   const query = url.searchParams;
-  const issues = new ListIssuesUseCase(root).execute({ status: query.get("status") ?? undefined,
-    project: query.get("project") ?? undefined, title: query.get("title") ?? undefined, type: query.get("type") ?? undefined,
-    limit: numberValue(query.get("limit")), offset: numberValue(query.get("offset")) });
+  const issues = listIssues({ status: query.get("status") ?? undefined,
+    project: query.get("project") ?? undefined, title: query.get("title") ?? undefined,
+    type: query.get("type") ?? undefined }, root);
   respond(response, 200, issues);
 }
 
 function get(response: ServerResponse, id: string, root?: string): void {
-  respond(response, 200, new GetIssueUseCase(root).execute(id).toJSON());
+  respond(response, 200, getIssue(id, root)); // IssueView (ganha o artefato de brinde)
 }
 
 function create(response: ServerResponse, body: Body, root?: string): void {
-  const issue = new CreateIssueUseCase(root).execute({ title: text(body, "title"), project: text(body, "project"),
+  const issue = createIssue({ title: text(body, "title"), project: text(body, "project"),
     type: text(body, "type"), problem: text(body, "problem"), artifacts: optionalText(body, "artifacts") ?? "",
     acceptance_criteria: optionalText(body, "acceptance_criteria") ?? "", actor: "human",
-    complexity: optionalText(body, "complexity"), human_need: optionalText(body, "human_need"), risk: optionalText(body, "risk") });
+    complexity: optionalText(body, "complexity"), human_need: optionalText(body, "human_need"), risk: optionalText(body, "risk"),
+    attachments: decodeAttachments(body) }, root);
   respond(response, 201, issue.toJSON());
 }
 
 function createTicket(response: ServerResponse, id: string, body: Body, root?: string): void {
-  const issue = new CreateTicketUseCase(root).execute({ issueId: id, type: text(body, "type"),
+  const issue = createTicketCase({ issueId: id, type: text(body, "type"),
     objective: text(body, "objective"), task: text(body, "task"), acceptance_criteria: text(body, "acceptance_criteria"),
     artifacts: optionalText(body, "artifacts"), references: optionalText(body, "references"),
-    human_need: optionalText(body, "human_need"), actor: "human" });
+    human_need: optionalText(body, "human_need"), actor: "human", attachments: decodeAttachments(body) }, root);
   respond(response, 201, issue.toJSON());
 }
 
 function claimIssue(response: ServerResponse, id: string, root?: string): void {
-  const issue = new ClaimIssueUseCase(root).execute({ id });
-  respond(response, 200, issue.toJSON());
+  respond(response, 200, claimIssueCase({ id }, root).toJSON());
 }
 
 function ticketAction(response: ServerResponse, route: string[], body: Body, root?: string): void {
@@ -103,14 +98,14 @@ function ticketAction(response: ServerResponse, route: string[], body: Body, roo
 }
 
 function tag(response: ServerResponse, id: string, ticketId: string | undefined, body: Body, root?: string): void {
-  const issue = new TagUseCase(root).execute({ issueId: id, ticketId,
-    complexity: optionalText(body, "complexity"), human_need: optionalText(body, "human_need"), risk: optionalText(body, "risk") });
+  const issue = updateTags({ issueId: id, ticketId,
+    complexity: optionalText(body, "complexity"), human_need: optionalText(body, "human_need"), risk: optionalText(body, "risk") }, root);
   respond(response, 200, issue.toJSON());
 }
 
 function comment(response: ServerResponse, id: string, ticketId: string | undefined, body: Body, root?: string): void {
-  const issue = new CommentUseCase(root).execute({ issueId: id, ticketId,
-    comment: text(body, "comment"), attachments: decodeAttachments(body), actor: "human" });
+  const issue = addComment({ issueId: id, ticketId,
+    comment: text(body, "comment"), attachments: decodeAttachments(body), actor: "human" }, root);
   respond(response, 201, issue.toJSON());
 }
 
@@ -137,36 +132,39 @@ function serveAttachment(response: ServerResponse, id: string, root?: string): v
 }
 
 function claimTicket(response: ServerResponse, id: string, tid: string, root?: string): void {
-  const issue = new ClaimTicketUseCase(root).execute({ issueId: id, ticketId: tid, actor: "human" });
+  const issue = claimTicketCase({ issueId: id, ticketId: tid, actor: "human" }, root);
   respond(response, 200, issue.toJSON());
 }
 
 function statusTicket(response: ServerResponse, id: string, tid: string, body: Body, root?: string): void {
-  const issue = new StatusTicketUseCase(root).execute({ issueId: id, ticketId: tid, actor: "human",
-    status: text(body, "status"), comment: text(body, "comment"), closed_reason: optionalText(body, "closed_reason") });
+  const issue = statusTicketCase({ issueId: id, ticketId: tid, actor: "human",
+    status: text(body, "status"), comment: text(body, "comment"), closed_reason: optionalText(body, "closed_reason"),
+    attachments: decodeAttachments(body) }, root);
   respond(response, 200, issue.toJSON());
 }
 
 function decideTicket(response: ServerResponse, id: string, tid: string, body: Body, root?: string): void {
-  const issue = new DecideTicketUseCase(root).execute({ issueId: id, ticketId: tid, human: true,
-    status: text(body, "status"), comment: text(body, "comment"), closed_reason: optionalText(body, "closed_reason") });
+  const issue = decideTicketCase({ issueId: id, ticketId: tid, human: true,
+    status: text(body, "status"), comment: text(body, "comment"), closed_reason: optionalText(body, "closed_reason"),
+    attachments: decodeAttachments(body) }, root);
   respond(response, 200, issue.toJSON());
 }
 
 function close(response: ServerResponse, id: string, body: Body, root?: string): void {
-  const issue = new StatusIssueUseCase(root).execute({ id, human: true, status: "CLOSED",
-    comment: text(body, "comment"), closed_reason: text(body, "closed_reason") });
+  const issue = statusIssue({ id, human: true, status: "CLOSED",
+    comment: text(body, "comment"), closed_reason: text(body, "closed_reason") }, root);
   respond(response, 200, issue.toJSON());
 }
 
 function decide(response: ServerResponse, id: string, body: Body, root?: string): void {
-  const issue = new DecideIssueUseCase(root).execute({ id, human: true, status: text(body, "status"),
-    comment: text(body, "comment"), closed_reason: optionalText(body, "closed_reason") });
+  const issue = decideIssue({ id, human: true, status: text(body, "status"),
+    comment: text(body, "comment"), closed_reason: optionalText(body, "closed_reason"),
+    attachments: decodeAttachments(body) }, root);
   respond(response, 200, issue.toJSON());
 }
 
 function reset(response: ServerResponse, id: string, body: Body, root?: string): void {
-  const issue = new ResetClaimUseCase(root).execute({ id, human: true, comment: text(body, "comment") });
+  const issue = resetClaim({ id, human: true, comment: text(body, "comment"), attachments: decodeAttachments(body) }, root);
   respond(response, 200, issue.toJSON());
 }
 
@@ -199,13 +197,6 @@ function optionalText(body: Body, name: string): string | undefined {
   const value = body[name];
   if (value === undefined) return undefined;
   return text(body, name);
-}
-
-function numberValue(value: string | null): number | undefined {
-  if (value === null) return undefined;
-  const number = Number(value);
-  if (!Number.isInteger(number) || number < 0) throw new RequestError("Invalid pagination");
-  return number;
 }
 
 function respond(response: ServerResponse, status: number, value: object | object[]): void {

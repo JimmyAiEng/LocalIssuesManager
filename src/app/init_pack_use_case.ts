@@ -4,9 +4,8 @@ import {
 } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { AGENT_IDS, type AgentId } from "../domain/value_objects.js";
 
-const HARNESSES = ["claude-code", "cursor", "codex", "pi"] as const;
-type Harness = (typeof HARNESSES)[number];
 const SKILLS_DIRECTORY = join(".agents", "skills");
 /** Relative from `<harnessDir>/skills` → `.agents/skills`. */
 const CANONICAL_SKILLS_LINK = join("..", SKILLS_DIRECTORY);
@@ -15,65 +14,59 @@ const AGENTS_POINTER_MARKER = "`sdlc-workflow`";
 export type InitInput = { harness?: string; target?: string; force?: boolean };
 export type InitResult = { pack_version: string; installed: string[]; notes: string[] };
 
-export class InitPackUseCase {
-  readonly #packRoot: string;
+export function initPack(input: InitInput = {}, packRoot = defaultPackRoot()): InitResult {
+  const target = input.target ?? process.cwd();
+  const result: InitResult = { pack_version: packVersion(packRoot), installed: [], notes: [] };
+  installAgentsFile(packRoot, target, result, Boolean(input.force));
+  installSkills(packRoot, target, result);
+  for (const harness of parseHarnesses(input.harness)) wireHarness(harness, target, result);
+  return result;
+}
 
-  constructor(packRoot = defaultPackRoot()) { this.#packRoot = packRoot; }
-
-  execute(input: InitInput = {}): InitResult {
-    const target = input.target ?? process.cwd();
-    const result: InitResult = { pack_version: packVersion(this.#packRoot), installed: [], notes: [] };
-    this.#installAgentsFile(target, result, Boolean(input.force));
-    this.#installSkills(target, result);
-    for (const harness of parseHarnesses(input.harness)) wireHarness(harness, target, result);
-    return result;
-  }
-
-  #installAgentsFile(target: string, result: InitResult, force: boolean): void {
-    const destination = join(target, "AGENTS.md");
-    const pointer = `${readFileSync(join(this.#packRoot, "AGENTS.md"), "utf8").trimEnd()}\n`;
-    if (force || !existsSync(destination)) {
-      writeFileSync(destination, pointer);
-      result.installed.push(destination);
-      if (force) result.notes.push("AGENTS.md sobrescrito (--force)");
-      return;
-    }
-    const current = readFileSync(destination, "utf8");
-    if (current.includes(AGENTS_POINTER_MARKER)) {
-      result.notes.push("AGENTS.md já referencia sdlc-workflow; mantido");
-      return;
-    }
-    const prefix = current.endsWith("\n") ? current : `${current}\n`;
-    writeFileSync(destination, `${prefix}\n${pointer}`);
+function installAgentsFile(packRoot: string, target: string, result: InitResult, force: boolean): void {
+  const destination = join(target, "AGENTS.md");
+  const pointer = `${readFileSync(join(packRoot, "AGENTS.md"), "utf8").trimEnd()}\n`;
+  if (force || !existsSync(destination)) {
+    writeFileSync(destination, pointer);
     result.installed.push(destination);
-    result.notes.push("AGENTS.md: ponteiro sdlc-workflow acrescentado");
+    if (force) result.notes.push("AGENTS.md sobrescrito (--force)");
+    return;
   }
+  const current = readFileSync(destination, "utf8");
+  if (current.includes(AGENTS_POINTER_MARKER)) {
+    result.notes.push("AGENTS.md já referencia sdlc-workflow; mantido");
+    return;
+  }
+  const prefix = current.endsWith("\n") ? current : `${current}\n`;
+  writeFileSync(destination, `${prefix}\n${pointer}`);
+  result.installed.push(destination);
+  result.notes.push("AGENTS.md: ponteiro sdlc-workflow acrescentado");
+}
 
-  #installSkills(target: string, result: InitResult): void {
-    const source = join(this.#packRoot, "skills");
-    const destination = join(target, SKILLS_DIRECTORY);
-    if (samePath(source, destination)) {
-      result.notes.push(".agents/skills já aponta para o pack source (dogfood); cópia pulada");
-      result.installed.push(destination);
-      return;
-    }
-    mkdirSync(dirname(destination), { recursive: true });
-    cpSync(source, destination, { recursive: true, force: true, filter: isSkillFile });
+function installSkills(packRoot: string, target: string, result: InitResult): void {
+  const source = join(packRoot, "skills");
+  const destination = join(target, SKILLS_DIRECTORY);
+  if (samePath(source, destination)) {
+    result.notes.push(".agents/skills já aponta para o pack source (dogfood); cópia pulada");
     result.installed.push(destination);
+    return;
   }
+  mkdirSync(dirname(destination), { recursive: true });
+  cpSync(source, destination, { recursive: true, force: true, filter: isSkillFile });
+  result.installed.push(destination);
 }
 
 function isSkillFile(source: string): boolean {
   return !["README.md", "INSTALL.md"].includes(basename(source));
 }
 
-function parseHarnesses(harness?: string): readonly Harness[] {
-  if (!harness || harness === "all") return HARNESSES;
-  if ((HARNESSES as readonly string[]).includes(harness)) return [harness as Harness];
-  throw new Error(`--harness must be one of: ${HARNESSES.join("|")}|all`);
+function parseHarnesses(harness?: string): readonly AgentId[] {
+  if (!harness || harness === "all") return AGENT_IDS;
+  if ((AGENT_IDS as readonly string[]).includes(harness)) return [harness as AgentId];
+  throw new Error(`--harness must be one of: ${AGENT_IDS.join("|")}|all`);
 }
 
-function wireHarness(harness: Harness, target: string, result: InitResult): void {
+function wireHarness(harness: AgentId, target: string, result: InitResult): void {
   if (harness === "codex") {
     linkSkills(target, ".codex", result);
     result.notes.push("codex: .codex/skills → .agents/skills (também lê .agents/skills nativamente)");

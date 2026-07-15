@@ -77,9 +77,10 @@ AGENTS.md
 ```
 
 1. Já está em camada 0.
-2. Tipo do Ticket → skill `*-phase` (tabela no `AGENTS.md` do projeto).
-3. A skill de fase diz o que a fase entrega e como fechá-la; o **como** executar é decisão do agente.
-4. Não carregue skills de outras fases neste claim.
+2. Ao reivindicar Issue **sem Tickets** para decompor (`next` → `{issue, ticket:null}`) → ler `issue-qualification`.
+3. Tipo do Ticket → skill `*-phase` (tabela no `AGENTS.md` do projeto).
+4. A skill de fase diz o que a fase entrega e como fechá-la; o **como** executar é decisão do agente.
+5. Não carregue skills de outras fases neste claim.
 
 ## Issues-local
 

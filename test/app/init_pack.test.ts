@@ -3,7 +3,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { InitPackUseCase, linkPackSkillsForDogfood } from "../../src/app/init_pack_use_case.js";
+import { initPack, linkPackSkillsForDogfood } from "../../src/app/init_pack_use_case.js";
 
 const target = () => mkdtempSync(join(tmpdir(), "issues-init-"));
 const POINTER =
@@ -11,7 +11,7 @@ const POINTER =
 
 test("init cria AGENTS.md com o ponteiro, skills e wiring de todos os harnesses", () => {
   const directory = target();
-  const result = new InitPackUseCase().execute({ target: directory });
+  const result = initPack({ target: directory });
 
   const agents = readFileSync(join(directory, "AGENTS.md"), "utf8");
   assert.equal(agents, `${POINTER}\n`);
@@ -29,8 +29,8 @@ test("init cria AGENTS.md com o ponteiro, skills e wiring de todos os harnesses"
 
 test("init re-executado não duplica o ponteiro no AGENTS.md", () => {
   const directory = target();
-  new InitPackUseCase().execute({ target: directory });
-  const again = new InitPackUseCase().execute({ target: directory });
+  initPack({ target: directory });
+  const again = initPack({ target: directory });
   assert.equal(readFileSync(join(directory, "AGENTS.md"), "utf8"), `${POINTER}\n`);
   assert.ok(again.notes.some((note) => note.includes("já referencia sdlc-workflow")));
 });
@@ -38,7 +38,7 @@ test("init re-executado não duplica o ponteiro no AGENTS.md", () => {
 test("init acrescenta o ponteiro em AGENTS.md existente sem sobrescrever", () => {
   const directory = target();
   writeFileSync(join(directory, "AGENTS.md"), "# meu arquivo\n");
-  const result = new InitPackUseCase().execute({ target: directory });
+  const result = initPack({ target: directory });
   assert.equal(readFileSync(join(directory, "AGENTS.md"), "utf8"), `# meu arquivo\n\n${POINTER}\n`);
   assert.ok(result.notes.some((note) => note.includes("acrescentado")));
 });
@@ -46,31 +46,31 @@ test("init acrescenta o ponteiro em AGENTS.md existente sem sobrescrever", () =>
 test("init --force sobrescreve AGENTS.md pelo ponteiro do pack", () => {
   const directory = target();
   writeFileSync(join(directory, "AGENTS.md"), "# meu arquivo\n");
-  new InitPackUseCase().execute({ target: directory, force: true });
+  initPack({ target: directory, force: true });
   assert.equal(readFileSync(join(directory, "AGENTS.md"), "utf8"), `${POINTER}\n`);
 });
 
 test("init preserva CLAUDE.md existente e apenas sugere o include", () => {
   const directory = target();
   writeFileSync(join(directory, "CLAUDE.md"), "# regras minhas\n");
-  const result = new InitPackUseCase().execute({ target: directory, harness: "claude-code" });
+  const result = initPack({ target: directory, harness: "claude-code" });
   assert.equal(readFileSync(join(directory, "CLAUDE.md"), "utf8"), "# regras minhas\n");
   assert.ok(result.notes.some((note) => note.includes("@AGENTS.md")));
 });
 
 test("init instala só o harness pedido e rejeita harness desconhecido", () => {
   const directory = target();
-  new InitPackUseCase().execute({ target: directory, harness: "codex" });
+  initPack({ target: directory, harness: "codex" });
   assert.equal(existsSync(join(directory, ".claude")), false);
   assert.equal(existsSync(join(directory, ".cursor")), false);
   assert.ok(existsSync(join(directory, ".agents", "skills")));
   assert.ok(existsSync(join(directory, ".codex", "skills", "sdlc-workflow", "SKILL.md")));
-  assert.throws(() => new InitPackUseCase().execute({ target: target(), harness: "vscode" }), /--harness/);
+  assert.throws(() => initPack({ target: target(), harness: "vscode" }), /--harness/);
 });
 
 test("init --harness pi cria .pi/skills apontando para .agents/skills", () => {
   const directory = target();
-  new InitPackUseCase().execute({ target: directory, harness: "pi" });
+  initPack({ target: directory, harness: "pi" });
   const link = join(directory, ".pi", "skills");
   assert.ok(lstatSync(link).isSymbolicLink());
   assert.equal(readlinkSync(link).replace(/\\/g, "/"), "../.agents/skills");

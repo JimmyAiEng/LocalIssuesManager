@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { Queue } from "../../src/domain/queue_repository.js";
 
 const bin = resolve("bin/issues");
 const env = () => ({ ...process.env, ISSUES_ROOT: mkdtempSync(join(tmpdir(), "issues-cli-")) });
@@ -31,6 +32,18 @@ test("CLI retorna JSON por padrão e next devolve { issue, ticket }", () => {
   assert.equal(fetched.owner, "pi");
 });
 
+test("CLI next --id reivindica Issue específica sem --project; sem id nem project falha", () => {
+  const vars = env();
+  const created = JSON.parse(run(createArgs, vars));
+  const claimed = JSON.parse(run(["next", "--id", created.id, "--agent", "pi"], vars));
+  assert.equal(claimed.issue.id, created.id);
+  assert.equal(claimed.issue.status, "CLAIMED");
+  assert.equal(claimed.ticket, null);
+  const missing = spawnSync(bin, ["next", "--agent", "pi"], { env: vars, encoding: "utf8" });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /project is required/);
+});
+
 test("CLI exige --human em comandos humanos e devolve erro claro", () => {
   const vars = env();
   const created = JSON.parse(run(createArgs, vars));
@@ -44,9 +57,9 @@ test("CLI --pretty mantém JSON legível", () => {
   const vars = env();
   run(createArgs, vars);
   run(createArgs, vars);
-  const output = run(["list", "--project", "demo", "--limit", "1", "--offset", "1", "--pretty"], vars);
+  const output = run(["list", "--project", "demo", "--pretty"], vars);
   assert.match(output, /\n {2}\{/);
-  assert.equal(JSON.parse(output).length, 1);
+  assert.equal(JSON.parse(output).length, 2);
 });
 
 test("CLI lista por tipo sem alterar filtros existentes", () => {
@@ -69,7 +82,7 @@ test("e2e: ciclo Issue+Ticket via CLI até CLOSED", () => {
   assert.equal(claimed.ticket.id, tid);
   assert.equal(claimed.ticket.status, "CLAIMED");
   run(["ticket", "status", "--issue", created.id, "--id", tid, "--agent", "pi",
-    "--status", "CLOSED", "--comment", "feito", "--reason", "concluido"], vars);
+    "--status", "CLOSED", "--comment", "feito", "--reason", "concluido", "--last"], vars);
   const cid = JSON.parse(run(["get", "--id", created.id], vars)).tickets
     .find((ticket: { type: string }) => ticket.type === "Confirmation").id;
   run(["ticket", "claim", "--issue", created.id, "--id", cid, "--agent", "pi"], vars);
@@ -143,6 +156,98 @@ test("e2e: tag insere complexidade/humano/risco em Issue e Ticket; valor inváli
   const bad = spawnSync(bin, ["tag", "--id", created.id, "--risk", "ENORME"], { env: vars, encoding: "utf8" });
   assert.notEqual(bad.status, 0);
   assert.match(bad.stderr, /Invalid risk: ENORME/);
+});
+
+test("CLI next --prompt (fila) retorna Markdown começando com ## SDLC, não JSON", () => {
+  const vars = env();
+  run(createArgs, vars);
+  const output = run(["next", "--prompt", "--agent", "pi", "--project", "demo"], vars);
+  assert.ok(output.startsWith("## SDLC"), output.slice(0, 40));
+  assert.throws(() => JSON.parse(output));
+});
+
+test("CLI next --prompt --id reivindica Issue específica como Markdown", () => {
+  const vars = env();
+  const created = JSON.parse(run(createArgs, vars));
+  const output = run(["next", "--prompt", "--id", created.id, "--agent", "pi"], vars);
+  assert.ok(output.startsWith("## SDLC"), output.slice(0, 40));
+  assert.match(output, /## Issue/);
+  assert.throws(() => JSON.parse(output));
+});
+
+test("CLI next --prompt com Ticket claimado inclui ## Ticket", () => {
+  const vars = env();
+  const created = JSON.parse(run(createArgs, vars));
+  run(["next", "--agent", "pi", "--project", "demo"], vars);
+  run(ticketArgs(created.id), vars);
+  const output = run(["next", "--prompt", "--agent", "pi", "--project", "demo"], vars);
+  assert.match(output, /## Tipo do Ticket/);
+  assert.match(output, /## Ticket/);
+});
+
+test("CLI next sem --prompt mantém JSON { issue, ticket } (regressão)", () => {
+  const vars = env();
+  const created = JSON.parse(run(createArgs, vars));
+  const claimed = JSON.parse(run(["next", "--agent", "pi", "--project", "demo"], vars));
+  assert.equal(claimed.issue.id, created.id);
+  assert.equal(claimed.ticket, null);
+});
+
+test("CLI next --prompt com fila vazia = stdout vazio e exit 0", () => {
+  const vars = env();
+  const result = spawnSync(bin, ["next", "--prompt", "--agent", "pi", "--project", "demo"], { env: vars, encoding: "utf8" });
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+});
+
+test("e2e: artifact grava .md da Issue/Ticket e create --artifact-file grava no id novo", () => {
+  const vars = env();
+  const dir = mkdtempSync(join(tmpdir(), "issues-art-"));
+  const md = join(dir, "doc.md");
+  writeFileSync(md, "# artefato");
+  const queue = new Queue(vars.ISSUES_ROOT);
+
+  const created = JSON.parse(run(createArgs.concat("--artifact-file", md), vars));
+  assert.equal(queue.readArtifact("demo", created.id), "# artefato");
+
+  const updated = join(dir, "up.md");
+  writeFileSync(updated, "# issue atualizado");
+  const ok = JSON.parse(run(["artifact", "--id", created.id, "--file", updated], vars));
+  assert.deepEqual(ok, { ok: true, id: created.id });
+  assert.equal(queue.readArtifact("demo", created.id), "# issue atualizado");
+
+  run(["next", "--agent", "pi", "--project", "demo"], vars);
+  const tid = JSON.parse(run(ticketArgs(created.id).concat("--artifact-file", md), vars)).tickets[0].id;
+  assert.equal(queue.readArtifact("demo", tid), "# artefato");
+  const tmd = join(dir, "t.md");
+  writeFileSync(tmd, "# ticket doc");
+  run(["ticket", "artifact", "--issue", created.id, "--id", tid, "--file", tmd], vars);
+  assert.equal(queue.readArtifact("demo", tid), "# ticket doc");
+});
+
+test("e2e: get/next/ticket get imprimem os campos de artefato no JSON", () => {
+  const vars = env();
+  const dir = mkdtempSync(join(tmpdir(), "issues-view-"));
+  const md = join(dir, "doc.md");
+  writeFileSync(md, "# art issue");
+  const created = JSON.parse(run(createArgs.concat("--artifact-file", md), vars));
+
+  assert.equal(JSON.parse(run(["get", "--id", created.id], vars)).artifact, "# art issue");
+  const queued = JSON.parse(run(["next", "--agent", "pi", "--project", "demo"], vars));
+  assert.equal(queued.issue.artifact, "# art issue"); // só-issue: artifact presente, ticket null
+  assert.equal(queued.ticket, null);
+
+  const tmd = join(dir, "t.md");
+  writeFileSync(tmd, "# art ticket");
+  const tid = JSON.parse(run(ticketArgs(created.id).concat("--artifact-file", tmd), vars)).tickets[0].id;
+  const claimed = JSON.parse(run(["next", "--agent", "pi", "--project", "demo"], vars));
+  assert.equal(claimed.ticket.id, tid);
+  assert.equal(claimed.ticket.artifact, "# art ticket");
+  assert.equal(claimed.ticket.issue_artifact, "# art issue");
+
+  const got = JSON.parse(run(["ticket", "get", "--issue", created.id, "--id", tid], vars));
+  assert.equal(got.artifact, "# art ticket");
+  assert.equal(got.issue_artifact, "# art issue");
 });
 
 test("e2e: reset humano libera Issue CLAIMED e subcomando ticket inválido falha", () => {

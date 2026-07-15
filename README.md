@@ -18,7 +18,7 @@ npm install @jimmypgomes/issues-local   # ou npm i -g / npx
 npx issues init [--harness claude-code|cursor|codex|pi|all]
 ```
 
-O `issues init` instala `AGENTS.md` + `.agents/skills/` e cria symlinks de discovery para cada harness (`.cursor`, `.claude`, `.codex`, `.pi`). Detalhes: `skills/INSTALL.md`.
+O `issues init` garante o ponteiro `sdlc-workflow` no `AGENTS.md` (cria ou acrescenta), copia `.agents/skills/` e cria symlinks de discovery (`.cursor`, `.claude`, `.codex`, `.pi`). Detalhes: `skills/INSTALL.md`.
 
 Neste repositório (desenvolvimento / pack source):
 
@@ -231,4 +231,4 @@ npm run check:fitness
 npm run skills:link
 ```
 
-Documentação de domínio: `CONTEXT.md`. Produto/design: `PRD.md`, `DESIGN.md` (compilados; stubs `PRD_v3.md` / `PRD-UI.md` / `DESIGN_v3.md` apontam para eles).
+Documentação de domínio: `CONTEXT.md`. Produto/design: `PRD.md`, `DESIGN.md`.

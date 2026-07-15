@@ -68,6 +68,10 @@ export class Ticket implements TicketData {
     this.#expect("CLAIMED");
     if (this.owner !== actor) throw new DomainError("Only the Owner may change status");
     if (status === "CLAIMED") throw new DomainError("Invalid ticket transition");
+    // Grau de autonomia: Ticket HITL não pode ser fechado pela IA; só vai a AWAITING para o humano decidir (decide).
+    if (status === "CLOSED" && this.tags.human_need === "HITL") {
+      throw new DomainError("Ticket HITL: IA não pode fechar direto; envie para AWAITING para decisão humana");
+    }
     if (status === "CLOSED" && !reason) throw new DomainError("Closed reason is required");
     if (status !== "CLOSED" && reason) throw new DomainError(`${status} cannot have a closed reason`);
     required(comment, "comment");

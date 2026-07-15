@@ -5,7 +5,6 @@ import { join } from "node:path";
 import test from "node:test";
 import { ClaimTicketUseCase } from "../../src/app/claim_ticket_use_case.js";
 import { NextIssueUseCase } from "../../src/app/next_issue_use_case.js";
-import { StatusIssueUseCase } from "../../src/app/status_issue_use_case.js";
 import { StatusTicketUseCase } from "../../src/app/status_ticket_use_case.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
@@ -176,8 +175,7 @@ async function createAwaiting(url: string, root: string): Promise<string> {
   new StatusTicketUseCase(root).execute({ issueId: id, ticketId: tid, actor: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" });
   const conf = ((await request(url, "GET", `/api/issues/${id}`)).body.tickets as { id: string; type: string }[]).find((ticket) => ticket.type === "Confirmation")!;
   new ClaimTicketUseCase(root).execute({ issueId: id, ticketId: conf.id, actor: "pi" });
-  new StatusTicketUseCase(root).execute({ issueId: id, ticketId: conf.id, actor: "pi", status: "CLOSED", comment: "verificado", closed_reason: "concluido" });
-  new StatusIssueUseCase(root).execute({ id, agent: "pi", status: "AWAITING", comment: "feito" });
+  new StatusTicketUseCase(root).execute({ issueId: id, ticketId: conf.id, actor: "pi", status: "CLOSED", comment: "verificado", closed_reason: "concluido" }); // avança a Issue para AWAITING
   return id;
 }
 

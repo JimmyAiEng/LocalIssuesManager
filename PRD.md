@@ -5,7 +5,7 @@
 | Produto | Gerenciador local de Issues via CLI + web, com pack de skills SDLC |
 | Versão do documento | 3.1 (compilado) |
 | Status | Vigente |
-| Fontes compiladas | `PRD.md` (v1) · `PRD_v3.md` · `PRD-UI.md` |
+| Fontes compiladas | PRD v1 · PRD UI · modelo v3 Issue+Ticket |
 | Escopo | Single-user, máquina local; tracker (domínio + CLI + web) e pack de skills |
 | Fora de escopo | Orquestração profunda de agentes, sync multi-máquina, multiusuário, validação semântica de critérios |
 

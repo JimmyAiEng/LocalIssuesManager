@@ -25,10 +25,9 @@ export class StatusIssueUseCase {
 
 function transitionByAgent(issue: Issue, input: StatusInput): void {
   const agent = parseAgentId(input.agent ?? "");
-  if (input.status === "AWAITING") issue.await(agent, input.comment, input.now);
-  else if (input.status === "CLOSED" && input.closed_reason) {
+  if (input.status === "CLOSED" && input.closed_reason) {
     issue.closeByAgent(agent, input.comment, parseClosedReason(input.closed_reason), input.now);
-  } else throw new DomainError("IA status supports AWAITING or CLOSED with reason");
+  } else throw new DomainError("IA status supports CLOSED with reason");
 }
 
 function closeByHuman(issue: Issue, input: StatusInput): void {

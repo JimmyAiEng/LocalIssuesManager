@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AttachmentData } from "./attachment_entity.js";
 import { DomainError } from "./domain_error.js";
 import { assertTicketAutonomy, Ticket, type CreateTicket, type TicketData } from "./ticket_entity.js";
-import { applyTags, assertDecision, required, threadEntry, type Actor, type AgentId, type ClosedReason, type Decision, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type Thread, type Worktree } from "./value_objects.js";
+import { applyTags, assertDecision, required, threadEntry, TICKET_TYPES, type Actor, type AgentId, type ClosedReason, type Decision, type HumanNeed, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type TicketType, type Thread, type Worktree } from "./value_objects.js";
 
 export type Phase = { status: IssueStatus; timestamp: string };
 export type CreateIssue = {
@@ -65,6 +65,10 @@ export class Issue implements IssueData {
     }
     if (ticket.issue_id !== this.id) throw new DomainError("Ticket belongs to another Issue");
     assertTicketAutonomy(this.tags.human_need, ticket.type, ticket.tags.human_need);
+    const blocker = this.phaseBlocker(ticket.type);
+    if (blocker) {
+      throw new DomainError(`Ticket de ${ticket.type} bloqueado: ${blocker.type} da fase anterior não está CLOSED`);
+    }
     for (const depId of ticket.depends_on) {
       if (!this.tickets.some((candidate) => candidate.id === depId)) {
         throw new DomainError(`Dependency not found: ${depId}`);
@@ -136,16 +140,6 @@ export class Issue implements IssueData {
     this.#confirmWhenDone(ticket, "human", now);
   }
 
-  await(agent: AgentId, comment: string, now = new Date()): void {
-    this.#expect("ON-GOING");
-    if (this.owner !== agent) throw new DomainError("Only the Owner may await");
-    required(comment, "comment");
-    if (!this.tickets.every((ticket) => ticket.status === "CLOSED")) {
-      throw new DomainError("All Tickets must be CLOSED");
-    }
-    this.#transition("AWAITING", agent, comment, null, now);
-  }
-
   reset(comment: string, now = new Date()): void {
     this.#expect("CLAIMED");
     required(comment, "comment");
@@ -174,6 +168,14 @@ export class Issue implements IssueData {
     this.#transition("CLOSED", "human", comment, reason, now);
   }
 
+  // Ordem das fases = ordem de TICKET_TYPES (Planning → … → Deploy → Confirmation).
+  // Um Ticket só pode ser criado ou entregue pela fila quando todos os de fases
+  // anteriores estão CLOSED; Confirmation é a última fase e nunca bloqueia ninguém.
+  phaseBlocker(type: TicketType): Ticket | null {
+    const rank = TICKET_TYPES.indexOf(type);
+    return this.tickets.find((ticket) => ticket.status !== "CLOSED" && TICKET_TYPES.indexOf(ticket.type) < rank) ?? null;
+  }
+
   dependenciesMet(ticketId: string): boolean {
     return this.#ticket(ticketId).depends_on.every((depId) => {
       const dep = this.tickets.find((candidate) => candidate.id === depId);
@@ -188,17 +190,21 @@ export class Issue implements IssueData {
   }
 
   // Destrava a Issue: ao fechar o último Ticket, injeta um Ticket de confirmação
-  // OPEN para a fila (next) reabordar a Issue. Fechar o próprio Confirmation não
-  // recria outro — quebra o loop.
+  // OPEN para a fila (next) reabordar a Issue. Ao fechar o próprio Confirmation
+  // (por IA ou humano), avança a Issue para AWAITING — quebra o loop e destrava.
   #confirmWhenDone(closed: Ticket, actor: Actor, now: Date): void {
     if (this.status !== "ON-GOING" || closed.status !== "CLOSED") return;
-    if (closed.type === "Confirmation") return;
-    if (!this.tickets.every((ticket) => ticket.status === "CLOSED")) return;
-    this.tickets.push(Ticket.create(Issue.#confirmationTicket(this.id, actor), now)); // mesma operação do close: sem #bumpRevision extra
+    if (!this.tickets.every((ticket) => ticket.status === "CLOSED")) return; // ainda há trabalho aberto
+    if (closed.type === "Confirmation") {
+      this.#transition("AWAITING", actor, "Confirmação concluída", null, now);
+      return;
+    }
+    // Herdar human_need da Issue mantém o Confirmation válido numa Issue HITL (assertTicketAutonomy exige tag em todo Ticket).
+    this.tickets.push(Ticket.create(Issue.#confirmationTicket(this.id, actor, this.tags.human_need), now)); // mesma operação do close: sem #bumpRevision extra
   }
 
-  static #confirmationTicket(issueId: string, actor: Actor): CreateTicket {
-    return { issue_id: issueId, type: "Confirmation", actor,
+  static #confirmationTicket(issueId: string, actor: Actor, human_need?: HumanNeed): CreateTicket {
+    return { issue_id: issueId, type: "Confirmation", actor, human_need,
       objective: "Confirmar se a Issue foi resolvida",
       task: "Verifique se o problema da Issue foi resolvido pelos Tickets concluídos. Se sim, mova a Issue para AWAITING; se não, crie os Tickets necessários para concluir o trabalho.",
       acceptance_criteria: "Issue movida para AWAITING com o resumo da verificação, ou novos Tickets cobrindo o trabalho restante." };

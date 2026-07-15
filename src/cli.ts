@@ -225,7 +225,10 @@ function parseOptions(args: string[]): Options {
     if (!key.startsWith("--")) throw new Error(`Unexpected argument: ${key}`);
     const name = key.slice(2);
     if (["human", "pretty", "no-open", "force", "cron", "now", "dogfood"].includes(name)) options[name] = true;
-    else if (name === "attach") (options.attach = (options.attach as string[] | undefined) ?? []).push(args[++index] ?? "");
+    else if (name === "attach") {
+      options.attach = (options.attach as string[] | undefined) ?? [];
+      (options.attach as string[]).push(args[++index] ?? "");
+    }
     else options[name] = args[++index] ?? "";
   }
   return options;

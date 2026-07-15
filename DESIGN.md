@@ -4,7 +4,7 @@
 |-------|--------|
 | Versão | 3.1 (compilado) |
 | Status | Vigente |
-| Fontes compiladas | `DESIGN.md` (v1) · `DESIGN_v3.md` |
+| Fontes compiladas | `DESIGN.md` (v1) · modelo v3 Issue+Ticket |
 | Requisitos | `PRD.md` |
 | Migração de store | Fora de escopo (base limpa no rollout v3) |
 

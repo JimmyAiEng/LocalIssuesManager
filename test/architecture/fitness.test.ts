@@ -17,8 +17,8 @@ function files(directory: string): string[] {
 
 test("módulos expõem somente a API pública definida (FF-06)", () => {
   assert.deepEqual(publicMethods(Issue.prototype), [
-    "addTicket", "await", "claim", "claimTicket", "clearWorktree", "closeByAgent", "closeByHuman",
-    "comment", "commentTicket", "decide", "decideTicket", "dependenciesMet", "reset", "setWorktree", "tag", "tagTicket", "toJSON", "transitionTicket",
+    "addTicket", "claim", "claimTicket", "clearWorktree", "closeByAgent", "closeByHuman",
+    "comment", "commentTicket", "decide", "decideTicket", "dependenciesMet", "phaseBlocker", "reset", "setWorktree", "tag", "tagTicket", "toJSON", "transitionTicket",
   ]);
   assert.deepEqual(publicMethods(Queue.prototype), [
     "findAttachment", "list", "load", "oldestOpen", "oldestOpenTicket", "purgeClosed", "save", "writeAttachment",
@@ -39,12 +39,25 @@ test("enums do client não divergem do domínio (Confirmation é interno ao sist
 test("respeita limites de arquivos e dependências", () => {
   const source = files("src").filter((file) => file.endsWith(".ts"));
   for (const file of source) inspectFile(file);
+  // JS do client segue o mesmo limite de 300 linhas (o resto de inspectFile é específico de TS)
+  for (const file of files("src").filter((file) => file.endsWith(".js"))) {
+    assertLineLimit(file, readFileSync(file, "utf8"));
+  }
   assert.equal(source.some((file) => file.includes("/infra/")), false);
 });
 
+test("o limite de 300 linhas cobre JavaScript (FF-07)", () => {
+  assert.throws(() => assertLineLimit("fake.js", `${"x\n".repeat(300)}x`), /exceeds 300 lines/);
+  assert.doesNotThrow(() => assertLineLimit("fake.js", "x\n".repeat(299)));
+});
+
+function assertLineLimit(file: string, content: string): void {
+  assert.ok(content.split("\n").length <= 300, `${file} exceeds 300 lines`);
+}
+
 function inspectFile(file: string): void {
   const content = readFileSync(file, "utf8");
-  assert.ok(content.split("\n").length <= 300, `${file} exceeds 300 lines`);
+  assertLineLimit(file, content);
   if (file === "src/cli.ts") assert.doesNotMatch(content, /from ["']\.\/domain\//);
   if (file.includes("src/domain/") && !file.endsWith("queue_repository.ts")) {
     assert.doesNotMatch(content, /from ["'].*(?:app|cli)/);

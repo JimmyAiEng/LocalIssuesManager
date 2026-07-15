@@ -84,6 +84,23 @@ test("addTicket recusa fora de CLAIMED/ON-GOING e Ticket de outra Issue", () => 
   assert.throws(() => issue.addTicket(alheio), /Ticket belongs to another Issue/);
 });
 
+test("fase posterior só pode ser criada com as anteriores CLOSED (OPEN/CLAIMED/AWAITING bloqueiam)", () => {
+  const issue = Issue.create(input, "pi");
+  issue.claim("pi");
+  const phase = (type: "Planning" | "Design") => Ticket.create({ issue_id: issue.id,
+    objective: "o", task: "t", acceptance_criteria: "c", type, actor: "pi" });
+  const planning = phase("Planning");
+  issue.addTicket(planning);
+  assert.throws(() => issue.addTicket(phase("Design")), /Design bloqueado: Planning/);
+  issue.claimTicket(planning.id, "pi");
+  assert.throws(() => issue.addTicket(phase("Design")), /Design bloqueado: Planning/);
+  issue.transitionTicket(planning.id, "pi", "AWAITING", "pronto");
+  assert.throws(() => issue.addTicket(phase("Design")), /Design bloqueado: Planning/);
+  issue.decideTicket(planning.id, "CLOSED", "ok", "concluido");
+  issue.addTicket(phase("Design")); // Planning CLOSED libera; Confirmation OPEN não bloqueia
+  assert.equal(issue.tickets.filter((ticket) => ticket.type === "Design").length, 1);
+});
+
 test("Tickets seguintes mantêm ON-GOING e apenas incrementam a revisão", () => {
   const { issue } = ongoing();
   const revision = issue.revision;
@@ -118,23 +135,13 @@ test("operações de Ticket inexistente falham identificando o id", () => {
   assert.throws(() => issue.decideTicket("nope", "OPEN", "x"), /Ticket not found: nope/);
 });
 
-test("await exige ON-GOING, dono e todos os Tickets CLOSED", () => {
-  const claimedOnly = Issue.create(input, "pi");
-  claimedOnly.claim("pi");
-  assert.throws(() => claimedOnly.await("pi", "feito"), /Expected ON-GOING, got CLAIMED/);
-
+test("fechar o Confirmation avança a Issue para AWAITING (destrava)", () => {
   const { issue, ticket } = ongoing();
-  assert.throws(() => issue.await("codex", "feito"), /Only the Owner may await/);
-  assert.throws(() => issue.await("pi", "  "), /comment is required/);
-  assert.throws(() => issue.await("pi", "feito"), /All Tickets must be CLOSED/);
-
   issue.claimTicket(ticket.id, "pi");
   issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
-  assert.throws(() => issue.await("pi", "cedo"), /All Tickets must be CLOSED/); // Confirmation ainda OPEN
+  assert.equal(issue.status, "ON-GOING"); // Confirmation ainda OPEN
   closeConfirmation(issue);
-  issue.await("pi", "tudo pronto", new Date("2026-03-01T00:00:00Z"));
   assert.equal(issue.status, "AWAITING");
-  assert.equal(issue.thread.at(-1)?.comment, "tudo pronto");
 });
 
 test("fechar o último Ticket injeta um Confirmation OPEN e destrava a Issue", () => {
@@ -180,8 +187,7 @@ test("decisão humana fecha a Issue AWAITING com motivo", () => {
   const { issue, ticket } = ongoing();
   issue.claimTicket(ticket.id, "pi");
   issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
-  closeConfirmation(issue);
-  issue.await("pi", "entregue");
+  closeConfirmation(issue); // avança a Issue para AWAITING
   issue.decide("CLOSED", "aceito", "concluido");
   assert.equal(issue.status, "CLOSED");
   assert.equal(issue.closed_reason, "concluido");

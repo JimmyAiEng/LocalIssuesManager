@@ -16,7 +16,7 @@ function boardControls() {
   const projects = selectOptions(options(state.issues, "project"), state.filters.project, "Todos os Projetos");
   const types = selectOptions(options(state.issues, "type"), state.filters.type, "Todos os Tipos");
   const updated = state.refreshedAt ? state.refreshedAt.toLocaleTimeString() : "ainda não atualizado";
-  return `<header class="toolbar"><h1>Issues</h1><a class="button" href="/issues/new">+ Nova Issue</a><label>Buscar título <input id="title" value="${escape(state.filters.title)}"></label><label>Projeto <select id="project">${projects}</select></label><label>Tipo <select id="type">${types}</select></label><button type="button" id="clear" ${hasFilters() ? "" : "disabled"}>Limpar filtros</button><button type="button" id="refresh">Atualizar quadro</button><output aria-live="polite">Atualizado às ${updated}</output></header>`;
+  return `<header class="toolbar"><h1>Issues</h1><a class="button" href="/issues/new">+ Nova Issue</a><label>Buscar título <input id="title" value="${escapeHtml(state.filters.title)}"></label><label>Projeto <select id="project">${projects}</select></label><label>Tipo <select id="type">${types}</select></label><button type="button" id="clear" ${hasFilters() ? "" : "disabled"}>Limpar filtros</button><button type="button" id="refresh">Atualizar quadro</button><output aria-live="polite">Atualizado às ${updated}</output></header>`;
 }
 
 function column(status, issues) {
@@ -25,18 +25,18 @@ function column(status, issues) {
 }
 
 function card(issue) {
-  const owner = issue.owner ? `<span class="owner">${escape(issue.owner)}</span>` : "";
+  const owner = issue.owner ? `<span class="owner">${escapeHtml(issue.owner)}</span>` : "";
   const tickets = issue.tickets?.length ? `<span class="pill-count">${issue.tickets.length} Ticket${issue.tickets.length === 1 ? "" : "s"}</span>` : "";
-  return `<a class="card status-${issue.status}" href="/issues/${issue.id}" data-issue-id="${issue.id}"><strong>${escape(issue.title)}</strong><span>${escape(issue.project)} · ${escape(issue.type)}</span>${owner}${tickets}<time title="${escape(issue.phases?.at(-1)?.timestamp ?? issue.created_at)}">${statusAge(issue)}</time></a>`;
+  return `<a class="card status-${issue.status}" href="/issues/${issue.id}" data-issue-id="${issue.id}"><strong>${escapeHtml(issue.title)}</strong><span>${escapeHtml(issue.project)} · ${escapeHtml(issue.type)}</span>${owner}${tickets}<time title="${escapeHtml(issue.phases?.at(-1)?.timestamp ?? issue.created_at)}">${statusAge(issue)}</time></a>`;
 }
 
 export function renderDetail() {
   const issue = state.issue;
   document.title = `${issue.title} · Issues`;
-  const owner = issue.owner ? `Owner: ${escape(issue.owner)}` : "Sem Owner";
-  const closed = issue.closed_reason ? `<section class="box"><h2>Motivo de fechamento</h2><p class="preserve">${escape(issue.closed_reason)}</p></section>` : "";
+  const owner = issue.owner ? `Owner: ${escapeHtml(issue.owner)}` : "Sem Owner";
+  const closed = issue.closed_reason ? `<section class="box"><h2>Motivo de fechamento</h2><p class="preserve">${escapeHtml(issue.closed_reason)}</p></section>` : "";
   const actions = humanActions(issue.status).length ? `<section class="actionbar"><h2>Ações</h2>${actionsPanel(issue)}</section>` : "";
-  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escape(issue.title)}</h1><p class="meta">Projeto: ${escape(issue.project)} · Tipo: ${escape(issue.type)} · ${owner}</p><p class="meta">ID: <code>${escape(issue.id)}</code> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}${tagEditor("issue", issue.tags, null, issue.status)}</header>${closed}${field("Problema", issue.problem)}${field("Artefatos", issue.artifacts)}${criteriaField(issue.acceptance_criteria)}${ticketsSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
+  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escapeHtml(issue.title)}</h1><p class="meta">Projeto: ${escapeHtml(issue.project)} · Tipo: ${escapeHtml(issue.type)} · ${owner}</p><p class="meta">ID: <code>${escapeHtml(issue.id)}</code> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}${tagEditor("issue", issue.tags, null, issue.status)}</header>${closed}${field("Problema", issue.problem)}${field("Artefatos", issue.artifacts)}${criteriaField(issue.acceptance_criteria)}${ticketsSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
 }
 
 function commentSection(issue) {
@@ -48,7 +48,7 @@ function commentSection(issue) {
 
 function commentForm(ticketId) {
   const idAttr = ticketId ? ` data-ticket-id="${ticketId}"` : "";
-  return `<form id="comment-form" class="form"${idAttr}>${summaryError()}<label>Comentário<textarea name="comment" rows="3">${escape(state.commentDraft.comment ?? "")}</textarea></label><label>Anexos (imagem/vídeo)<input type="file" name="attachments" multiple accept="image/*,video/*"></label><div class="form-actions"><button ${state.busy ? "disabled" : ""}>Enviar comentário</button><button type="button" data-cancel-comment>Cancelar</button></div></form>`;
+  return `<form id="comment-form" class="form"${idAttr}>${summaryError()}<label>Comentário<textarea name="comment" rows="3">${escapeHtml(state.commentDraft.comment ?? "")}</textarea></label><label>Anexos (imagem/vídeo)<input type="file" name="attachments" multiple accept="image/*,video/*"></label><div class="form-actions"><button ${state.busy ? "disabled" : ""}>Enviar comentário</button><button type="button" data-cancel-comment>Cancelar</button></div></form>`;
 }
 
 function actionsPanel(issue) {
@@ -80,9 +80,9 @@ function ticketsSection(issue) {
 }
 
 function ticketCard(ticket) {
-  const owner = ticket.owner ? `<span class="owner">${escape(ticket.owner)}</span>` : "";
-  const references = ticket.references?.trim() ? `<p class="ticket-refs">Referências: ${escape(ticket.references)}</p>` : "";
-  return `<article class="ticket status-${ticket.status}"><header class="ticket-head"><span class="badge status-${ticket.status}">${ticket.status}</span><span class="ticket-type">${escape(ticket.type)}</span>${owner}</header>${tagsMarkup(ticket.tags)}${tagEditor("ticket", ticket.tags, ticket.id, ticket.status)}<h3>${escape(ticket.objective)}</h3><p class="preserve ticket-task">${escape(ticket.task)}</p>${references}<details class="ticket-thread"><summary>Thread (${ticket.thread.length})</summary><ol class="thread">${ticket.thread.map(message).join("")}</ol></details>${ticketCommentSection(ticket)}${ticketActionsPanel(ticket)}</article>`;
+  const owner = ticket.owner ? `<span class="owner">${escapeHtml(ticket.owner)}</span>` : "";
+  const references = ticket.references?.trim() ? `<p class="ticket-refs">Referências: ${escapeHtml(ticket.references)}</p>` : "";
+  return `<article class="ticket status-${ticket.status}"><header class="ticket-head"><span class="badge status-${ticket.status}">${ticket.status}</span><span class="ticket-type">${escapeHtml(ticket.type)}</span>${owner}</header>${tagsMarkup(ticket.tags)}${tagEditor("ticket", ticket.tags, ticket.id, ticket.status)}<h3>${escapeHtml(ticket.objective)}</h3><p class="preserve ticket-task">${escapeHtml(ticket.task)}</p>${references}<details class="ticket-thread"><summary>Thread (${ticket.thread.length})</summary><ol class="thread">${ticket.thread.map(message).join("")}</ol></details>${ticketCommentSection(ticket)}${ticketActionsPanel(ticket)}</article>`;
 }
 
 function tagEditor(scope, tags, ticketId, status) {
@@ -155,21 +155,21 @@ export function renderNewIssue() {
 
 function textInput(name, label, value, suggestions = []) {
   const list = suggestions.length ? ` list="${name}-list"` : "";
-  const datalist = suggestions.length ? `<datalist id="${name}-list">${suggestions.map((item) => `<option value="${escape(item)}">`).join("")}</datalist>` : "";
-  return `<label>${label}<input name="${name}" value="${escape(value)}"${list} aria-invalid="${Boolean(state.errors[name])}">${fieldError(name)}</label>${datalist}`;
+  const datalist = suggestions.length ? `<datalist id="${name}-list">${suggestions.map((item) => `<option value="${escapeHtml(item)}">`).join("")}</datalist>` : "";
+  return `<label>${label}<input name="${name}" value="${escapeHtml(value)}"${list} aria-invalid="${Boolean(state.errors[name])}">${fieldError(name)}</label>${datalist}`;
 }
 
 function selectInput(name, label, values, selected, emptyLabel = "Selecione") {
-  const optionsHtml = `<option value="">${emptyLabel}</option>${values.map((value) => `<option ${value === selected ? "selected" : ""}>${escape(value)}</option>`).join("")}`;
+  const optionsHtml = `<option value="">${emptyLabel}</option>${values.map((value) => `<option ${value === selected ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}`;
   return `<label>${label}<select name="${name}" aria-invalid="${Boolean(state.errors[name])}">${optionsHtml}</select>${fieldError(name)}</label>`;
 }
 
 function areaInput(name, label, value) {
-  return `<label>${label}<textarea name="${name}" rows="4" aria-invalid="${Boolean(state.errors[name])}">${escape(value)}</textarea>${fieldError(name)}</label>`;
+  return `<label>${label}<textarea name="${name}" rows="4" aria-invalid="${Boolean(state.errors[name])}">${escapeHtml(value)}</textarea>${fieldError(name)}</label>`;
 }
 
 function commentField() {
-  return `<label>Comentário<textarea name="comment" rows="3" aria-invalid="${Boolean(state.errors.comment)}">${escape(state.draft.comment ?? "")}</textarea>${fieldError("comment")}</label>`;
+  return `<label>Comentário<textarea name="comment" rows="3" aria-invalid="${Boolean(state.errors.comment)}">${escapeHtml(state.draft.comment ?? "")}</textarea>${fieldError("comment")}</label>`;
 }
 
 function reasonField() {
@@ -177,30 +177,30 @@ function reasonField() {
 }
 
 function fieldError(name) {
-  return state.errors[name] ? `<span class="field-error">${escape(state.errors[name])}</span>` : "";
+  return state.errors[name] ? `<span class="field-error">${escapeHtml(state.errors[name])}</span>` : "";
 }
 
 function summaryError() {
   const messages = Object.values(state.errors);
-  return messages.length ? `<p class="error-summary" role="alert">Corrija os campos: ${escape(messages.join("; "))}</p>` : "";
+  return messages.length ? `<p class="error-summary" role="alert">Corrija os campos: ${escapeHtml(messages.join("; "))}</p>` : "";
 }
 
 function feedback() {
   if (!state.feedback) return "";
   const refresh = state.feedback.kind === "conflict"
     ? `<button type="button" id="refresh-issue">Atualizar Issue</button>` : "";
-  return `<p class="feedback feedback-${state.feedback.kind}" role="status" aria-live="polite">${escape(state.feedback.message)} ${refresh}</p>`;
+  return `<p class="feedback feedback-${state.feedback.kind}" role="status" aria-live="polite">${escapeHtml(state.feedback.message)} ${refresh}</p>`;
 }
 
 function field(title, value) {
-  return `<section class="box"><h2>${title}</h2><p class="preserve">${escape(value)}</p></section>`;
+  return `<section class="box"><h2>${title}</h2><p class="preserve">${escapeHtml(value)}</p></section>`;
 }
 
 function criteriaField(value) {
   const items = parseChecklist(value);
   const body = items.length
-    ? `<ul class="checklist">${items.map((item) => `<li class="${item.done ? "done" : ""}">${escape(item.label)}</li>`).join("")}</ul>`
-    : `<p class="preserve">${escape(value)}</p>`;
+    ? `<ul class="checklist">${items.map((item) => `<li class="${item.done ? "done" : ""}">${escapeHtml(item.label)}</li>`).join("")}</ul>`
+    : `<p class="preserve">${escapeHtml(value)}</p>`;
   return `<section class="box"><h2>Critérios de aceite</h2>${body}</section>`;
 }
 
@@ -210,8 +210,8 @@ function thread(entries) {
 
 function message(entry) {
   const kind = entry.actor === "human" ? "human" : "agent";
-  const reason = entry.closed_reason ? ` · ${escape(entry.closed_reason)}` : "";
-  return `<li class="msg msg--${kind}"><div class="msg-head"><span class="msg-who">${escape(entry.actor)}</span><time>${date(entry.timestamp)}</time></div><p class="msg-status">${entry.status}${reason}</p><p class="preserve">${escape(entry.comment)}</p>${attachmentsMarkup(entry.attachments)}</li>`;
+  const reason = entry.closed_reason ? ` · ${escapeHtml(entry.closed_reason)}` : "";
+  return `<li class="msg msg--${kind}"><div class="msg-head"><span class="msg-who">${escapeHtml(entry.actor)}</span><time>${date(entry.timestamp)}</time></div><p class="msg-status">${entry.status}${reason}</p><p class="preserve">${escapeHtml(entry.comment)}</p>${attachmentsMarkup(entry.attachments)}</li>`;
 }
 
 function dates(issue) {
@@ -220,21 +220,21 @@ function dates(issue) {
 }
 
 export function renderLoading() { root().innerHTML = `<p class="loading" aria-live="polite">Carregando quadro…</p>`; }
-export function renderError(error) { root().innerHTML = `<main class="error" role="alert"><h1>Não foi possível ler as Issues</h1><p>${escape(error.message)}</p><button type="button" id="refresh">Tentar novamente</button></main>`; }
+export function renderError(error) { root().innerHTML = `<main class="error" role="alert"><h1>Não foi possível ler as Issues</h1><p>${escapeHtml(error.message)}</p><button type="button" id="refresh">Tentar novamente</button></main>`; }
 export function root() { return document.querySelector("#app"); }
 
 const tagLabels = { complexity: "Complexidade", human_need: "Humano", risk: "Risco" };
 function tagsMarkup(tags) {
   const entries = Object.entries(tags ?? {});
   if (!entries.length) return "";
-  const chips = entries.map(([key, value]) => `<span class="tag tag-${key}">${tagLabels[key] ?? key}: ${escape(value)}</span>`).join("");
+  const chips = entries.map(([key, value]) => `<span class="tag tag-${key}">${tagLabels[key] ?? key}: ${escapeHtml(value)}</span>`).join("");
   return `<p class="tags">${chips}</p>`;
 }
 
 function date(value) { return new Date(value).toLocaleString(); }
-function escape(value) { return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" })[character]); }
+function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" })[character]); }
 function hasFilters() { return Object.values(state.filters).some(Boolean); }
-function selectOptions(values, selected, empty) { return `<option value="">${empty}</option>${values.map((value) => `<option ${value === selected ? "selected" : ""}>${escape(value)}</option>`).join("")}`; }
+function selectOptions(values, selected, empty) { return `<option value="">${empty}</option>${values.map((value) => `<option ${value === selected ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}`; }
 function restoreScroll() { setTimeout(() => window.scrollTo(0, Number(sessionStorage.getItem("issues.scroll") ?? 0))); }
 
 function actionLabel(action) {

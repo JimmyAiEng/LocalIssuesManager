@@ -54,6 +54,27 @@ test("oldestOpenTicket omite Ticket cuja dependência não está AWAITING/CLOSED
   assert.equal(queue.oldestOpenTicket("p")?.ticket.id, t2.id);
 });
 
+test("oldestOpenTicket não entrega fase posterior com fase anterior não fechada", () => {
+  const queue = new Queue(root());
+  const issue = Issue.create({ ...body, project: "p" }, "pi");
+  issue.claim("pi");
+  const implement = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
+    acceptance_criteria: "c", type: "Implement", actor: "pi" }, new Date("2026-01-01"));
+  issue.addTicket(implement);
+  // fase anterior pode nascer depois de uma posterior já existir
+  const planning = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
+    acceptance_criteria: "c", type: "Planning", actor: "pi" }, new Date("2026-01-02"));
+  issue.addTicket(planning);
+  queue.save(issue);
+
+  // Implement é o OPEN mais antigo, mas Planning aberto o tira da fila
+  assert.equal(queue.oldestOpenTicket("p")?.ticket.id, planning.id);
+  issue.claimTicket(planning.id, "pi");
+  issue.transitionTicket(planning.id, "pi", "CLOSED", "ok", "concluido");
+  queue.save(issue);
+  assert.equal(queue.oldestOpenTicket("p")?.ticket.id, implement.id);
+});
+
 test("addTicket recusa dependência inexistente na Issue", () => {
   const issue = Issue.create(body, "pi");
   issue.claim("pi");
@@ -158,8 +179,7 @@ test("pastas AWAITING e CLOSED preservam a separação por status", () => {
   const { issue, ticket } = ongoingIssue(queue, "p", "awaiting", new Date("2026-01-01"));
   issue.claimTicket(ticket.id, "pi");
   issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
-  closeConfirmation(issue);
-  issue.await("pi", "review");
+  closeConfirmation(issue); // avança a Issue para AWAITING
   queue.save(issue);
   const closed = Issue.create({ ...body, project: "p", title: "closed" }, "pi");
   closed.closeByAgent("pi", "done", "concluido");
@@ -274,8 +294,7 @@ test("blob de anexo é gravado fora das pastas de status e sobrevive à transiç
   // move a Issue de ongoing -> awaiting (renomeia a pasta do JSON)
   issue.claimTicket(ticket.id, "pi");
   issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
-  closeConfirmation(issue);
-  issue.await("pi", "pronto");
+  closeConfirmation(issue); // avança a Issue para AWAITING
   queue.save(issue);
 
   const found = queue.findAttachment(attachment.id);

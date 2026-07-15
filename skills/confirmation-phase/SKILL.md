@@ -24,11 +24,16 @@ Confirmar se o problema descrito na Issue foi resolvido pelos Tickets já conclu
 
 ## Encerramento
 
-**Resolvido** → feche este Ticket e mova a Issue para `AWAITING` (decisão humana `OPEN|CLOSED`):
+**Resolvido** → feche este Ticket. Ao fechar o `Confirmation` com todos os demais Tickets `CLOSED`, o sistema move a Issue para `AWAITING` automaticamente (decisão humana `OPEN|CLOSED`):
 
 ```
 issues ticket status --issue <id> --id <tid> --agent <ia> --status CLOSED --comment "…" --reason concluido
-issues status --id <id> --agent <ia> --status AWAITING --comment "…"
+```
+
+Numa Issue HITL o `Confirmation` também é HITL: em vez de `CLOSED`, mande-o para `AWAITING` e o humano decide — o avanço da Issue acontece igual ao fechar.
+
+```
+issues ticket status --issue <id> --id <tid> --agent <ia> --status AWAITING --comment "…"
 ```
 
 **Não resolvido** → crie os Tickets que faltam e feche este:

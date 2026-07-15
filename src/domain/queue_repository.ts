@@ -79,7 +79,7 @@ export class Queue {
 
   oldestOpenTicket(project?: string): TicketTarget | null {
     const targets = this.list({ status: "ON-GOING", project }).flatMap((issue) =>
-      issue.tickets.filter((ticket) => ticket.status === "OPEN" && issue.dependenciesMet(ticket.id))
+      issue.tickets.filter((ticket) => ticket.status === "OPEN" && issue.dependenciesMet(ticket.id) && !issue.phaseBlocker(ticket.type))
         .map((ticket) => ({ issue, ticket: ticket.toJSON() })));
     targets.sort((a, b) => ticketOrder(a.ticket, b.ticket));
     return targets[0] ?? null;

@@ -55,6 +55,64 @@ test("Issue HITL: re-taguear Planning para AFK também é rejeitado", () => {
   assert.equal(issue.revision, revision);
 });
 
+test("Ticket HITL: IA não pode fechar direto; só AWAITING", () => {
+  const issue = issueWith("HITL");
+  issue.addTicket(ticket(issue.id, "Implement", "HITL"));
+  const t = issue.tickets.at(-1)!;
+  issue.claimTicket(t.id, "pi");
+  assert.throws(
+    () => issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido"),
+    (e: unknown) => e instanceof DomainError && /HITL/.test(e.message),
+  );
+  issue.transitionTicket(t.id, "pi", "AWAITING", "pronto para decisão humana");
+  assert.equal(t.status, "AWAITING");
+});
+
+test("Ticket AFK: IA fecha direto (fluxo inalterado)", () => {
+  const issue = issueWith("HITL");
+  issue.addTicket(ticket(issue.id, "Implement", "AFK"));
+  const t = issue.tickets.at(-1)!;
+  issue.claimTicket(t.id, "pi");
+  issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido");
+  assert.equal(t.status, "CLOSED");
+});
+
+test("Confirmation automático herda human_need numa Issue HITL", () => {
+  const issue = issueWith("HITL");
+  issue.addTicket(ticket(issue.id, "Implement", "AFK"));
+  const t = issue.tickets.at(-1)!;
+  issue.claimTicket(t.id, "pi");
+  issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido");
+  const confirmation = issue.tickets.at(-1)!;
+  assert.equal(confirmation.type, "Confirmation");
+  assert.equal(confirmation.tags.human_need, "HITL"); // antes nascia sem tag → inválido numa Issue HITL
+});
+
+test("Issue HITL: humano decidindo o Confirmation AWAITING destrava a Issue (→ AWAITING)", () => {
+  const issue = issueWith("HITL");
+  issue.addTicket(ticket(issue.id, "Implement", "AFK"));
+  const t = issue.tickets.at(-1)!;
+  issue.claimTicket(t.id, "pi");
+  issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido");
+  const confirmation = issue.tickets.at(-1)!; // HITL: IA não fecha, só manda para AWAITING
+  issue.claimTicket(confirmation.id, "pi");
+  issue.transitionTicket(confirmation.id, "pi", "AWAITING", "para decisão humana");
+  assert.equal(issue.status, "ON-GOING");
+  issue.decideTicket(confirmation.id, "CLOSED", "resolvido", "concluido");
+  assert.equal(issue.status, "AWAITING"); // antes ficava travada em ON-GOING
+});
+
+test("Confirmation automático numa Issue sem autonomia não recebe tag", () => {
+  const issue = issueWith();
+  issue.addTicket(ticket(issue.id, "Implement"));
+  const t = issue.tickets.at(-1)!;
+  issue.claimTicket(t.id, "pi");
+  issue.transitionTicket(t.id, "pi", "CLOSED", "feito", "concluido");
+  const confirmation = issue.tickets.at(-1)!;
+  assert.equal(confirmation.type, "Confirmation");
+  assert.equal(confirmation.tags.human_need, undefined);
+});
+
 test("Issue AFK ou sem tag: sem restrição de autonomia", () => {
   const afk = issueWith("AFK");
   afk.addTicket(ticket(afk.id, "Planning")); // Planning sem tag numa Issue AFK: aceito

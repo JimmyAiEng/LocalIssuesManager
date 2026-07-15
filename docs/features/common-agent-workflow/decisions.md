@@ -30,7 +30,7 @@ Artefato de debate: `.lavish/common-agent-workflow-debate.html`
 | Data | Decisão |
 |---|---|
 | 2026-07-13 | YAGNI no pack: camada 2 (skills de execução) removida por decisão do humano. Supersede D14 e a parte de camada 2 de D17. O pack passa a ter só `sdlc-workflow` (camada 0) + 5 skills `*-phase` (camada 1); o **como** executar cada fase é decisão do agente. |
-| v3 (Issues + Tickets) | Modelo Issue-agregado + Ticket. A fase SDLC deixa de ser TAG da Issue e vira o **tipo do Ticket** (`Planning` · `Design` · `Implement` · `QA` · `Deploy`); o roteamento de fase (D11, D17) passa a ser por **tipo do Ticket**, não por TAG da Issue. `Deployment` renomeado para `Deploy`; `Maintenance` (D15) deixa de ser fase e vira Issue de tipo `Fix`/`Refactor`. Spec vigente: `PRD.md` / `DESIGN.md` (compilados a partir de `PRD_v3`/`DESIGN_v3`). |
+| v3 (Issues + Tickets) | Modelo Issue-agregado + Ticket. A fase SDLC deixa de ser TAG da Issue e vira o **tipo do Ticket** (`Planning` · `Design` · `Implement` · `QA` · `Deploy`); o roteamento de fase (D11, D17) passa a ser por **tipo do Ticket**, não por TAG da Issue. `Deployment` renomeado para `Deploy`; `Maintenance` (D15) deixa de ser fase e vira Issue de tipo `Fix`/`Refactor`. Spec vigente: `PRD.md` / `DESIGN.md`. |
 
 ## Rejeitado / corrigido
 

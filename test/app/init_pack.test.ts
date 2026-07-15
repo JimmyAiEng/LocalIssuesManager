@@ -6,14 +6,15 @@ import test from "node:test";
 import { InitPackUseCase, linkPackSkillsForDogfood } from "../../src/app/init_pack_use_case.js";
 
 const target = () => mkdtempSync(join(tmpdir(), "issues-init-"));
+const POINTER =
+  "Sempre leia a skill `sdlc-workflow` quando estiver trabalhando com issues-local ou caso o usuário exigir a execução de algum CLI `issues {comando}`.";
 
-test("init instala AGENTS.md versionado, skills e wiring de todos os harnesses", () => {
+test("init cria AGENTS.md com o ponteiro, skills e wiring de todos os harnesses", () => {
   const directory = target();
   const result = new InitPackUseCase().execute({ target: directory });
 
   const agents = readFileSync(join(directory, "AGENTS.md"), "utf8");
-  assert.ok(agents.startsWith(`<!-- issues-local pack v${result.pack_version} -->`));
-  assert.ok(agents.includes("sdlc-workflow"));
+  assert.equal(agents, `${POINTER}\n`);
   assert.ok(existsSync(join(directory, ".agents", "skills", "sdlc-workflow", "SKILL.md")));
   assert.ok(existsSync(join(directory, ".agents", "skills", "planning-phase", "SKILL.md")));
   assert.equal(existsSync(join(directory, ".agents", "skills", "README.md")), false);
@@ -26,20 +27,27 @@ test("init instala AGENTS.md versionado, skills e wiring de todos os harnesses",
   assert.ok(result.installed.length >= 4);
 });
 
-test("init re-executado atualiza AGENTS.md gerenciado sem exigir --force", () => {
+test("init re-executado não duplica o ponteiro no AGENTS.md", () => {
   const directory = target();
-  const first = new InitPackUseCase().execute({ target: directory });
+  new InitPackUseCase().execute({ target: directory });
   const again = new InitPackUseCase().execute({ target: directory });
-  assert.equal(again.pack_version, first.pack_version);
-  assert.ok(again.notes.some((note) => note.includes("já aponta") || note.includes("já existe")));
+  assert.equal(readFileSync(join(directory, "AGENTS.md"), "utf8"), `${POINTER}\n`);
+  assert.ok(again.notes.some((note) => note.includes("já referencia sdlc-workflow")));
 });
 
-test("init recusa sobrescrever AGENTS.md alheio sem --force", () => {
+test("init acrescenta o ponteiro em AGENTS.md existente sem sobrescrever", () => {
   const directory = target();
   writeFileSync(join(directory, "AGENTS.md"), "# meu arquivo\n");
-  assert.throws(() => new InitPackUseCase().execute({ target: directory }), /--force/);
+  const result = new InitPackUseCase().execute({ target: directory });
+  assert.equal(readFileSync(join(directory, "AGENTS.md"), "utf8"), `# meu arquivo\n\n${POINTER}\n`);
+  assert.ok(result.notes.some((note) => note.includes("acrescentado")));
+});
+
+test("init --force sobrescreve AGENTS.md pelo ponteiro do pack", () => {
+  const directory = target();
+  writeFileSync(join(directory, "AGENTS.md"), "# meu arquivo\n");
   new InitPackUseCase().execute({ target: directory, force: true });
-  assert.ok(readFileSync(join(directory, "AGENTS.md"), "utf8").startsWith("<!-- issues-local pack"));
+  assert.equal(readFileSync(join(directory, "AGENTS.md"), "utf8"), `${POINTER}\n`);
 });
 
 test("init preserva CLAUDE.md existente e apenas sugere o include", () => {

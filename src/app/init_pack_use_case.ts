@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 
 const HARNESSES = ["claude-code", "cursor", "codex", "pi"] as const;
 type Harness = (typeof HARNESSES)[number];
-const PACK_MARKER = "<!-- issues-local pack";
 const SKILLS_DIRECTORY = join(".agents", "skills");
 /** Relative from `<harnessDir>/skills` → `.agents/skills`. */
 const CANONICAL_SKILLS_LINK = join("..", SKILLS_DIRECTORY);
+const AGENTS_POINTER_MARKER = "`sdlc-workflow`";
 
 export type InitInput = { harness?: string; target?: string; force?: boolean };
 export type InitResult = { pack_version: string; installed: string[]; notes: string[] };
@@ -31,12 +31,22 @@ export class InitPackUseCase {
 
   #installAgentsFile(target: string, result: InitResult, force: boolean): void {
     const destination = join(target, "AGENTS.md");
-    if (existsSync(destination) && !force && !readFileSync(destination, "utf8").startsWith(PACK_MARKER)) {
-      throw new Error("AGENTS.md already exists and is not managed by this pack; use --force to overwrite");
+    const pointer = `${readFileSync(join(this.#packRoot, "AGENTS.md"), "utf8").trimEnd()}\n`;
+    if (force || !existsSync(destination)) {
+      writeFileSync(destination, pointer);
+      result.installed.push(destination);
+      if (force) result.notes.push("AGENTS.md sobrescrito (--force)");
+      return;
     }
-    const body = readFileSync(join(this.#packRoot, "AGENTS.md"), "utf8");
-    writeFileSync(destination, `${PACK_MARKER} v${result.pack_version} -->\n${body}`);
+    const current = readFileSync(destination, "utf8");
+    if (current.includes(AGENTS_POINTER_MARKER)) {
+      result.notes.push("AGENTS.md já referencia sdlc-workflow; mantido");
+      return;
+    }
+    const prefix = current.endsWith("\n") ? current : `${current}\n`;
+    writeFileSync(destination, `${prefix}\n${pointer}`);
     result.installed.push(destination);
+    result.notes.push("AGENTS.md: ponteiro sdlc-workflow acrescentado");
   }
 
   #installSkills(target: string, result: InitResult): void {

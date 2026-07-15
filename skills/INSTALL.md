@@ -12,7 +12,7 @@ O `init` materializa no projeto:
 
 ```text
 <projeto>/
-├── AGENTS.md                 ← entrada do pack, com a versão gravada no cabeçalho
+├── AGENTS.md                 ← cria se ausente; se existe, só acrescenta o ponteiro sdlc-workflow
 ├── CLAUDE.md                 ← criado com "@AGENTS.md" se não existir (claude-code)
 ├── .agents/skills/<nome>/    ← cópia canônica das skills (padrão Agent Skills)
 ├── .cursor/skills            ← symlink → .agents/skills
@@ -39,7 +39,7 @@ Não é preciso apontar path manual no Pi: com `.agents/skills` (ou `.pi/skills`
 
 Aqui o source canônico das skills é `skills/` (publicado no npm). Os harnesses **não** leem `skills/` diretamente.
 
-Para descoberta local sem sobrescrever o `AGENTS.md` do pack:
+Para discovery local no pack source (não toca em `AGENTS.md`):
 
 ```bash
 npm run skills:link
@@ -56,12 +56,12 @@ Isso cria (e versiona) os symlinks:
 .codex/skills  → ../.agents/skills
 ```
 
-**Não** rode `issues init` (sem `--dogfood`) na raiz deste repo: isso reescreveria `AGENTS.md` com o marcador de pack consumidor.
+`issues init` sem `--dogfood` na raiz deste repo só acrescentaria o ponteiro se faltasse; prefira `--dogfood` / `skills:link` para ligar as skills.
 
 ## Atualização
 
 Rode o `init` de novo com a versão nova do pacote no projeto consumidor.
-`AGENTS.md` gerenciado pelo pack (cabeçalho `<!-- issues-local pack v… -->`) é atualizado no lugar; um `AGENTS.md` seu só é sobrescrito com `--force`.
+`AGENTS.md`: se ausente, cria com o ponteiro; se já existe e não cita `sdlc-workflow`, acrescenta o ponteiro; `--force` sobrescreve o arquivo inteiro pelo ponteiro do pack.
 Skills em `.agents/skills/` são re-copiadas; links corretos do pack são reutilizados.
 
 Skills extras do consumidor (camada 2) podem viver ao lado em `.agents/skills/<sua-skill>/` — o `init` **sobrescreve** skills com o mesmo nome do pack; use nomes distintos.

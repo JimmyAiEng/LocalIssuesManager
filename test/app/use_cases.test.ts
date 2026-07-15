@@ -64,22 +64,21 @@ test("ciclo completo Issue+Ticket até CLOSED via decisão humana", () => {
   new NextIssueUseCase(dir).execute({ agent: "pi", project: "app" });
   new StatusTicketUseCase(dir).execute({ issueId: issue.id, ticketId, actor: "pi",
     status: "CLOSED", comment: "feito", closed_reason: "concluido" });
-  closeConfirmation(dir, issue.id);
-  new StatusIssueUseCase(dir).execute({ id: issue.id, agent: "pi", status: "AWAITING", comment: "pronto" });
+  closeConfirmation(dir, issue.id); // avança a Issue para AWAITING
   new DecideIssueUseCase(dir).execute({ id: issue.id, human: true, status: "CLOSED", comment: "ok", closed_reason: "concluido" });
   const full = new GetIssueUseCase(dir).execute(issue.id);
   assert.equal(full.status, "CLOSED");
   assert.equal(full.tickets[0].status, "CLOSED");
 });
 
-test("await da Issue é recusado enquanto houver Ticket não CLOSED", () => {
+test("status AWAITING pela IA é rejeitado (avanço é automático ao fechar o Confirmation)", () => {
   const dir = root();
   const issue = new CreateIssueUseCase(dir).execute({ ...body, title: "gate" });
   new NextIssueUseCase(dir).execute({ agent: "pi", project: "app" });
   addTicket(dir, issue.id);
   assert.throws(
     () => new StatusIssueUseCase(dir).execute({ id: issue.id, agent: "pi", status: "AWAITING", comment: "x" }),
-    /All Tickets must be CLOSED/,
+    /IA status supports CLOSED with reason/,
   );
   assert.equal(new GetIssueUseCase(dir).execute(issue.id).status, "ON-GOING");
 });

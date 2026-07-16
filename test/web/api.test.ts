@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { nextIssue, setArtifact } from "../../src/app/issue_use_cases.js";
+import { setRequirements } from "../../src/app/requirements_use_cases.js";
 import { claimTicket, statusTicket } from "../../src/app/ticket_use_cases.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
 const input = { title: "Web issue", project: "web", type: "Fix", problem: "p" };
 const ticketInput = { type: "Implement", objective: "o", task: "t", acceptance_criteria: "c" };
+const VALID_REQ = JSON.stringify({
+  features: ["Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel"],
+});
 
 test("API cria, lista por tipo, lê e fecha pela camada app", async () => withWeb(async (url) => {
   const created = await request(url, "POST", "/api/issues", input);
@@ -232,6 +236,17 @@ test("API GET /issues/:id devolve a IssueView com o Artefato injetado (null sem 
   assert.equal((await request(url, "GET", `/api/issues/${id}`)).body.artifact, null);
   setArtifact({ issueId: id, content: "# doc web" }, root);
   assert.equal((await request(url, "GET", `/api/issues/${id}`)).body.artifact, "# doc web");
+}));
+
+test("API GET /issues/:id/requirements devolve requisitos persistidos (200) e 404 sem eles", async () => withWeb(async (url, root) => {
+  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
+  assert.equal((await request(url, "GET", `/api/issues/${id}/requirements`)).status, 404);
+  const file = join(root, "req.json");
+  writeFileSync(file, VALID_REQ, "utf8");
+  setRequirements({ issueId: id, file }, root);
+  const ok = await request(url, "GET", `/api/issues/${id}/requirements`);
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.body.features, JSON.parse(VALID_REQ).features);
 }));
 
 async function withWeb(run: (url: string, root: string) => Promise<void>): Promise<void> {

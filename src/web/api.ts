@@ -4,6 +4,7 @@ import {
   addComment, claimIssue as claimIssueCase, createIssue, decideIssue, getIssue, type IncomingAttachment,
   listIssues, resetClaim, statusIssue, updateTags,
 } from "../app/issue_use_cases.js";
+import { getRequirements } from "../app/requirements_use_cases.js";
 import {
   claimTicket as claimTicketCase, createTicket as createTicketCase,
   decideTicket as decideTicketCase, statusTicket as statusTicketCase,
@@ -37,6 +38,9 @@ async function dispatch(request: IncomingMessage, response: ServerResponse, root
   const route = routeParts(url.pathname);
   if (request.method === "GET" && route.length === 0) return list(response, url, root);
   if (request.method === "GET" && route.length === 1) return get(response, route[0], root);
+  if (request.method === "GET" && route.length === 2 && route[1] === "requirements") {
+    return respond(response, 200, getRequirements({ issueId: route[0] }, root));
+  }
   const body = await readBody(request);
   if (request.method !== "POST") return respond(response, 404, { error: "Not found" });
   if (route.length === 0) return create(response, body, root);

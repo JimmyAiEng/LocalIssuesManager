@@ -235,6 +235,17 @@ test("list combina filtros por tipo", () => {
   assert.equal(filtered[0].type, "Fix");
 });
 
+test("summary do quadro traz status_changed_at, tags e resumo mínimo de Tickets", () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "board", complexity: "ALTA" }, dir);
+  nextIssue({ agent: "pi", project: "app" }, dir); // OPEN -> CLAIMED
+  const ticketId = addTicket(dir, issue.id); // CLAIMED -> ON-GOING
+  const [card] = listIssues({ project: "app" }, dir);
+  assert.equal(card.status_changed_at, getIssue(issue.id, dir).status_changed_at);
+  assert.deepEqual(card.tags, { complexity: "ALTA" });
+  assert.deepEqual(card.tickets, [{ id: ticketId, type: "Implement", status: "OPEN", owner: null }]);
+});
+
 test("setArtifact grava .md da Issue e do Ticket; createIssue/createTicket com artifact idem", () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "art", artifact: "# na criação" }, dir);
@@ -298,6 +309,8 @@ test("slice C: get/next/getTicket injetam o Artefato nas views; sem artefato →
   const got = getTicket({ issueId: issue.id, ticketId }, dir);
   assert.equal(got.artifact, "# ticket art");
   assert.equal(got.issue_artifact, "# issue art");
+  const view = getIssue(issue.id, dir); // web detail: cada Ticket carrega o próprio Artefato
+  assert.equal(view.tickets.find((ticket) => ticket.id === ticketId)?.artifact, "# ticket art");
 });
 
 test("slice C: views trazem artifact null quando não há Artefato .md", () => {

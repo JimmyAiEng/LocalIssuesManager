@@ -6,10 +6,11 @@ import { type IncomingAttachment, persistableAttachments } from "./attachments.j
 import { DomainError } from "../domain/domain_error.js";
 import { Issue, type IssueData, type Phase } from "../domain/issue_entity.js";
 import { Queue, type TicketTarget } from "../domain/queue_repository.js";
-import type { Ticket } from "../domain/ticket_entity.js";
+import type { Ticket, TicketData } from "../domain/ticket_entity.js";
 import { type TicketView, ticketView } from "./ticket_use_cases.js";
 import {
-  type AgentId, parseActor, parseAgentId, parseClosedReason, parseIssueStatus, parseIssueType, type TagUpdates,
+  type Actor, type AgentId, parseActor, parseAgentId, parseClosedReason, parseIssueStatus, parseIssueType,
+  type Tags, type TagUpdates, type TicketStatus, type TicketType,
 } from "../domain/value_objects.js";
 
 export type CreateInput = {
@@ -45,16 +46,21 @@ export function claimIssue(input: { id: string; now?: Date }, root?: string): Is
   return issue;
 }
 
-export type IssueView = IssueData & { artifact: string | null };
+export type IssueView = Omit<IssueData, "tickets"> & {
+  artifact: string | null;
+  tickets: (TicketData & { artifact: string | null })[];
+};
 
 export function getIssue(id: string, root?: string): IssueView {
   const queue = new Queue(root);
   return issueView(queue, queue.loadRequired(id));
 }
 
-// Injeta o Artefato .md da Issue na view (custo: 1 leitura, desprezível).
+// Injeta o Artefato .md da Issue e de cada Ticket na view (leituras locais, custo desprezível).
 function issueView(queue: Queue, issue: Issue): IssueView {
-  return { ...issue.toJSON(), artifact: queue.readArtifact(issue.project, issue.id) };
+  const { tickets, ...data } = issue.toJSON();
+  return { ...data, artifact: queue.readArtifact(issue.project, issue.id),
+    tickets: tickets.map((ticket) => ({ ...ticket, artifact: queue.readArtifact(issue.project, ticket.id) })) };
 }
 
 // Decora issue (sempre com artifact) e ticket (com artifact + issue_artifact) para o retorno de next.
@@ -65,7 +71,8 @@ function nextView(queue: Queue, issue: Issue, ticket: Ticket | null): NextResult
 export type IssueSummary = {
   id: string; title: string; project: string; type: string; status: string;
   owner: string | null; closed_reason: string | null; created_at: string;
-  phases: Phase[];
+  status_changed_at: string; phases: Phase[]; tags: Tags;
+  tickets: { id: string; type: TicketType; status: TicketStatus; owner: Actor | null }[];
 };
 
 export function listIssues(filter: { status?: string; project?: string; title?: string; type?: string }, root?: string): IssueSummary[] {
@@ -77,7 +84,9 @@ export function listIssues(filter: { status?: string; project?: string; title?: 
 function summary(issue: Issue): IssueSummary {
   return { id: issue.id, title: issue.title, project: issue.project, type: issue.type,
     status: issue.status, owner: issue.owner, closed_reason: issue.closed_reason,
-    created_at: issue.created_at, phases: structuredClone(issue.phases) };
+    created_at: issue.created_at, status_changed_at: issue.status_changed_at,
+    phases: structuredClone(issue.phases), tags: structuredClone(issue.tags),
+    tickets: issue.tickets.map((t) => ({ id: t.id, type: t.type, status: t.status, owner: t.owner })) };
 }
 
 export type NextResult = { issue: IssueView; ticket: TicketView | null };

@@ -4,7 +4,8 @@ import {
 } from "./view_model.js";
 import { clearActionState, emptyDraft, emptyTicketDraft, state } from "./state.js";
 import { api } from "./http.js";
-import { renderDetail, renderError, renderNewIssue } from "./view.js";
+import { renderError, renderNewIssue } from "./view.js";
+import { renderDetail } from "./detail_view.js";
 
 export function readForm(form, target) {
   for (const [key, value] of new FormData(form).entries()) target[key] = String(value);
@@ -107,11 +108,19 @@ export async function submitAction(form) {
   if (state.panel === "decide-close" || state.panel === "close") return submitClose();
 }
 
+// Submit válido do form de fechamento não muta: entra em confirmação (UX.md §6).
 async function submitClose() {
   const values = { comment: state.draft.comment, closed_reason: state.draft.closed_reason };
   const result = state.panel === "close" ? validateClose(values) : validateDecide({ ...values, status: "CLOSED" });
   state.errors = result.errors;
   if (!result.ok) return renderDetail();
+  state.confirmClose = true;
+  renderDetail();
+}
+
+// Só "Fechar definitivamente" chama a API.
+export async function performClose() {
+  state.confirmClose = false;
   state.busy = true;
   renderDetail();
   const path = state.panel === "close"
@@ -215,6 +224,11 @@ export async function reloadIssues() {
   state.refreshedAt = new Date();
 }
 
+// Requisitos Gherkin da Issue: 404 (não persistidos) ou erro de rede → null, sem ruído na tela.
+export async function fetchRequirements(id) {
+  try { return await api(`/api/issues/${id}/requirements`); } catch { return null; }
+}
+
 export async function refreshIssue() {
   const draft = { ...state.draft };
   const panel = state.panel;
@@ -222,7 +236,10 @@ export async function refreshIssue() {
   const commentPanel = state.commentPanel;
   const commentDraft = { ...state.commentDraft };
   try {
-    state.issue = await api(`/api/issues/${state.issue.id}`);
+    const id = state.issue.id;
+    const [issue, requirements] = await Promise.all([api(`/api/issues/${id}`), fetchRequirements(id)]);
+    state.issue = issue;
+    state.requirements = requirements;
     state.draft = draft;
     state.commentDraft = commentDraft;
     state.commentPanel = commentStillValid(commentPanel) ? commentPanel : null;

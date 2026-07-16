@@ -193,6 +193,153 @@ code { overflow-wrap: anywhere; font-family: var(--mono); font-size: .9em; }
 .attachment img, video.attachment { max-width: 240px; max-height: 200px; width: auto; height: auto; display: block; }
 #comment-form input[type="file"] { font: inherit; color: var(--dim); }
 
+/* ---------- Inbox de Decisões (âmbar chamativo) ---------- */
+.decisions-badge {
+  font-weight: 700; color: var(--st-awaiting); border-color: var(--st-awaiting);
+  background: color-mix(in srgb, var(--st-awaiting) 18%, transparent);
+}
+.decisions-badge:hover { border-color: var(--st-awaiting); background: color-mix(in srgb, var(--st-awaiting) 28%, transparent); }
+.decisions-inbox {
+  border: 1px solid var(--st-awaiting); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--st-awaiting) 10%, var(--surface));
+  padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3);
+}
+.decisions-inbox h2 { margin: 0 0 var(--sp-1); font-size: 1rem; color: var(--st-awaiting); display: flex; align-items: center; gap: var(--sp-1); }
+.decisions-inbox h2 small { font-family: var(--mono); font-size: .72rem; }
+.decisions-inbox ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
+.decisions-inbox a { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; text-decoration: none; color: var(--ink); padding: .35rem .5rem; border-radius: var(--radius-sm); }
+.decisions-inbox a:hover { background: var(--surface-2); }
+.decisions-inbox .dim { color: var(--dim); font-size: .82rem; }
+
+/* ---------- Mini-stepper de fases no card (P·D·I·Q·D) ---------- */
+.stepper { display: flex; gap: .3rem; margin-top: .2rem; }
+.step {
+  width: 1.35rem; height: 1.35rem; display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: .68rem; font-weight: 700; border-radius: 50%;
+  border: 1px solid var(--border); color: var(--faint); background: var(--surface);
+}
+.step--done { color: var(--st-closed); border-color: color-mix(in srgb, var(--st-closed) 50%, transparent); background: color-mix(in srgb, var(--st-closed) 16%, transparent); }
+.step--active { color: var(--st-ongoing); border-color: var(--st-ongoing); background: color-mix(in srgb, var(--st-ongoing) 20%, transparent); }
+
+/* ---------- Badges/chips/aging do card ---------- */
+.card-foot { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.card-foot time { margin-left: auto; }
+.card-tags { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .15rem; }
+.card-flag {
+  font-family: var(--mono); font-size: .7rem; font-weight: 700; color: var(--st-awaiting);
+  border: 1px solid var(--st-awaiting); border-radius: var(--pill); padding: .06rem .45rem;
+  background: color-mix(in srgb, var(--st-awaiting) 16%, transparent);
+}
+.tag--need-HITL, .tag--need-AFK { font-weight: 800; --tg: var(--accent); }
+.tag--unclassified {
+  --tg: var(--st-awaiting); font-style: normal;
+  color: var(--st-awaiting); border-color: color-mix(in srgb, var(--st-awaiting) 40%, transparent);
+  background: color-mix(in srgb, var(--st-awaiting) 12%, transparent);
+}
+.card--stale { border-left-color: var(--st-awaiting); box-shadow: inset 3px 0 0 0 var(--st-awaiting); }
+.card--stale strong::after { content: " ⏳"; }
+
+/* ---------- Markdown renderizado (renderMarkdown) ---------- */
+.md-code { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--sp-2); overflow-x: auto; }
+.md-code code { font-size: .85em; }
+.md-list { margin: var(--sp-1) 0; padding-left: 1.4rem; display: grid; gap: .2rem; }
+.md-list .md-task { list-style: none; margin-left: -1.4rem; display: flex; gap: .5rem; align-items: baseline; }
+
+/* ---------- Markdown longo (Problema/Artefatos/Artefato/Requisitos) ---------- */
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md h1, .md h2, .md h3, .md h4 { font-size: 1rem; margin: var(--sp-2) 0 var(--sp-1); }
+.md p { margin: 0 0 var(--sp-1); }
+.md a { overflow-wrap: anywhere; }
+
+/* details.box (Artefato/Requisitos): summary faz papel do h2 */
+details.box > summary {
+  cursor: pointer; font-size: .95rem; font-weight: 700; color: var(--ink);
+  margin: 0; list-style-position: inside;
+}
+details.box[open] > summary { margin-bottom: var(--sp-2); }
+/* Gherkin estruturado: Feature > user story > Scenarios > steps com keyword colorida */
+.feature {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: var(--sp-2); margin: 0 0 var(--sp-2);
+}
+.feature:last-child { margin-bottom: 0; }
+.feature > h3 { margin: 0 0 var(--sp-1); font-size: .95rem; }
+.feature .story { margin: 0 0 var(--sp-2); }
+.feature .story p { margin: 0; font-style: italic; color: var(--dim); font-size: .85rem; }
+.scenario {
+  border: 1px solid var(--border); border-left: 3px solid var(--st-awaiting);
+  border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); margin: 0 0 var(--sp-1);
+}
+.scenario:last-child { margin-bottom: 0; }
+.scenario > h4 { margin: 0 0 var(--sp-1); font-size: .88rem; }
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps li { display: flex; gap: var(--sp-1); align-items: baseline; padding: .1rem 0; font-size: .85rem; }
+.step-text { color: var(--ink); }
+.kw {
+  flex: none; min-width: 3.4rem; text-align: center; padding: .02rem .4rem;
+  border-radius: var(--radius-sm); font-family: var(--mono); font-size: .72rem; font-weight: 700;
+  border: 1px solid var(--border); color: var(--dim);
+}
+.kw-feature, .kw-given { color: var(--st-open); }
+.kw-scenario, .kw-when { color: var(--st-awaiting); }
+.kw-then { color: var(--st-closed); }
+.kw-and { color: var(--faint); }
+
+/* ---------- Copiar ID ---------- */
+.copy-id {
+  padding: .05rem .45rem; font-size: .72rem; font-family: var(--mono);
+  color: var(--dim); background: transparent; border-color: var(--border);
+}
+
+/* ---------- Stepper de fases no detalhe (maior que o do card) ---------- */
+.detail-stepper { list-style: none; display: flex; flex-wrap: wrap; gap: var(--sp-1); margin: 0; padding: 0; }
+.dstep {
+  display: flex; align-items: center; gap: .45rem; padding: .3rem .7rem .3rem .4rem;
+  border: 1px solid var(--border); border-radius: var(--pill); color: var(--faint); background: var(--surface);
+}
+.dstep-dot {
+  width: 1.5rem; height: 1.5rem; display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: .74rem; font-weight: 700; border-radius: 50%;
+  border: 1px solid currentColor;
+}
+.dstep-label { font-size: .82rem; }
+.dstep--done { color: var(--st-closed); border-color: color-mix(in srgb, var(--st-closed) 45%, transparent); background: color-mix(in srgb, var(--st-closed) 12%, transparent); }
+.dstep--active { color: var(--st-ongoing); border-color: var(--st-ongoing); background: color-mix(in srgb, var(--st-ongoing) 16%, transparent); }
+.dstep--gate { color: var(--st-awaiting); border-color: var(--st-awaiting); background: color-mix(in srgb, var(--st-awaiting) 16%, transparent); }
+
+/* ---------- Confirmação de fechamento irreversível ---------- */
+.confirm-close {
+  border: 1px solid var(--danger); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface)); padding: var(--sp-2) var(--sp-3);
+}
+.confirm-close p { margin: 0 0 var(--sp-2); }
+button.danger {
+  font-weight: 700; color: var(--danger-ink); border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+button.danger:hover { border-color: var(--danger-ink); background: color-mix(in srgb, var(--danger) 28%, transparent); }
+
+/* ---------- Aviso não-bloqueante do form / gate de qualificação ---------- */
+.warn { color: var(--st-awaiting); font-size: .88rem; margin: 0; }
+.ticket-gate--blocked { display: grid; gap: var(--sp-1); }
+
+/* ---------- Dependências do Ticket ---------- */
+.ticket-deps { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.ticket-deps .deps-label { color: var(--faint); font-size: .82rem; }
+.deps { list-style: none; display: flex; flex-wrap: wrap; gap: .35rem; margin: 0; padding: 0; }
+.deps li {
+  font-family: var(--mono); font-size: .72rem; color: var(--dim);
+  border: 1px solid var(--border); border-radius: var(--pill); padding: .05rem .5rem;
+}
+.deps li.dep--unmet {
+  color: var(--st-awaiting); border-color: color-mix(in srgb, var(--st-awaiting) 45%, transparent);
+  background: color-mix(in srgb, var(--st-awaiting) 12%, transparent);
+}
+
+/* ---------- Thread colapsada ---------- */
+.thread-more button { color: var(--accent); font-size: .85rem; background: transparent; }
+
 @media (max-width: 1000px) {
   .board { grid-template-columns: repeat(2, 1fr); }
   .detail { max-width: 100%; }

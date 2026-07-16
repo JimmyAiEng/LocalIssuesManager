@@ -1,8 +1,9 @@
-import { clearActionState, emptyCommentDraft, emptyDraft, emptyTicketDraft, saveFilters, state } from "./state.js";
+import { clearActionState, emptyCommentDraft, emptyDraft, emptyFilters, emptyTicketDraft, saveFilters, state } from "./state.js";
 import { api } from "./http.js";
-import { renderBoard, renderDetail, renderError, renderLoading, renderNewIssue, root } from "./view.js";
+import { renderBoard, renderError, renderLoading, renderNewIssue, root } from "./view.js";
+import { renderDetail } from "./detail_view.js";
 import {
-  claimIssue, claimTicket, readForm, refreshIssue,
+  claimIssue, claimTicket, fetchRequirements, performClose, readForm, refreshIssue,
   submitAction, submitComment, submitCreate, submitCreateTicket, submitTags, submitTicketAction,
 } from "./mutations.js";
 
@@ -27,10 +28,13 @@ async function loadDetail(id) {
     clearActionState();
     state.draft = emptyDraft();
     state.ticketDraft = emptyTicketDraft();
+    state.threadExpanded = false;
   }
   root().innerHTML = `<p class="loading" aria-live="polite">Carregando Issue…</p>`;
   try {
-    state.issue = await api(`/api/issues/${id}`);
+    const [issue, requirements] = await Promise.all([api(`/api/issues/${id}`), fetchRequirements(id)]);
+    state.issue = issue;
+    state.requirements = requirements;
     renderDetail();
   } catch (error) { renderError(error); }
 }
@@ -41,10 +45,12 @@ export function handleClick(event) {
   if (target.id === "refresh") return refresh();
   if (target.id === "refresh-issue") return refreshIssue();
   if (target.id === "toggle-ticket-form") { state.showTicketForm = !state.showTicketForm; state.errors = {}; return renderDetail(); }
-  if (target.id === "clear") { state.filters = { title: "", project: "", type: "" }; saveFilters(); return renderBoard(); }
+  if (target.id === "clear") { state.filters = emptyFilters(); saveFilters(); return renderBoard(); }
+  if (target.id === "toggle-decisions") { state.decisionsOpen = !state.decisionsOpen; return renderBoard(); }
   if (target.dataset.openPanel) {
     state.panel = target.dataset.openPanel;
     state.ticketPanel = null;
+    state.confirmClose = false;
     state.errors = {};
     state.draft = { ...state.draft, comment: "", closed_reason: "" };
     return renderDetail();
@@ -56,10 +62,19 @@ export function handleClick(event) {
     state.draft = { ...state.draft, comment: "", closed_reason: "" };
     return renderDetail();
   }
+  if (target.dataset.copyId) {
+    navigator.clipboard?.writeText(target.dataset.copyId);
+    target.textContent = "ID copiado";
+    return;
+  }
+  if (target.dataset.expandThread) { state.threadExpanded = true; return renderDetail(); }
+  if (target.dataset.confirmClose) return performClose();
+  if (target.dataset.cancelClose) { state.confirmClose = false; return renderDetail(); }
   if (target.id === "claim-issue") return claimIssue();
   if (target.dataset.claimTicket) return claimTicket(target.dataset.claimTicket);
-  if (target.dataset.cancelPanel) { state.panel = null; state.errors = {}; return renderDetail(); }
-  if (target.dataset.cancelTicketPanel) { state.ticketPanel = null; state.errors = {}; return renderDetail(); }
+  // Atributos data-* sem valor viram "" (falsy) — presença via `in`, nunca truthiness.
+  if ("cancelPanel" in target.dataset) { state.panel = null; state.confirmClose = false; state.errors = {}; return renderDetail(); }
+  if ("cancelTicketPanel" in target.dataset) { state.ticketPanel = null; state.errors = {}; return renderDetail(); }
   if (target.dataset.openComment) {
     state.commentPanel = { scope: target.dataset.openComment, ticketId: target.dataset.ticketId };
     state.panel = null;
@@ -68,9 +83,9 @@ export function handleClick(event) {
     state.commentDraft = emptyCommentDraft();
     return renderDetail();
   }
-  if (target.dataset.cancelComment) { state.commentPanel = null; state.errors = {}; return renderDetail(); }
-  if (target.dataset.issueId || target.dataset.back || target.getAttribute("href") === "/issues/new") {
-    if (target.dataset.back || target.getAttribute("href") === "/") {
+  if ("cancelComment" in target.dataset) { state.commentPanel = null; state.errors = {}; return renderDetail(); }
+  if (target.dataset.issueId || "back" in target.dataset || target.getAttribute("href") === "/issues/new") {
+    if ("back" in target.dataset || target.getAttribute("href") === "/") {
       state.draft = emptyDraft();
       clearActionState();
     }
@@ -90,6 +105,8 @@ export function handleInput(event) {
     : form?.id === "comment-form" ? state.commentDraft
       : state.draft;
   target[event.target.name] = event.target.value;
+  // Trocar o tipo re-renderiza o form para atualizar o aviso de bloqueio de fase.
+  if (form?.id === "ticket-create-form" && event.target.name === "type") renderDetail();
 }
 
 export async function handleSubmit(event) {
@@ -109,4 +126,33 @@ function navigate(event, path) {
   if (path.startsWith("/issues/")) sessionStorage.setItem("issues.scroll", String(window.scrollY));
   history.pushState({}, "", path);
   renderRoute();
+}
+
+// Auto-atualização: só com a aba visível e sem foco em campo de edição (não rouba foco/digitação).
+export function pollTick() {
+  if (document.visibilityState !== "visible" || isEditing(document.activeElement)) return;
+  const path = location.pathname;
+  if (path === "/") return pollBoard();
+  if (path.startsWith("/issues/") && path !== "/issues/new" && state.issue) refreshIssue();
+}
+
+async function pollBoard() {
+  try {
+    const fresh = await api("/api/issues");
+    if (JSON.stringify(fresh) === JSON.stringify(state.issues)) return; // só re-renderiza se o JSON mudou
+    state.issues = fresh;
+    state.refreshedAt = new Date();
+    renderBoard();
+  } catch { /* polling silencioso: um erro transitório não deve gritar na tela */ }
+}
+
+// Atalhos só no quadro, ignorando eventos vindos de campos de edição.
+export function handleKeydown(event) {
+  if (location.pathname !== "/" || isEditing(event.target)) return;
+  if (event.key === "c") { history.pushState({}, "", "/issues/new"); renderRoute(); }
+  if (event.key === "/") { event.preventDefault(); document.querySelector("#title")?.focus(); }
+}
+
+function isEditing(element) {
+  return Boolean(element) && ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName);
 }

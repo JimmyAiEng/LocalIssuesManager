@@ -5,18 +5,21 @@ import {
   canClaimTicket,
   canCreateTicket,
   classifyMutationError,
+  escapeHtml,
   filterIssues,
   groupIssues,
   hasPendingDecision,
   humanActions,
   isStale,
   isUnclassified,
+  options,
   parseChecklist,
   pendingDecisions,
   phaseBlockerOf,
   phaseSteps,
   splitThread,
   statusAge,
+  statusAgeFrom,
   suggestNextTicketType,
   tagRoute,
   ticketCreationGate,
@@ -103,10 +106,19 @@ test("phaseSteps deriva concluída/ativa/pendente por Ticket, sem Confirmation",
   assert.deepEqual(steps.map((step) => step.state), ["done", "done", "active", "pending", "pending"]);
 });
 
-test("isUnclassified marca Issue não-CLOSED com qualquer tag ausente", () => {
-  assert.equal(isUnclassified({ status: "OPEN", tags: { complexity: "BAIXA", human_need: "AFK" } }), true);
+// Espelha o guard de Issue.addTicket: risk + complexity são a entrada da heurística de autonomia.
+// human_need é override opcional (ausente = AFK), então não classifica nem desclassifica a Issue.
+test("isUnclassified marca Issue não-CLOSED sem risk ou sem complexity", () => {
+  assert.equal(isUnclassified({ status: "OPEN", tags: { complexity: "BAIXA", human_need: "AFK" } }), true); // só risk ausente
+  assert.equal(isUnclassified({ status: "OPEN", tags: { human_need: "AFK", risk: "BAIXO" } }), true); // só complexity ausente
+  assert.equal(isUnclassified({ status: "OPEN", tags: { complexity: "BAIXA", risk: "BAIXO" } }), false); // human_need ausente não desclassifica
   assert.equal(isUnclassified({ status: "OPEN", tags: { complexity: "BAIXA", human_need: "AFK", risk: "BAIXO" } }), false);
   assert.equal(isUnclassified({ status: "CLOSED", tags: {} }), false);
+});
+
+test("options extrai valores únicos e ordenados de uma propriedade", () => {
+  assert.deepEqual(options([{ project: "b" }, { project: "a" }, { project: "b" }], "project"), ["a", "b"]);
+  assert.deepEqual(options([], "project"), []);
 });
 
 test("isStale sinaliza CLAIMED/ON-GOING parada há mais de 24h", () => {
@@ -120,6 +132,23 @@ test("isStale sinaliza CLAIMED/ON-GOING parada há mais de 24h", () => {
 test("view model mostra idade humana do Status", () => {
   const age = statusAge({ ...issues[0], status_changed_at: "2026-01-01T00:00:00Z" }, new Date("2026-01-03T01:00:00Z"));
   assert.equal(age, "há 2 dias");
+});
+
+test("statusAgeFrom cobre menos de 1h, horas (singular/plural) e dias (singular/plural)", () => {
+  const base = "2026-01-01T00:00:00Z";
+  assert.equal(statusAgeFrom(base, new Date("2026-01-01T00:30:00Z")), "há menos de 1 hora");
+  assert.equal(statusAgeFrom(base, new Date("2026-01-01T01:00:00Z")), "há 1 hora");
+  assert.equal(statusAgeFrom(base, new Date("2026-01-01T05:00:00Z")), "há 5 horas");
+  assert.equal(statusAgeFrom(base, new Date("2026-01-02T00:00:00Z")), "há 1 dia");
+  assert.equal(statusAgeFrom(base, new Date("2026-01-03T01:00:00Z")), "há 2 dias");
+});
+
+test("statusAge cai para phases.at(-1) e depois para created_at quando falta status_changed_at", () => {
+  const now = new Date("2026-01-02T00:00:00Z");
+  const viaPhases = statusAge({ created_at: "2025-01-01T00:00:00Z", phases: [{ status: "OPEN", timestamp: "2026-01-01T00:00:00Z" }] }, now);
+  assert.equal(viaPhases, "há 1 dia");
+  const viaCreatedAt = statusAge({ created_at: "2026-01-01T00:00:00Z" }, now);
+  assert.equal(viaCreatedAt, "há 1 dia");
 });
 
 test("somente ações humanas válidas por Status, sem Claim nem reset de ON-GOING", () => {
@@ -251,6 +280,8 @@ test("ticketCreationGate: sem Ticket bloqueia; com Ticket só avisa; classificad
   assert.equal(ticketCreationGate({ ...unclassified, tickets: [] }), "blocked");
   assert.equal(ticketCreationGate({ ...unclassified, tickets: [{ type: "Planning", status: "OPEN" }] }), "warn");
   assert.equal(ticketCreationGate({ status: "CLAIMED", tags: { complexity: "BAIXA", human_need: "AFK", risk: "BAIXO" }, tickets: [] }), "ok");
+  // Espelho do domínio: risk + complexity bastam para o servidor, logo bastam para o cliente.
+  assert.equal(ticketCreationGate({ status: "CLAIMED", tags: { complexity: "BAIXA", risk: "BAIXO" }, tickets: [] }), "ok");
 });
 
 test("splitThread separa as anteriores das últimas 5", () => {
@@ -286,6 +317,45 @@ test("requirementsMarkup renderiza Features estruturadas escapando o conteúdo",
   assert.match(html, /<span class="kw kw-given">Given<\/span><span class="step-text">credenciais válidas<\/span>/);
   assert.match(html, /&lt;b&gt;meu nome&lt;\/b&gt;/);
   assert.doesNotMatch(html, /<b>meu nome<\/b>/);
+});
+
+test("parseFeature tolera texto ausente e steps fora do vocabulário/sem descrição", () => {
+  assert.deepEqual(parseFeature(undefined), { name: "", story: [], scenarios: [] });
+  const text = [
+    "Feature: X", "Como um usuário", "Eu quero poder entrar", "Para que eu acesse",
+    "Scenario: s", "Given", "Faço qualquer coisa",
+  ].join("\n");
+  const feature = parseFeature(text);
+  assert.deepEqual(feature.scenarios[0].steps[0], { keyword: "Given", text: "" }); // sem descrição após a keyword
+  assert.deepEqual(feature.scenarios[0].steps[1], { keyword: "", text: "Faço qualquer coisa" }); // fora do vocabulário
+});
+
+test("parseFeature ignora step antes de qualquer Scenario (sem scenario atual para empilhar)", () => {
+  const text = ["Feature: X", "Como um usuário", "Eu quero poder entrar", "Para que eu acesse", "Given solto"].join("\n");
+  assert.deepEqual(parseFeature(text).scenarios, []);
+});
+
+test("funções tolerantes a undefined: campos ausentes (não só vazios) usam o fallback ??", () => {
+  assert.deepEqual(pendingDecisions(undefined), []); // issues ?? []
+  const noStatusChangedAt = { id: "i1", title: "t", project: "p", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" };
+  assert.deepEqual(pendingDecisions([noStatusChangedAt]), [{ issueId: "i1", issueTitle: "t", project: "p",
+    since: "2026-01-01T00:00:00Z", kind: "issue" }]); // status_changed_at ?? created_at
+
+  assert.deepEqual(phaseSteps({}).map((step) => step.state), ["pending", "pending", "pending", "pending", "pending"]); // tickets ?? []
+  assert.equal(phaseBlockerOf([{ type: "Design", status: "OPEN" }], "Confirmation"), null); // rank<0 (type inválido)
+  assert.equal(phaseBlockerOf(undefined, "Design"), null); // tickets ?? []
+
+  assert.equal(ticketCreationGate({ status: "CLAIMED", tags: {} }), "blocked"); // issue.tickets ?? []
+  assert.deepEqual(splitThread(undefined), { older: [], recent: [] }); // entries ?? []
+  assert.equal(isUnclassified({ status: "OPEN" }), true); // issue.tags ?? {}
+  assert.equal(isStale({ status: "CLAIMED", created_at: "2026-01-01T00:00:00Z" }, new Date("2026-01-03T00:00:00Z")), true); // status_changed_at ?? created_at
+  assert.deepEqual(parseChecklist(undefined), []); // text ?? ""
+  assert.equal(escapeHtml(undefined), ""); // value ?? ""
+
+  assert.equal(validateCreate({}).errors.title, "Campo obrigatório"); // values[field] ?? "" (chave ausente)
+  assert.equal(validateCreateTicket({}).errors.objective, "Campo obrigatório");
+  assert.equal(validateReset({}).errors.comment, "Campo obrigatório"); // values.comment ?? ""
+  assert.equal(validateClose({}).errors.closed_reason, "Motivo obrigatório"); // values.closed_reason ?? ""
 });
 
 test("409 é conflito; demais falhas preservam mensagem de erro", () => {

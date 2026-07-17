@@ -8,7 +8,9 @@ import { getRequirements, setRequirements } from "../../src/app/requirements_use
 import { claimTicket, createTicket, statusTicket } from "../../src/app/ticket_use_cases.js";
 import { DomainError, NotFoundError } from "../../src/domain/domain_error.js";
 
-const body = { project: "app", type: "Feat" as const, problem: "p", actor: "human" as const };
+// Issue classificada: a criação de Ticket exige risk+complexity para derivar a autonomia.
+const body = { project: "app", type: "Feat" as const, problem: "p", actor: "human" as const,
+  complexity: "BAIXA", risk: "BAIXO" };
 const root = () => mkdtempSync(join(tmpdir(), "issues-req-"));
 
 const VALID = JSON.stringify({
@@ -58,19 +60,19 @@ test("getRequirements erro claro quando inexistente", () => {
     (e: unknown) => e instanceof NotFoundError && /não encontrado/.test(e.message));
 });
 
-test("gate: Planning não vai a AWAITING sem requisitos válidos", () => {
+test("gate: Planning não vai a AWAITING sem requisitos válidos", async () => {
   const dir = root();
   const { issueId, ticketId } = planningClaimed(dir);
-  assert.throws(
-    () => statusTicket({ issueId, ticketId, actor: "pi", status: "AWAITING", comment: "fim" }, dir),
+  await assert.rejects(
+    statusTicket({ issueId, ticketId, actor: "pi", status: "AWAITING", comment: "fim" }, dir),
     (e: unknown) => e instanceof NotFoundError && /sem requisitos/.test(e.message),
   );
 });
 
-test("gate: Planning vai a AWAITING com requisitos válidos persistidos", () => {
+test("gate: Planning vai a AWAITING com requisitos válidos persistidos", async () => {
   const dir = root();
   const { issueId, ticketId } = planningClaimed(dir);
   setRequirements({ issueId, file: reqFile(dir, VALID) }, dir);
-  const issue = statusTicket({ issueId, ticketId, actor: "pi", status: "AWAITING", comment: "fim" }, dir);
+  const issue = await statusTicket({ issueId, ticketId, actor: "pi", status: "AWAITING", comment: "fim" }, dir);
   assert.equal(issue.tickets.find((t) => t.id === ticketId)!.status, "AWAITING");
 });

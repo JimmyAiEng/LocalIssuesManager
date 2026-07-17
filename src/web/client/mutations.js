@@ -8,7 +8,10 @@ import { renderError, renderNewIssue } from "./view.js";
 import { renderDetail } from "./detail_view.js";
 
 export function readForm(form, target) {
-  for (const [key, value] of new FormData(form).entries()) target[key] = String(value);
+  // Só campos de texto: o FormData também traz o <input type=file> dos anexos, que readAttachments
+  // lê à parte. Copiá-lo gravaria "[object File]" no draft — e submitCreateTicket serializa o draft
+  // inteiro no POST, o que a API rejeita com "Invalid attachments". Mesma exclusão do handler de input.
+  for (const [key, value] of new FormData(form).entries()) if (typeof value === "string") target[key] = value;
 }
 
 export async function submitCreate(form) {
@@ -238,6 +241,10 @@ export async function refreshIssue() {
   try {
     const id = state.issue.id;
     const [issue, requirements] = await Promise.all([api(`/api/issues/${id}`), fetchRequirements(id)]);
+    // Só re-renderiza se o JSON mudou (mesmo contrato de pollBoard): re-render reescreve o
+    // innerHTML e levaria junto seleção de texto e rolagem de quem só está lendo.
+    if (JSON.stringify(issue) === JSON.stringify(state.issue)
+      && JSON.stringify(requirements) === JSON.stringify(state.requirements)) return;
     state.issue = issue;
     state.requirements = requirements;
     state.draft = draft;

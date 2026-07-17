@@ -107,6 +107,13 @@ test("rejeita conteúdo antes do primeiro Scenario", () => {
   throwsDomain(() => validateGherkinRequirements({ features: [before] }), /antes do primeiro Scenario/);
 });
 
+test("rejeita quando o último Scenario do texto não tem nenhum step (checagem pós-loop)", () => {
+  const lastWithoutStep = [
+    "Feature: X", "  Como um a", "  Eu quero poder b", "  Para que eu c", "  Scenario: sozinho, sem steps",
+  ].join("\n");
+  throwsDomain(() => validateGherkinRequirements({ features: [lastWithoutStep] }), /ao menos um step/);
+});
+
 test("parseAndValidateRequirements rejeita JSON malformado", () => {
   throwsDomain(() => parseAndValidateRequirements("{ features: [ }"), /JSON válido/);
 });

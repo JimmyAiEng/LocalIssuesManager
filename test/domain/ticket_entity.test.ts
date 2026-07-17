@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Attachment } from "../../src/domain/attachment_entity.js";
 import { DomainError } from "../../src/domain/domain_error.js";
 import { Ticket } from "../../src/domain/ticket_entity.js";
 
@@ -160,4 +161,20 @@ test("Ticket legado sem last hidrata como false", () => {
   const { last, ...legacy } = Ticket.create(input).toJSON();
   const ticket = Ticket.fromJSON(legacy as never);
   assert.equal(ticket.last, false);
+});
+
+test("Ticket legado sem tags nem depends_on hidrata com defaults ({} e [])", () => {
+  const { tags, depends_on, ...legacy } = Ticket.create(input).toJSON();
+  const ticket = Ticket.fromJSON(legacy as never);
+  assert.deepEqual(ticket.tags, {});
+  assert.deepEqual(ticket.depends_on, []);
+});
+
+test("comment aceita só anexo sem texto no Ticket (attachments.length !== 0 evita o erro)", () => {
+  const ticket = claimed();
+  const attachment = Attachment.create({ filename: "v.mp4", mediaType: "video/mp4", size: 10 }).toJSON();
+  ticket.comment("pi", "", [attachment]);
+  const entry = ticket.thread.at(-1)!;
+  assert.equal(entry.comment, "");
+  assert.deepEqual(entry.attachments, [attachment]);
 });

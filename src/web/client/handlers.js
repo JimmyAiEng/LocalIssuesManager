@@ -29,6 +29,7 @@ async function loadDetail(id) {
     state.draft = emptyDraft();
     state.ticketDraft = emptyTicketDraft();
     state.threadExpanded = false;
+    state.expanded.clear(); // as chaves são da Issue anterior
   }
   root().innerHTML = `<p class="loading" aria-live="polite">Carregando Issue…</p>`;
   try {
@@ -91,6 +92,15 @@ export function handleClick(event) {
     }
     navigate(event, target.getAttribute("href"));
   }
+}
+
+// Expansão de <details>: grava a chave para o PRÓXIMO render — o DOM atual já está correto,
+// re-renderizar aqui só destruiria seleção e rolagem.
+export function handleToggle(event) {
+  const key = event.target.dataset?.detailsId;
+  if (!key) return;
+  if (event.target.open) state.expanded.add(key);
+  else state.expanded.delete(key);
 }
 
 export function handleInput(event) {

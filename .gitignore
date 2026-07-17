@@ -25,4 +25,5 @@ pi-loop/*.log.detail
 pi-loop/cron.out
 plan.md
 reports/
+coverage/
 .stryker-tmp/

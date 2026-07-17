@@ -18,7 +18,9 @@
   ],
   "scripts": {
     "test": "node --import tsx --test test/**/*.test.ts",
+    "test:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-include='src/**' --test-coverage-lines=95 --test-coverage-branches=95 --test-coverage-functions=95 test/**/*.test.ts",
     "test:mutation": "stryker run",
+    "check": "npm run typecheck && npm run lint && npm run test:coverage && npm run check:fitness",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint src test",
     "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').cpSync('src/web/client','dist/src/web/client',{recursive:true})\"",
@@ -32,7 +34,11 @@
     "@stryker-mutator/tap-runner": "^9.6.1",
     "@stryker-mutator/typescript-checker": "^9.6.1",
     "@types/node": "^24.0.0",
+    "playwright": "^1.61.1",
     "tsx": "^4.20.0",
     "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@plantuml/mcp-js": "^0.2.0"
   }
 }

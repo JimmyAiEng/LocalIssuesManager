@@ -3,10 +3,8 @@ import test from "node:test";
 import { Attachment } from "../../src/domain/attachment_entity.js";
 import { Issue } from "../../src/domain/issue_entity.js";
 import { Ticket } from "../../src/domain/ticket_entity.js";
-import { ISSUE_TYPES, type IssueType, TICKET_TYPES, type TicketType } from "../../src/domain/value_objects.js";
-import {
-  composePrompt, ISSUE_TYPE_PROMPTS, TICKET_TYPE_PROMPTS,
-} from "../../src/app/prompt_composition.js";
+import { TICKET_TYPES, type IssueType, type TicketType } from "../../src/domain/value_objects.js";
+import { composePrompt } from "../../src/app/prompt_composition.js";
 
 function makeIssue(type: IssueType = "Feat"): Issue {
   return Issue.create({ title: "T", project: "demo", type,
@@ -18,28 +16,34 @@ function makeTicket(type: TicketType = "Implement", extra: Partial<{ references:
     objective: "obj Z", task: "tarefa W", acceptance_criteria: "crit T", ...extra });
 }
 
-function order(text: string, ...headers: string[]): number[] {
-  return headers.map((header) => text.indexOf(header));
-}
-
-test("com ticket: 5 seções na ordem correta", () => {
+test("com ticket: cabeçalho aponta o tipo e as seções vêm na ordem correta", () => {
   const text = composePrompt(makeIssue(), makeTicket());
-  const positions = order(text, "## SDLC", "## Tipo da Issue", "## Issue", "## Tipo do Ticket", "## Ticket");
+  assert.match(text, /Ticket `Implement`/);
+  const positions = ["sdlc-workflow", "## Issue", "## Ticket", "issues next --prompt"]
+    .map((header) => text.indexOf(header));
   assert.ok(positions.every((pos) => pos >= 0), "todas as seções presentes");
   assert.deepEqual(positions, [...positions].sort((a, b) => a - b), "seções em ordem crescente");
 });
 
-test("sem ticket: omite seções 4 e 5", () => {
+test("sem ticket: cabeçalho de decomposição e sem seção Ticket", () => {
   const text = composePrompt(makeIssue());
-  assert.match(text, /## SDLC/);
-  assert.match(text, /## Tipo da Issue/);
+  assert.match(text, /Issue sem Tickets/);
+  assert.match(text, /sdlc-workflow/);
   assert.match(text, /## Issue/);
-  assert.doesNotMatch(text, /## Tipo do Ticket/);
   assert.doesNotMatch(text, /## Ticket/);
 });
 
 test("ticket null é tratado como ausente", () => {
-  assert.equal(composePrompt(makeIssue(), null), composePrompt(makeIssue()));
+  const issue = makeIssue(); // a mesma Issue nos dois lados: ids diferentes tornariam a igualdade impossível
+  assert.equal(composePrompt(issue, null), composePrompt(issue));
+});
+
+test("prompt é mínimo: sem catálogo de comandos nem instruções de fase (ficam nas skills)", () => {
+  const text = composePrompt(makeIssue(), makeTicket());
+  assert.doesNotMatch(text, /## Comandos/);
+  assert.doesNotMatch(text, /## SDLC/);
+  assert.doesNotMatch(text, /## Tipo d/);
+  assert.match(text, /issues next --prompt/); // único comando: o loop
 });
 
 test("anexos ficam localizáveis ao agente: caminho em disco + URL; sem anexo, sem linha", () => {
@@ -56,22 +60,20 @@ test("anexos ficam localizáveis ao agente: caminho em disco + URL; sem anexo, s
   assert.match(text, new RegExp(`/api/attachments/${att.id}`));
 });
 
-test("cada IssueType injeta seu texto", () => {
-  for (const type of ISSUE_TYPES) {
-    assert.ok(composePrompt(makeIssue(type)).includes(ISSUE_TYPE_PROMPTS[type]), `IssueType ${type}`);
-  }
-});
-
-test("cada TicketType injeta seu texto", () => {
+test("cada TicketType aparece no cabeçalho e na seção Ticket", () => {
   for (const type of TICKET_TYPES) {
     const text = composePrompt(makeIssue(), makeTicket(type));
-    assert.ok(text.includes(TICKET_TYPE_PROMPTS[type]), `TicketType ${type}`);
+    assert.match(text, new RegExp(`Ticket \`${type}\``), `TicketType ${type}`);
+    assert.ok(text.includes(`- Tipo: ${type}`), `TicketType ${type} na seção`);
   }
 });
 
-test("infos de Issue e Ticket presentes", () => {
-  const text = composePrompt(makeIssue(), makeTicket());
-  for (const fragment of ["- Problema: problema X", "- Critérios de aceitação: criterio Y",
+test("infos de Issue e Ticket presentes, incluindo ids para os comandos", () => {
+  const issue = makeIssue();
+  const ticket = makeTicket();
+  const text = composePrompt(issue, ticket);
+  for (const fragment of [`- Id: ${issue.id}`, `- Id: ${ticket.id}`,
+    "- Problema: problema X", "- Critérios de aceitação: criterio Y",
     "- Tipo: Feat", "- Objetivo: obj Z", "- Tarefa: tarefa W", "- Status: OPEN", "- Tags: —"]) {
     assert.ok(text.includes(fragment), fragment);
   }
@@ -86,12 +88,11 @@ test("references/artifacts omitidos quando vazios, presentes quando existem", ()
   assert.match(filled, /- Artefatos: art B/);
 });
 
-test("catálogo de comandos injetado (com e sem ticket)", () => {
-  for (const text of [composePrompt(makeIssue()), composePrompt(makeIssue(), makeTicket())]) {
-    assert.match(text, /## Comandos/);
-    assert.match(text, /issues next --prompt/);
-    assert.match(text, /issues ticket status .*--last/);
-  }
+test("Tags preenchidas aparecem formatadas como key=value", () => {
+  const issue = makeIssue();
+  issue.tag({ complexity: "ALTA", risk: "BAIXO" }, "human");
+  const text = composePrompt(issue);
+  assert.match(text, /- Tags: complexity=ALTA, risk=BAIXO/);
 });
 
 test("determinismo: 2 chamadas iguais produzem saída idêntica", () => {

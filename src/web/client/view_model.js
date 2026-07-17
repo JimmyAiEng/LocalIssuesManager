@@ -106,11 +106,13 @@ export function splitThread(entries, visible = 5) {
   return { older: list.slice(0, cut), recent: list.slice(cut) };
 }
 
-// Issue não-CLOSED com qualquer tag ausente (complexity/human_need/risk) está "não classificada".
+// Issue não-CLOSED sem complexity ou sem risk está "não classificada" — espelha o guard de
+// Issue.addTicket, que precisa das duas para derivar a autonomia do Ticket. human_need fica fora:
+// é override opcional do humano (ausente = AFK), não entrada obrigatória da heurística.
 export function isUnclassified(issue) {
   if (issue.status === "CLOSED") return false;
   const tags = issue.tags ?? {};
-  return !tags.complexity || !tags.human_need || !tags.risk;
+  return !tags.complexity || !tags.risk;
 }
 
 // Agente possivelmente travado: Issue CLAIMED/ON-GOING sem mudança de Status há mais de 24h.

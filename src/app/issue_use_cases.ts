@@ -28,7 +28,7 @@ export function createIssue(input: CreateInput, root?: string): Issue {
     acceptance_criteria: input.acceptance_criteria, attachments: created.map(({ entity }) => entity.toJSON()) },
     actor, input.now);
   const tags: TagUpdates = { complexity: input.complexity, human_need: input.human_need, risk: input.risk };
-  if (Object.values(tags).some((value) => value !== undefined)) issue.tag(tags); // reusa applyTags (valida enums)
+  if (Object.values(tags).some((value) => value !== undefined)) issue.tag(tags, actor); // reusa applyTags (valida enums)
   const queue = new Queue(root);
   for (const { entity, bytes } of created) queue.writeAttachment(issue.project, entity, bytes);
   queue.save(issue);
@@ -227,7 +227,7 @@ export function addComment(input: CommentInput, root?: string): Issue {
 }
 
 export type TagInput = {
-  issueId: string; ticketId?: string;
+  issueId: string; ticketId?: string; actor?: string;
   complexity?: string; human_need?: string; risk?: string;
 };
 
@@ -236,9 +236,16 @@ export function updateTags(input: TagInput, root?: string): Issue {
   const issue = queue.loadRequired(input.issueId);
   const updates: TagUpdates = { complexity: input.complexity, human_need: input.human_need, risk: input.risk };
   if (input.ticketId) issue.tagTicket(input.ticketId, updates);
-  else issue.tag(updates);
+  else issue.tag(updates, taggingActor(input.actor));
   queue.save(issue);
   return issue;
+}
+
+// Tag da Issue é mutação com dono: sem actor não dá para saber se um rebaixamento é permitido.
+// (tagTicket não precisa: rejeita human_need e não alimenta a autonomia derivada.)
+function taggingActor(actor: string | undefined): Actor {
+  if (!actor?.trim()) throw new DomainError("Tag da Issue exige actor: use --agent <ia> ou --human");
+  return parseActor(actor);
 }
 
 export type WorktreeInput = { issueId: string; path?: string; cwd?: string };

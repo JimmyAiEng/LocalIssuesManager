@@ -2,13 +2,14 @@ import { DomainError } from "../domain/domain_error.js";
 import type { Issue } from "../domain/issue_entity.js";
 import { Queue } from "../domain/queue_repository.js";
 import { Ticket, type TicketData } from "../domain/ticket_entity.js";
-import { parseActor, parseClosedReason, parseHumanNeed, parseTicketStatus, parseTicketType } from "../domain/value_objects.js";
+import { parseActor, parseClosedReason, parseTicketStatus, parseTicketType } from "../domain/value_objects.js";
 import { type IncomingAttachment, persistableAttachments } from "./attachments.js";
+import { requireDesignGate } from "./design_use_cases.js";
 import { requireValidRequirements } from "./requirements_use_cases.js";
 
 export type CreateTicketInput = {
   issueId: string; type: string; objective: string; task: string; acceptance_criteria: string;
-  artifacts?: string; references?: string; depends_on?: string[]; actor: string; human_need?: string;
+  artifacts?: string; references?: string; depends_on?: string[]; actor: string;
   artifact?: string; attachments?: IncomingAttachment[]; now?: Date;
 };
 
@@ -22,7 +23,6 @@ export function createTicket(input: CreateTicketInput, root?: string): Issue {
   const ticket = Ticket.create({ issue_id: input.issueId, type,
     objective: input.objective, task: input.task, acceptance_criteria: input.acceptance_criteria,
     artifacts: input.artifacts, references: input.references, depends_on: input.depends_on, actor,
-    human_need: input.human_need ? parseHumanNeed(input.human_need) : undefined,
     attachments: created.map(({ entity }) => entity.toJSON()) }, input.now);
   issue.addTicket(ticket, input.now);
   for (const { entity, bytes } of created) queue.writeAttachment(issue.project, entity, bytes);
@@ -47,21 +47,27 @@ export type StatusTicketInput = {
   comment: string; closed_reason?: string; last?: boolean; attachments?: IncomingAttachment[]; now?: Date;
 };
 
-export function statusTicket(input: StatusTicketInput, root?: string): Issue {
+export async function statusTicket(input: StatusTicketInput, root?: string): Promise<Issue> {
   const actor = parseActor(input.actor);
   const queue = new Queue(root);
   const issue = queue.loadRequired(input.issueId);
   const status = parseTicketStatus(input.status);
   const reason = input.closed_reason ? parseClosedReason(input.closed_reason) : undefined;
-  if (status === "AWAITING" && issue.ticket(input.ticketId).type === "Planning") {
-    requireValidRequirements(queue, issue.project, issue.id);
-  }
+  if (status === "AWAITING") await requirePhaseGate(queue, issue, input.ticketId);
   const created = persistableAttachments(input.attachments, input.now);
   issue.transitionTicket(input.ticketId, actor, status, input.comment, reason, Boolean(input.last), input.now,
     created.map(({ entity }) => entity.toJSON()));
   for (const { entity, bytes } of created) queue.writeAttachment(issue.project, entity, bytes);
   queue.save(issue);
   return issue;
+}
+
+// Gates de fase na transição →AWAITING (falha propaga: nada é aplicado nem salvo):
+// Planning exige requisitos válidos; Design exige design.md + ≥1 diagrama PlantUML válido.
+async function requirePhaseGate(queue: Queue, issue: Issue, ticketId: string): Promise<void> {
+  const type = issue.ticket(ticketId).type;
+  if (type === "Planning") requireValidRequirements(queue, issue.project, issue.id);
+  if (type === "Design") await requireDesignGate(queue, issue.project, ticketId);
 }
 
 export type DecideTicketInput = {

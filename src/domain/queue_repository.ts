@@ -36,6 +36,7 @@ export class Queue {
         if (Date.parse(issue.status_changed_at) <= cutoff) {
           this.#purgeAttachments(issue);
           this.#purgeArtifacts(issue);
+          this.#purgeDesign(issue);
           rmSync(this.#requirementsPath(issue.project, issue.id), { force: true });
           rmSync(file, { force: true }); // corrida entre closes concorrentes: ignora arquivo já removido
           purged.push(issue.id);
@@ -76,6 +77,33 @@ export class Queue {
   readArtifact(project: string, ownerId: string): string | null {
     const path = this.#artifactPath(project, ownerId);
     return existsSync(path) ? readFileSync(path, "utf8") : null;
+  }
+
+  // Design: pacote por Ticket type=Design em design/<ticketId>/<name> (design.md e <kind>.puml).
+  #designDir(project: string, ticketId: string): string {
+    return join(this.#root, "projects", projectSegment(project), "design", ticketId);
+  }
+
+  #purgeDesign(issue: Issue): void {
+    for (const ticket of issue.tickets) {
+      rmSync(this.#designDir(issue.project, ticket.id), { recursive: true, force: true });
+    }
+  }
+
+  writeDesign(project: string, ticketId: string, name: string, content: string): void {
+    const directory = this.#designDir(project, ticketId);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, name), content, "utf8");
+  }
+
+  readDesign(project: string, ticketId: string, name: string): string | null {
+    const path = join(this.#designDir(project, ticketId), name);
+    return existsSync(path) ? readFileSync(path, "utf8") : null;
+  }
+
+  listDesign(project: string, ticketId: string): string[] {
+    const directory = this.#designDir(project, ticketId);
+    return existsSync(directory) ? readdirSync(directory) : [];
   }
 
   // Requirements: JSON Gherkin da Issue, flat em requirements/<issueId>.json (keyed pela Issue).

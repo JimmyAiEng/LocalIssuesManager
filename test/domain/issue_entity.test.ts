@@ -16,9 +16,17 @@ const ticketFor = (issue: Issue, actor: "human" | "pi" | "codex" = "pi") =>
   Ticket.create({ issue_id: issue.id, objective: "o", task: "t", acceptance_criteria: "c",
     type: "Implement", actor });
 
-const ongoing = (actor: "pi" | "codex" = "pi") => {
+// Issue CLAIMED e classificada: addTicket exige risk+complexity para derivar a autonomia do Ticket.
+// Feat·BAIXO·BAIXA só força HITL em Planning; Implement (o ticketFor acima) deriva AFK.
+const claimed = (actor: "pi" | "codex" = "pi") => {
   const issue = Issue.create(input, "pi");
+  issue.tag({ complexity: "BAIXA", risk: "BAIXO" }, "human");
   issue.claim(actor);
+  return issue;
+};
+
+const ongoing = (actor: "pi" | "codex" = "pi") => {
+  const issue = claimed(actor);
   const ticket = ticketFor(issue, actor);
   issue.addTicket(ticket);
   return { issue, ticket };
@@ -64,14 +72,14 @@ test("claim leva OPEN a CLAIMED e incrementa a revisão", () => {
 });
 
 test("o primeiro Ticket move CLAIMED para ON-GOING sem thread de Issue", () => {
-  const issue = Issue.create(input, "pi");
-  issue.claim("pi");
+  const issue = claimed();
+  const revision = issue.revision;
   issue.addTicket(ticketFor(issue));
   assert.equal(issue.status, "ON-GOING");
   assert.equal(issue.tickets.length, 1);
   assert.equal(issue.thread.length, 1);
   assert.equal(issue.phases.at(-1)?.status, "ON-GOING");
-  assert.equal(issue.revision, 2);
+  assert.equal(issue.revision, revision + 1);
 });
 
 test("addTicket recusa fora de CLAIMED/ON-GOING e Ticket de outra Issue", () => {
@@ -84,9 +92,39 @@ test("addTicket recusa fora de CLAIMED/ON-GOING e Ticket de outra Issue", () => 
   assert.throws(() => issue.addTicket(alheio), /Ticket belongs to another Issue/);
 });
 
+test("addTicket exige classificação (risk e complexity) da Issue para derivar a autonomia", () => {
+  const semTags = Issue.create(input, "pi");
+  semTags.claim("pi");
+  assert.throws(() => semTags.addTicket(ticketFor(semTags)),
+    (error: unknown) => error instanceof DomainError && /risk e complexity/.test(error.message));
+  assert.equal(semTags.tickets.length, 0); // nenhum Ticket é criado
+
+  const semRisk = Issue.create(input, "pi");
+  semRisk.claim("pi");
+  semRisk.tag({ complexity: "BAIXA" }, "human");
+  assert.throws(() => semRisk.addTicket(ticketFor(semRisk)), /risk e complexity/);
+
+  const semComplexity = Issue.create(input, "pi");
+  semComplexity.claim("pi");
+  semComplexity.tag({ risk: "BAIXO" }, "human");
+  assert.throws(() => semComplexity.addTicket(ticketFor(semComplexity)), /risk e complexity/);
+
+  // Sem human_need a criação passa: o override só existe quando vale HITL; ausência é AFK.
+  const semHumanNeed = claimed();
+  semHumanNeed.addTicket(ticketFor(semHumanNeed));
+  assert.equal(semHumanNeed.tickets.at(-1)!.tags.human_need, "AFK");
+});
+
+test("addTicket rejeitado não marca o Ticket com autonomia", () => {
+  const issue = claimed();
+  const alheio = Ticket.create({ issue_id: "outra", objective: "o", task: "t",
+    acceptance_criteria: "c", type: "QA", actor: "pi" });
+  assert.throws(() => issue.addTicket(alheio), /Ticket belongs to another Issue/);
+  assert.deepEqual(alheio.tags, {}); // a derivação só acontece depois de todas as validações
+});
+
 test("fase posterior só pode ser criada com as anteriores CLOSED (OPEN/CLAIMED/AWAITING bloqueiam)", () => {
-  const issue = Issue.create(input, "pi");
-  issue.claim("pi");
+  const issue = claimed();
   const phase = (type: "Planning" | "Design") => Ticket.create({ issue_id: issue.id,
     objective: "o", task: "t", acceptance_criteria: "c", type, actor: "pi" });
   const planning = phase("Planning");
@@ -112,8 +150,7 @@ test("Tickets seguintes mantêm ON-GOING e apenas incrementam a revisão", () =>
 });
 
 test("claim/transition/decide de Ticket delegam à raiz e incrementam a revisão", () => {
-  const issue = Issue.create(input, "pi");
-  issue.claim("pi");
+  const issue = claimed();
   const ticket = ticketFor(issue, "codex");
   issue.addTicket(ticket);
   let revision = issue.revision;
@@ -262,33 +299,99 @@ test("commentTicket delega ao Ticket e incrementa a revisão da Issue", () => {
   assert.throws(() => issue.commentTicket("nope", "pi", "x"), /Ticket not found: nope/);
 });
 
+// A tag da Issue alimenta requiredHumanNeed: rebaixá-la é o agente afrouxando a própria supervisão.
+// Escalar é sempre livre (pedir mais humano nunca é ataque); rebaixar é prerrogativa humana.
+test("tag da Issue por IA: escalar é aceito nos 3 eixos", () => {
+  const issue = Issue.create(input, "pi");
+  issue.tag({ risk: "BAIXO", complexity: "BAIXA", human_need: "AFK" }, "human");
+  issue.tag({ risk: "MEDIO" }, "pi"); // BAIXO → MEDIO
+  issue.tag({ risk: "ALTO" }, "pi"); // MEDIO → ALTO
+  issue.tag({ complexity: "MEDIA" }, "pi"); // BAIXA → MEDIA
+  issue.tag({ complexity: "ALTA" }, "pi"); // MEDIA → ALTA
+  issue.tag({ human_need: "HITL" }, "pi"); // AFK → HITL: MAIS supervisão, apesar do índice menor em TAG_VALUES
+  assert.deepEqual(issue.tags, { risk: "ALTO", complexity: "ALTA", human_need: "HITL" });
+});
+
+test("tag da Issue por IA: manter o mesmo valor é no-op aceito, e tag ausente não compara", () => {
+  const issue = Issue.create(input, "pi");
+  issue.tag({ risk: "MEDIO", complexity: "MEDIA", human_need: "AFK" }, "pi"); // Issue sem tags: nada a rebaixar
+  issue.tag({ risk: "MEDIO", complexity: "MEDIA", human_need: "AFK" }, "pi"); // no-op
+  assert.deepEqual(issue.tags, { risk: "MEDIO", complexity: "MEDIA", human_need: "AFK" });
+});
+
+test("tag da Issue por IA: rebaixar é DomainError nos 3 eixos", () => {
+  const issue = Issue.create(input, "pi");
+  issue.tag({ risk: "ALTO", complexity: "ALTA", human_need: "HITL" }, "human");
+  assert.throws(() => issue.tag({ risk: "MEDIO" }, "pi"), (error: unknown) =>
+    error instanceof DomainError && /rebaixar risk \(ALTO → MEDIO\)/.test(error.message));
+  assert.throws(() => issue.tag({ risk: "BAIXO" }, "pi"), /rebaixar risk/);
+  assert.throws(() => issue.tag({ complexity: "MEDIA" }, "pi"), /rebaixar complexity/);
+  assert.throws(() => issue.tag({ complexity: "BAIXA" }, "pi"), /rebaixar complexity/);
+  // A armadilha: human_need é ["HITL","AFK"] em TAG_VALUES — índice CRESCENTE = MENOS supervisão.
+  // Comparar índice ingenuamente deixaria HITL → AFK passar, que é exatamente a fuga da coleira.
+  assert.throws(() => issue.tag({ human_need: "AFK" }, "pi"), (error: unknown) =>
+    error instanceof DomainError && /rebaixar human_need \(HITL → AFK\)/.test(error.message));
+  assert.deepEqual(issue.tags, { risk: "ALTO", complexity: "ALTA", human_need: "HITL" }); // nada mutou
+});
+
+test("tag da Issue por IA: rebaixamento é rejeitado mesmo escondido atrás de uma escalada no mesmo update", () => {
+  const issue = Issue.create(input, "pi");
+  issue.tag({ risk: "ALTO", complexity: "BAIXA" }, "human");
+  assert.throws(() => issue.tag({ complexity: "ALTA", risk: "BAIXO" }, "pi"), /rebaixar risk/);
+  assert.deepEqual(issue.tags, { risk: "ALTO", complexity: "BAIXA" }); // update é atômico: nem a escalada passou
+});
+
+test("tag da Issue por humano: rebaixar é aceito nos 3 eixos", () => {
+  const issue = Issue.create(input, "pi");
+  issue.tag({ risk: "ALTO", complexity: "ALTA", human_need: "HITL" }, "human");
+  issue.tag({ risk: "BAIXO", complexity: "BAIXA", human_need: "AFK" }, "human");
+  assert.deepEqual(issue.tags, { risk: "BAIXO", complexity: "BAIXA", human_need: "AFK" });
+});
+
 test("tag valida categoria/valor, mescla e incrementa a revisão", () => {
   const issue = Issue.create(input, "pi");
-  issue.tag({ complexity: "ALTA" });
-  issue.tag({ human_need: "AFK", risk: "BAIXO" });
+  issue.tag({ complexity: "ALTA" }, "human");
+  issue.tag({ human_need: "AFK", risk: "BAIXO" }, "human");
   assert.deepEqual(issue.tags, { complexity: "ALTA", human_need: "AFK", risk: "BAIXO" });
   assert.equal(issue.revision, 2);
-  assert.throws(() => issue.tag({ risk: "GIGANTE" }), (error: unknown) => error instanceof DomainError && error.message === "Invalid risk: GIGANTE");
-  assert.throws(() => issue.tag({}), /At least one tag is required/);
+  assert.throws(() => issue.tag({ risk: "GIGANTE" }, "human"), (error: unknown) => error instanceof DomainError && error.message === "Invalid risk: GIGANTE");
+  assert.throws(() => issue.tag({}, "human"), /At least one tag is required/);
 });
 
-test("tag da Issue revalida a autonomia dos Tickets existentes", () => {
-  const issue = Issue.create(input, "pi");
-  issue.claim("pi");
-  issue.addTicket(ticketFor(issue));
-  assert.throws(() => issue.tag({ human_need: "HITL" }), /todo Ticket precisa da tag de autonomia/);
-  assert.deepEqual(issue.tags, {});
+test("tag da Issue recomputa a autonomia dos Tickets não-CLOSED", () => {
+  const { issue, ticket } = ongoing(); // Implement numa Issue Feat·BAIXO·BAIXA → AFK
+  assert.equal(ticket.tags.human_need, "AFK");
+  issue.tag({ risk: "ALTO", complexity: "ALTA" }, "human"); // combo tóxico: Implement passa a exigir supervisão
+  assert.equal(ticket.tags.human_need, "HITL"); // a autonomia derivada nunca fica stale
+  issue.tag({ risk: "BAIXO" }, "human"); // e volta (rebaixar é prerrogativa humana), porque a regra é derivada e não acumulada
+  assert.equal(ticket.tags.human_need, "AFK");
 });
 
-test("tagTicket delega ao Ticket; CLOSED é imutável para tags", () => {
+test("tag da Issue não altera Ticket CLOSED e o retag segue aceito", () => {
+  const { issue, ticket } = ongoing();
+  issue.claimTicket(ticket.id, "pi");
+  issue.transitionTicket(ticket.id, "pi", "CLOSED", "feito", "concluido");
+  assert.equal(ticket.tags.human_need, "AFK");
+  issue.tag({ risk: "ALTO", complexity: "ALTA" }, "human"); // aceito: informação nova não esbarra em Ticket antigo
+  assert.equal(ticket.tags.human_need, "AFK"); // CLOSED é imutável: registra a decisão da época
+  assert.deepEqual(issue.tags, { complexity: "ALTA", risk: "ALTO" });
+});
+
+test("tagTicket delega ao Ticket mas rejeita human_need (derivado, não settável)", () => {
   const { issue, ticket } = ongoing();
   const revision = issue.revision;
   issue.tagTicket(ticket.id, { complexity: "MEDIA" });
-  assert.deepEqual(issue.tickets[0].tags, { complexity: "MEDIA" });
+  assert.deepEqual(issue.tickets[0].tags, { human_need: "AFK", complexity: "MEDIA" });
   assert.equal(issue.revision, revision + 1);
+
+  assert.throws(() => issue.tagTicket(ticket.id, { human_need: "HITL" }),
+    (error: unknown) => error instanceof DomainError && /derivado/.test(error.message));
+  assert.equal(ticket.tags.human_need, "AFK"); // inalterada
+  assert.equal(issue.revision, revision + 1); // e sem bump
+
   const closed = Issue.create(input, "pi");
   closed.closeByAgent("pi", "errada", "errado");
-  assert.throws(() => closed.tag({ risk: "ALTO" }), /CLOSED aggregate is immutable/);
+  assert.throws(() => closed.tag({ risk: "ALTO" }, "human"), /CLOSED aggregate is immutable/);
 });
 
 test("artifactOwnerId retorna a Issue sem ticketId e o Ticket com ticketId válido", () => {
@@ -310,6 +413,31 @@ test("artifactOwnerId guarda CLOSED-imutável na Issue e no Ticket", () => {
   assert.equal(issue.tickets[0].status, "CLOSED");
   assert.throws(() => issue.artifactOwnerId(ticket.id), /CLOSED aggregate is immutable/);
   assert.equal(issue.artifactOwnerId(), issue.id); // Issue segue mutável
+});
+
+test("tag com Tickets existentes recomputa cada um e incrementa a revisão uma única vez", () => {
+  const { issue } = ongoing(); // 1 Ticket Implement, Issue Feat·BAIXO·BAIXA
+  const revision = issue.revision;
+  issue.tag({ complexity: "ALTA" }, "human"); // complexity ALTA não força Implement (só Planning/Design)
+  assert.deepEqual(issue.tags, { complexity: "ALTA", risk: "BAIXO" });
+  assert.equal(issue.tickets[0].tags.human_need, "AFK");
+  assert.equal(issue.revision, revision + 1);
+});
+
+test("Issue legada sem classificação ainda destrava: o Confirmation deriva AFK e a IA fecha", () => {
+  // Persistida antes do guard: tem Ticket e nenhuma tag. O Confirmation não passa por addTicket
+  // de propósito, e a regra é total (tag ausente não dispara gatilho) — ninguém fica preso.
+  const { issue, ticket } = ongoing();
+  const legacy = Issue.fromJSON({ ...issue.toJSON(), tags: {} });
+  const legacyTicket = legacy.ticket(ticket.id);
+  legacy.claimTicket(legacyTicket.id, "pi");
+  legacy.transitionTicket(legacyTicket.id, "pi", "CLOSED", "feito", "concluido", true);
+  const confirmation = legacy.tickets.at(-1)!;
+  assert.equal(confirmation.type, "Confirmation");
+  assert.equal(confirmation.tags.human_need, "AFK");
+  legacy.claimTicket(confirmation.id, "pi");
+  legacy.transitionTicket(confirmation.id, "pi", "CLOSED", "verificado", "concluido");
+  assert.equal(legacy.status, "AWAITING");
 });
 
 test("fromJSON hidrata Tickets como entidades e toJSON os serializa", () => {

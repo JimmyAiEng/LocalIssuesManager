@@ -1,24 +1,37 @@
 import { randomUUID } from "node:crypto";
 import type { AttachmentData } from "./attachment_entity.js";
 import { DomainError } from "./domain_error.js";
-import { applyTags, assertDecision, required, threadEntry, type Actor, type ClosedReason, type Decision, type HumanNeed, type Tags, type TagUpdates, type Thread, type TicketStatus, type TicketType } from "./value_objects.js";
+import { applyTags, assertDecision, required, threadEntry, type Actor, type ClosedReason, type Decision, type HumanNeed, type IssueType, type Tags, type TagUpdates, type Thread, type TicketStatus, type TicketType } from "./value_objects.js";
 
 export type CreateTicket = {
   issue_id: string; objective: string; task: string; acceptance_criteria: string;
-  type: TicketType; artifacts?: string; references?: string; depends_on?: string[]; actor: Actor; human_need?: HumanNeed;
+  type: TicketType; artifacts?: string; references?: string; depends_on?: string[]; actor: Actor;
   attachments?: AttachmentData[];
 };
 
-// Grau de autonomia: numa Issue HITL todo Ticket precisa da tag human_need,
-// e os de Planning/Design são obrigatoriamente HITL (não podem ser AFK).
-// Issue AFK ou sem tag não impõe restrição. Validação usada na criação e
-// marcação de Ticket e ao mudar a autonomia da própria Issue.
-export function assertTicketAutonomy(issueHumanNeed: HumanNeed | undefined, type: TicketType, humanNeed: HumanNeed | undefined): void {
-  if (issueHumanNeed !== "HITL") return;
-  if (!humanNeed) throw new DomainError("Issue HITL: todo Ticket precisa da tag de autonomia (human_need)");
-  if ((type === "Planning" || type === "Design") && humanNeed !== "HITL") {
-    throw new DomainError(`Issue HITL: Ticket de ${type} deve ser HITL, não pode ser AFK`);
-  }
+// A Issue vista pela regra de autonomia. Estrutural (não a classe Issue) para não criar o ciclo
+// de import ticket_entity → issue_entity; a classe Issue satisfaz este shape de graça.
+export type Classified = { type: IssueType; tags: Tags };
+
+// Gatilhos de supervisão aprovados (Artefato da Issue 164fe3fc): cada um mapeia uma condição da
+// Issue para os tipos de Ticket que ela força a HITL. Supervisão humana é cara: gasta-se onde o
+// erro é caro de desfazer e invisível para a automação.
+const AUTONOMY_TRIGGERS: readonly [(issue: Classified) => boolean, readonly TicketType[]][] = [
+  [({ tags }) => tags.human_need === "HITL", ["Planning", "Design", "Deploy", "Confirmation"]], // override humano
+  [({ tags }) => tags.risk === "ALTO", ["Design", "QA", "Deploy", "Confirmation"]], // risco alto
+  [({ tags }) => tags.risk === "MEDIO", ["Deploy"]], // risco médio: porta de sentido único
+  [({ tags }) => tags.complexity === "ALTA", ["Planning", "Design"]], // complexidade alta
+  [({ type }) => type === "Research", ["Planning", "Design"]], // spec desconhecida
+  [({ type }) => type === "Feat", ["Planning"]], // superfície nova: escopo é decisão de produto
+  [({ tags }) => tags.risk === "ALTO" && tags.complexity === "ALTA", ["Implement"]], // combo tóxico
+];
+
+// Autonomia do Ticket derivada da Issue — o agente não tem caneta sobre a própria supervisão.
+// Max wins: HITL se qualquer gatilho disparar; default AFK. TOTAL: tag ausente nunca dispara
+// gatilho (risk indefinido não é risco alto), o que mantém Issue legada sem classificação destravável.
+export function requiredHumanNeed(issue: Classified, ticketType: TicketType): HumanNeed {
+  const forced = AUTONOMY_TRIGGERS.some(([fires, types]) => fires(issue) && types.includes(ticketType));
+  return forced ? "HITL" : "AFK";
 }
 export type TicketData = {
   id: string; issue_id: string; objective: string; task: string;
@@ -54,7 +67,7 @@ export class Ticket implements TicketData {
       task: input.task, acceptance_criteria: input.acceptance_criteria, type: input.type,
       status: "OPEN", owner: null, closed_reason: null, artifacts: input.artifacts ?? "",
       references: input.references ?? "", depends_on: input.depends_on ?? [], created_at: timestamp, status_changed_at: timestamp,
-      thread: [entry], tags: input.human_need ? { human_need: input.human_need } : {}, last: false };
+      thread: [entry], tags: {}, last: false }; // tags.human_need é estampado pela Issue (derivado, nunca declarado)
   }
 
   static fromJSON(data: TicketData): Ticket {

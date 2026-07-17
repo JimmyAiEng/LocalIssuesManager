@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -50,6 +50,13 @@ test("init --force sobrescreve AGENTS.md pelo ponteiro do pack", () => {
   assert.equal(readFileSync(join(directory, "AGENTS.md"), "utf8"), `${POINTER}\n`);
 });
 
+test("init acrescenta newline quando o AGENTS.md existente não termina em \\n", () => {
+  const directory = target();
+  writeFileSync(join(directory, "AGENTS.md"), "# sem quebra de linha final");
+  initPack({ target: directory });
+  assert.equal(readFileSync(join(directory, "AGENTS.md"), "utf8"), `# sem quebra de linha final\n\n${POINTER}\n`);
+});
+
 test("init preserva CLAUDE.md existente e apenas sugere o include", () => {
   const directory = target();
   writeFileSync(join(directory, "CLAUDE.md"), "# regras minhas\n");
@@ -89,4 +96,54 @@ test("linkPackSkillsForDogfood liga skills/ aos paths dos harnesses sem copiar",
   assert.equal(readlinkSync(join(directory, ".agents", "skills")).replace(/\\/g, "/"), "../skills");
   assert.ok(existsSync(join(directory, ".cursor", "skills", "sdlc-workflow", "SKILL.md")));
   assert.ok(existsSync(join(directory, ".pi", "skills", "sdlc-workflow", "SKILL.md")));
+});
+
+test("linkPackSkillsForDogfood é idempotente: 2ª chamada não recria os links já corretos", () => {
+  const directory = target();
+  mkdirSync(join(directory, "skills", "sdlc-workflow"), { recursive: true });
+  writeFileSync(join(directory, "skills", "sdlc-workflow", "SKILL.md"), "---\nname: sdlc-workflow\ndescription: x\n---\n");
+  writeFileSync(join(directory, "AGENTS.md"), "# pack\n");
+  writeFileSync(join(directory, "package.json"), "{\"version\":\"0.0.0\"}\n");
+
+  linkPackSkillsForDogfood(directory);
+  const again = linkPackSkillsForDogfood(directory); // links já apontam certo -> isExpectedLink() no-op
+  assert.deepEqual(again, []);
+  assert.ok(existsSync(join(directory, ".claude", "skills", "sdlc-workflow", "SKILL.md")));
+});
+
+test("init: harness/skills já existente como diretório real (não symlink do pack) é preservado", () => {
+  const directory = target();
+  mkdirSync(join(directory, ".codex", "skills"), { recursive: true });
+  writeFileSync(join(directory, ".codex", "skills", "meu-arquivo.txt"), "conteúdo local");
+  const result = initPack({ target: directory, harness: "codex" });
+  assert.equal(lstatSync(join(directory, ".codex", "skills")).isSymbolicLink(), false);
+  assert.equal(readFileSync(join(directory, ".codex", "skills", "meu-arquivo.txt"), "utf8"), "conteúdo local");
+  assert.ok(result.notes.some((note) => note.includes("não é o link do pack; mantido")));
+});
+
+test("linkSkills: symlinkSync sem permissão cai no catch (fallback de cópia, que também falha aqui)", () => {
+  const directory = target();
+  mkdirSync(join(directory, ".codex"), { recursive: true });
+  chmodSync(join(directory, ".codex"), 0o555); // sem permissão de escrita: nem symlink nem cópia entram
+  try {
+    assert.throws(
+      () => initPack({ target: directory, harness: "codex" }),
+      (error: unknown) => error instanceof Error && (error as NodeJS.ErrnoException).code === "EACCES",
+    );
+  } finally {
+    chmodSync(join(directory, ".codex"), 0o755); // restaura para limpeza do diretório temporário
+  }
+});
+
+test("installSkills detecta dogfood (target já é o packRoot) e pula a cópia", () => {
+  const directory = target();
+  mkdirSync(join(directory, "skills", "sdlc-workflow"), { recursive: true });
+  writeFileSync(join(directory, "skills", "sdlc-workflow", "SKILL.md"), "---\nname: sdlc-workflow\ndescription: x\n---\n");
+  writeFileSync(join(directory, "AGENTS.md"), "# pack\n");
+  mkdirSync(join(directory, ".agents"), { recursive: true });
+  symlinkSync(join("..", "skills"), join(directory, ".agents", "skills")); // .agents/skills já aponta pro próprio skills/
+
+  const result = initPack({ target: directory, harness: "codex" }, directory); // packRoot === target
+  assert.ok(result.notes.some((note) => note.includes("dogfood); cópia pulada")));
+  assert.ok(existsSync(join(directory, ".codex", "skills", "sdlc-workflow", "SKILL.md")));
 });

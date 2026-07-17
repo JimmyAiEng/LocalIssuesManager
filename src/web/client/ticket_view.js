@@ -1,11 +1,11 @@
 import {
-  TAG_VALUES, TICKET_TYPES, canClaimTicket, canCreateTicket, escapeHtml,
+  TICKET_TYPES, canClaimTicket, canCreateTicket, escapeHtml,
   phaseBlockerOf, suggestNextTicketType, ticketCreationGate, ticketHumanActions,
 } from "./view_model.js";
 import { state } from "./state.js";
 import {
-  areaInput, attachmentField, commentField, commentForm, message, reasonField,
-  selectInput, summaryError, tagEditor, tagLabels, tagsMarkup,
+  areaInput, attachmentField, commentField, commentForm, detailsAttrs, message, reasonField,
+  selectInput, summaryError, tagEditor, tagsMarkup,
 } from "./view.js";
 import { renderMarkdown } from "./markdown.js";
 
@@ -18,8 +18,8 @@ function ticketCard(ticket, issue) {
   const owner = ticket.owner ? `<span class="owner">${escapeHtml(ticket.owner)}</span>` : "";
   const references = ticket.references?.trim() ? `<p class="ticket-refs">Referências: ${escapeHtml(ticket.references)}</p>` : "";
   const artifact = ticket.artifact
-    ? `<details class="ticket-artifact"><summary>Artefato</summary><div class="md">${renderMarkdown(ticket.artifact)}</div></details>` : "";
-  return `<article class="ticket status-${ticket.status}"><header class="ticket-head"><span class="badge status-${ticket.status}">${ticket.status}</span><span class="ticket-type">${escapeHtml(ticket.type)}</span>${owner}</header>${tagsMarkup(ticket.tags)}${tagEditor("ticket", ticket.tags, ticket.id, ticket.status)}<h3>${escapeHtml(ticket.objective)}</h3><div class="md ticket-task">${renderMarkdown(ticket.task)}</div>${artifact}${dependsLine(ticket, issue)}${references}<details class="ticket-thread"><summary>Thread (${ticket.thread.length})</summary><ol class="thread">${ticket.thread.map(message).join("")}</ol></details>${ticketCommentSection(ticket)}${ticketActionsPanel(ticket)}</article>`;
+    ? `<details class="ticket-artifact"${detailsAttrs(`artifact:${ticket.id}`)}><summary>Artefato</summary><div class="md">${renderMarkdown(ticket.artifact)}</div></details>` : "";
+  return `<article class="ticket status-${ticket.status}"><header class="ticket-head"><span class="badge status-${ticket.status}">${ticket.status}</span><span class="ticket-type">${escapeHtml(ticket.type)}</span>${owner}</header>${tagsMarkup(ticket.tags)}${tagEditor("ticket", ticket.tags, ticket.id, ticket.status)}<h3>${escapeHtml(ticket.objective)}</h3><div class="md ticket-task">${renderMarkdown(ticket.task)}</div>${artifact}${dependsLine(ticket, issue)}${references}<details class="ticket-thread"${detailsAttrs(`thread:${ticket.id}`)}><summary>Thread (${ticket.thread.length})</summary><ol class="thread">${ticket.thread.map(message).join("")}</ol></details>${ticketCommentSection(ticket)}${ticketActionsPanel(ticket)}</article>`;
 }
 
 // Dependências do Ticket resolvidas contra os Tickets da Issue; id desconhecido → id curto.
@@ -63,7 +63,7 @@ function ticketCreate(issue) {
   if (!canCreateTicket(issue.status)) return "";
   const gate = ticketCreationGate(issue);
   if (gate === "blocked") {
-    return `<div class="ticket-gate ticket-gate--blocked"><p class="warn" role="alert">Classifique a Issue (Complexidade, Humano, Risco) antes de criar o 1º Ticket</p>${tagEditor("issue", issue.tags, null, issue.status, true)}</div>`;
+    return `<div class="ticket-gate ticket-gate--blocked"><p class="warn" role="alert">Classifique a Issue (Complexidade, Risco) antes de criar o 1º Ticket</p>${tagEditor("issue", issue.tags, null, issue.status, true)}</div>`;
   }
   if (!state.showTicketForm) return `<button type="button" id="toggle-ticket-form" class="new-ticket">+ Novo Ticket</button>`;
   return ticketCreateForm(issue, gate);
@@ -73,7 +73,7 @@ function ticketCreateForm(issue, gate) {
   const draft = state.ticketDraft;
   const type = draft.type || suggestNextTicketType(issue.tickets);
   const blocker = phaseBlockerOf(issue.tickets, type);
-  const warn = gate === "warn" ? `<p class="warn">Issue sem classificação completa (Complexidade, Humano, Risco) — recomendado classificar.</p>` : "";
+  const warn = gate === "warn" ? `<p class="warn">Issue sem classificação completa (Complexidade, Risco) — recomendado classificar.</p>` : "";
   const blocked = blocker ? `<p class="warn" role="alert">Fase anterior (${escapeHtml(blocker.type)}) ainda aberta — a criação será rejeitada.</p>` : "";
   return `<form id="ticket-create-form" class="form" novalidate>${summaryError()}${warn}
     ${selectInput("type", "Tipo", TICKET_TYPES, type)}
@@ -83,7 +83,6 @@ function ticketCreateForm(issue, gate) {
     ${areaInput("acceptance_criteria", "Critérios de aceite", draft.acceptance_criteria)}
     ${areaInput("artifacts", "Artefatos (opcional)", draft.artifacts)}
     ${areaInput("references", "Referências (opcional)", draft.references)}
-    ${selectInput("human_need", `${tagLabels.human_need} (opcional)`, TAG_VALUES.human_need, draft.human_need)}
     ${attachmentField()}
     <div class="form-actions"><button ${state.busy ? "disabled" : ""}>Criar Ticket</button><button type="button" id="toggle-ticket-form">Cancelar</button></div>
   </form>`;

@@ -12,7 +12,14 @@ Acionada quando o Ticket claimado tem **type=`Deploy`**.
 ## Objetivo
 
 Preparar PR / entrega / handoff operacional.
+No diagrama: **Merge & Pull Request** → análise estática → **PR Analysis** → Code Review humano.
 Gate **G4**: go / no-go de merge.
+
+## Validações da fase
+
+- Prepare o PR com o conjunto integrado; **não** faça o merge.
+- Se o repositório tiver análise estática de PR (ex.: SonarQube), aguarde/colete o resultado.
+- **PR Analysis**: analise o diff do PR e os apontamentos da análise estática; trate ou registre cada um antes de pedir G4.
 
 ## Heurísticas
 

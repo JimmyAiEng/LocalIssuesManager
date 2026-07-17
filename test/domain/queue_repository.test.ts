@@ -12,8 +12,14 @@ import { Ticket } from "../../src/domain/ticket_entity.js";
 const body = { title: "one", project: "space / project", type: "Feat" as const, problem: "p" };
 const root = () => mkdtempSync(join(tmpdir(), "queue-test-"));
 
+// addTicket exige risk+complexity para derivar a autonomia; Feat·BAIXO·BAIXA → Implement AFK.
+const classify = (issue: Issue): Issue => {
+  issue.tag({ complexity: "BAIXA", risk: "BAIXO" }, "human");
+  return issue;
+};
+
 function ongoingIssue(queue: Queue, project: string, id: string, ticketDate: Date) {
-  const issue = Issue.create({ ...body, project }, "pi");
+  const issue = classify(Issue.create({ ...body, project }, "pi"));
   issue.id = id;
   issue.claim("pi");
   const ticket = Ticket.create({ issue_id: id, objective: "o", task: "t",
@@ -31,7 +37,7 @@ const closeConfirmation = (issue: Issue, actor: "pi" | "codex" = "pi") => {
 
 test("oldestOpenTicket omite Ticket cuja dependência não está AWAITING/CLOSED", () => {
   const queue = new Queue(root());
-  const issue = Issue.create({ ...body, project: "p" }, "pi");
+  const issue = classify(Issue.create({ ...body, project: "p" }, "pi"));
   issue.claim("pi");
   const t1 = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
     acceptance_criteria: "c", type: "Implement", actor: "pi" }, new Date("2026-01-01"));
@@ -56,7 +62,7 @@ test("oldestOpenTicket omite Ticket cuja dependência não está AWAITING/CLOSED
 
 test("oldestOpenTicket não entrega fase posterior com fase anterior não fechada", () => {
   const queue = new Queue(root());
-  const issue = Issue.create({ ...body, project: "p" }, "pi");
+  const issue = classify(Issue.create({ ...body, project: "p", type: "Fix" }, "pi")); // Fix: Planning deriva AFK
   issue.claim("pi");
   const implement = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
     acceptance_criteria: "c", type: "Implement", actor: "pi" }, new Date("2026-01-01"));
@@ -76,7 +82,7 @@ test("oldestOpenTicket não entrega fase posterior com fase anterior não fechad
 });
 
 test("addTicket recusa dependência inexistente na Issue", () => {
-  const issue = Issue.create(body, "pi");
+  const issue = classify(Issue.create(body, "pi"));
   issue.claim("pi");
   const orphan = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
     acceptance_criteria: "c", type: "Implement", depends_on: ["nao-existe"], actor: "pi" });
@@ -226,7 +232,7 @@ test("Claims concorrentes têm um único vencedor persistido", async () => {
 
 test("save não apaga Reset humano com snapshot antigo", () => {
   const queue = new Queue(root());
-  const issue = Issue.create({ ...body, project: "p" }, "pi");
+  const issue = classify(Issue.create({ ...body, project: "p" }, "pi"));
   queue.save(issue);
   issue.claim("pi");
   queue.save(issue);
@@ -322,6 +328,18 @@ test("purgeClosed remove os anexos das Issues purgadas", () => {
   assert.equal(existsSync(join(dir, "projects/p/closed/withatt.json")), false);
 });
 
+test("findAttachment pula projeto sem pasta attachments até achar no projeto seguinte", () => {
+  const dir = root();
+  const queue = new Queue(dir);
+  // "aaa" nunca recebe writeAttachment: nunca cria a pasta attachments (força o continue)
+  queue.save(Issue.create({ ...body, project: "aaa" }, "pi"));
+  queue.save(Issue.create({ ...body, project: "bbb" }, "pi"));
+  const attachment = Attachment.create({ filename: "prova.png", mediaType: "image/png", size: 3 }).toJSON();
+  queue.writeAttachment("bbb", attachment, Buffer.from("png"));
+  const found = queue.findAttachment(attachment.id);
+  assert.equal(found?.mediaType, "image/png");
+});
+
 test("Artefato .md faz round-trip write/read e devolve null quando inexistente", () => {
   const dir = root();
   const queue = new Queue(dir);
@@ -343,7 +361,7 @@ test("Artefato .md é sobrescrito por completo na reescrita (nunca append)", () 
 test("purgeClosed remove os Artefatos .md da Issue e de cada Ticket purgado", () => {
   const dir = root();
   const queue = new Queue(dir);
-  const issue = Issue.create({ ...body, project: "p" }, "pi");
+  const issue = classify(Issue.create({ ...body, project: "p" }, "pi"));
   issue.id = "witharti";
   issue.claim("pi");
   const ticket = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
@@ -362,6 +380,41 @@ test("purgeClosed remove os Artefatos .md da Issue e de cada Ticket purgado", ()
   assert.deepEqual(queue.purgeClosed(new Date("2026-07-14")), ["witharti"]);
   assert.equal(existsSync(issueMd), false);
   assert.equal(existsSync(ticketMd), false);
+});
+
+test("Design faz round-trip write/read/list por Ticket e regravar substitui", () => {
+  const dir = root();
+  const queue = new Queue(dir);
+  assert.equal(queue.readDesign("space / project", "tid", "design.md"), null);
+  assert.deepEqual(queue.listDesign("space / project", "tid"), []);
+  queue.writeDesign("space / project", "tid", "design.md", "# doc");
+  queue.writeDesign("space / project", "tid", "class.puml", "@startuml\n@enduml");
+  queue.writeDesign("space / project", "tid", "design.md", "# doc v2");
+  assert.equal(queue.readDesign("space / project", "tid", "design.md"), "# doc v2");
+  assert.deepEqual(queue.listDesign("space / project", "tid").sort(), ["class.puml", "design.md"]);
+  const segment = encodeURIComponent("space / project");
+  assert.equal(existsSync(join(dir, "projects", segment, "design", "tid", "class.puml")), true);
+});
+
+test("purgeClosed remove a pasta design/<ticketId>/ de cada Ticket da Issue purgada", () => {
+  const dir = root();
+  const queue = new Queue(dir);
+  const issue = classify(Issue.create({ ...body, project: "p" }, "pi"));
+  issue.id = "withdesign";
+  issue.claim("pi");
+  const ticket = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
+    acceptance_criteria: "c", type: "Design", actor: "pi" });
+  issue.addTicket(ticket);
+  queue.writeDesign("p", ticket.id, "design.md", "# doc");
+  queue.writeDesign("p", ticket.id, "class.puml", "@startuml\n@enduml");
+  issue.status = "CLOSED"; // força o estado terminal no JSON (o purge lê status do disco)
+  issue.status_changed_at = "2026-01-01T00:00:00.000Z";
+  mkdirSync(join(dir, "projects/p/closed"), { recursive: true });
+  writeFileSync(join(dir, "projects/p/closed/withdesign.json"), JSON.stringify(issue));
+  const designDir = join(dir, "projects/p/design", ticket.id);
+  assert.equal(existsSync(designDir), true);
+  assert.deepEqual(queue.purgeClosed(new Date("2026-07-14")), ["withdesign"]);
+  assert.equal(existsSync(designDir), false);
 });
 
 function claim(dir: string, agent: string, project = "p"): Promise<{ owner: string } | null> {

@@ -28,6 +28,33 @@ export type Tags = { [K in TagCategory]?: (typeof TAG_VALUES)[K][number] };
 export type TagUpdates = Partial<Record<TagCategory, string>>;
 export type HumanNeed = (typeof TAG_VALUES)["human_need"][number];
 
+// Severidade = quanta supervisão humana o valor exige, do menor para o maior. NÃO é a ordem de
+// TAG_VALUES: lá human_need é ["HITL","AFK"], e HITL exige MAIS supervisão que AFK. Comparar índice
+// de TAG_VALUES inverteria a regra justo no eixo que governa a autonomia do agente — o buraco que
+// este guard existe para fechar. Ordem explícita, não derivada.
+const SEVERITY = {
+  complexity: ["BAIXA", "MEDIA", "ALTA"],
+  human_need: ["AFK", "HITL"],
+  risk: ["BAIXO", "MEDIO", "ALTO"],
+} as const satisfies { [K in TagCategory]: readonly (typeof TAG_VALUES)[K][number][] };
+
+// Escalar (pedir mais supervisão) nunca é ataque, e manter o valor é no-op: ambos livres para a IA.
+// Rebaixar é a IA mexendo na própria coleira — só o humano. Tag ausente nos dois lados não compara.
+export function assertNoDowngrade(current: Tags, next: Tags): void {
+  for (const category of Object.keys(SEVERITY) as TagCategory[]) {
+    const before = current[category];
+    const after = next[category];
+    if (before === undefined || after === undefined) continue;
+    if (severity(category, after) < severity(category, before)) {
+      throw new DomainError(`IA não pode rebaixar ${category} (${before} → ${after}): rebaixar supervisão exige --human`);
+    }
+  }
+}
+
+function severity(category: TagCategory, value: string): number {
+  return (SEVERITY[category] as readonly string[]).indexOf(value);
+}
+
 export function applyTags(current: Tags, updates: TagUpdates): Tags {
   const result: Tags = { ...current };
   let changed = false;
@@ -98,10 +125,6 @@ export function parseIssueStatus(value: string): IssueStatus {
 
 export function parseTicketStatus(value: string): TicketStatus {
   return parseEnum(TICKET_STATUSES, value, "ticket status");
-}
-
-export function parseHumanNeed(value: string): HumanNeed {
-  return parseEnum(TAG_VALUES.human_need, value, "human_need");
 }
 
 function parseEnum<const Values extends readonly string[]>(

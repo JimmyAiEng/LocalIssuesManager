@@ -8,7 +8,9 @@ import { setRequirements } from "../../src/app/requirements_use_cases.js";
 import { claimTicket, statusTicket } from "../../src/app/ticket_use_cases.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
-const input = { title: "Web issue", project: "web", type: "Fix", problem: "p" };
+// Issue já classificada: a criação de Ticket exige risk+complexity para derivar a autonomia.
+const input = { title: "Web issue", project: "web", type: "Fix", problem: "p", complexity: "BAIXA", risk: "BAIXO" };
+const bare = { title: "Web issue", project: "web", type: "Fix", problem: "p" }; // sem classificação
 const ticketInput = { type: "Implement", objective: "o", task: "t", acceptance_criteria: "c" };
 const VALID_REQ = JSON.stringify({
   features: ["Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel"],
@@ -71,14 +73,26 @@ test("API deixa o Humano assumir uma Issue OPEN (OPEN->CLAIMED) e criar Ticket p
   assert.equal(ticketRes.body.status, "ON-GOING");
 }));
 
-test("API encaminha human_need ao criar Ticket em Issue HITL pela web", async () => withWeb(async (url) => {
+test("API deriva a autonomia do Ticket em vez de aceitar human_need do cliente", async () => withWeb(async (url) => {
   const id = (await request(url, "POST", "/api/issues", { ...input, human_need: "HITL" })).body.id as string;
   await request(url, "POST", `/api/issues/${id}/claim`, {});
-  const semTag = await request(url, "POST", `/api/issues/${id}/tickets`, ticketInput);
-  assert.equal(semTag.status, 400); // Issue HITL exige human_need no Ticket
-  const comTag = await request(url, "POST", `/api/issues/${id}/tickets`, { ...ticketInput, human_need: "HITL" });
-  assert.equal(comTag.status, 201);
-  assert.equal(comTag.body.status, "ON-GOING");
+  // Implement é reversível: nem o override HITL da Issue nem o human_need do POST o forçam a HITL.
+  const created = await request(url, "POST", `/api/issues/${id}/tickets`, { ...ticketInput, human_need: "HITL" });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.status, "ON-GOING");
+  assert.deepEqual((created.body.tickets as { tags: object }[]).at(-1)!.tags, { human_need: "AFK" });
+  // Planning é fase de decisão: o override da Issue força HITL, derivado pela regra.
+  const planning = await request(url, "POST", `/api/issues/${id}/tickets`, { ...ticketInput, type: "Planning" });
+  assert.equal(planning.status, 201);
+  assert.equal((planning.body.tickets as { tags: { human_need: string } }[]).at(-1)!.tags.human_need, "HITL");
+}));
+
+test("API rejeita criar Ticket em Issue sem risk/complexity (mesmo guard da CLI)", async () => withWeb(async (url) => {
+  const id = (await request(url, "POST", "/api/issues", bare)).body.id as string;
+  await request(url, "POST", `/api/issues/${id}/claim`, {});
+  const result = await request(url, "POST", `/api/issues/${id}/tickets`, ticketInput);
+  assert.equal(result.status, 400);
+  assert.match(result.body.error as string, /risk e complexity/);
 }));
 
 test("API rejeita criar Ticket em Issue não reivindicada", async () => withWeb(async (url) => {
@@ -198,20 +212,28 @@ test("API grava tags em Issue e Ticket e rejeita valor inválido", async () => w
   const tid = ((await request(url, "POST", `/api/issues/${id}/tickets`, ticketInput)).body.tickets as { id: string }[])[0].id;
   const ticketTagged = await request(url, "POST", `/api/issues/${id}/tickets/${tid}/tags`, { risk: "ALTO" });
   assert.equal(ticketTagged.status, 200);
-  assert.deepEqual((ticketTagged.body.tickets as { id: string; tags: object }[]).find((t) => t.id === tid)!.tags, { risk: "ALTO" });
+  // human_need não vem do cliente: é derivado da Issue e convive com as tags graváveis do Ticket.
+  assert.deepEqual((ticketTagged.body.tickets as { id: string; tags: object }[]).find((t) => t.id === tid)!.tags, { human_need: "AFK", risk: "ALTO" });
+  const derived = await request(url, "POST", `/api/issues/${id}/tickets/${tid}/tags`, { human_need: "HITL" });
+  assert.equal(derived.status, 400);
+  assert.match(derived.body.error as string, /derivado/);
   assert.equal((await request(url, "POST", `/api/issues/${id}/tags`, { complexity: "GIGANTE" })).status, 400);
+  // O painel web é o teclado do humano: rebaixar segue permitido por ali (a IA é barrada na CLI).
+  const rebaixado = await request(url, "POST", `/api/issues/${id}/tags`, { complexity: "BAIXA", risk: "BAIXO" });
+  assert.equal(rebaixado.status, 200);
+  assert.deepEqual(rebaixado.body.tags, { complexity: "BAIXA", human_need: "AFK", risk: "BAIXO" });
 }));
 
 test("API cria Issue com tags no create, sem tags segue funcionando e rejeita valor inválido", async () => withWeb(async (url) => {
-  const withTags = await request(url, "POST", "/api/issues", { ...input, complexity: "ALTA", human_need: "AFK" });
+  const withTags = await request(url, "POST", "/api/issues", { ...bare, complexity: "ALTA", human_need: "AFK" });
   assert.equal(withTags.status, 201);
   assert.deepEqual(withTags.body.tags, { complexity: "ALTA", human_need: "AFK" });
   const persisted = await request(url, "GET", `/api/issues/${withTags.body.id}`);
   assert.deepEqual(persisted.body.tags, { complexity: "ALTA", human_need: "AFK" });
-  const noTags = await request(url, "POST", "/api/issues", input);
+  const noTags = await request(url, "POST", "/api/issues", bare);
   assert.equal(noTags.status, 201);
-  assert.deepEqual(noTags.body.tags, {});
-  assert.equal((await request(url, "POST", "/api/issues", { ...input, risk: "GIGANTE" })).status, 400);
+  assert.deepEqual(noTags.body.tags, {}); // Issue nasce sem classificação; o guard só morde ao criar Ticket
+  assert.equal((await request(url, "POST", "/api/issues", { ...bare, risk: "GIGANTE" })).status, 400);
 }));
 
 function ticketOf(issue: Record<string, unknown>, tid: string): { status: string } {
@@ -224,10 +246,10 @@ async function createAwaiting(url: string, root: string): Promise<string> {
   const tickets = (await request(url, "POST", `/api/issues/${id}/tickets`, ticketInput)).body.tickets as { id: string }[];
   const tid = tickets[0].id;
   claimTicket({ issueId: id, ticketId: tid, actor: "pi" }, root);
-  statusTicket({ issueId: id, ticketId: tid, actor: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido", last: true }, root);
+  await statusTicket({ issueId: id, ticketId: tid, actor: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido", last: true }, root);
   const conf = ((await request(url, "GET", `/api/issues/${id}`)).body.tickets as { id: string; type: string }[]).find((ticket) => ticket.type === "Confirmation")!;
   claimTicket({ issueId: id, ticketId: conf.id, actor: "pi" }, root);
-  statusTicket({ issueId: id, ticketId: conf.id, actor: "pi", status: "CLOSED", comment: "verificado", closed_reason: "concluido" }, root); // avança a Issue para AWAITING
+  await statusTicket({ issueId: id, ticketId: conf.id, actor: "pi", status: "CLOSED", comment: "verificado", closed_reason: "concluido" }, root); // avança a Issue para AWAITING
   return id;
 }
 

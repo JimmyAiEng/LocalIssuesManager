@@ -21,7 +21,7 @@ test("módulos expõem somente a API pública definida (FF-06)", () => {
     "comment", "commentTicket", "decide", "decideTicket", "dependenciesMet", "phaseBlocker", "readyTickets", "reset", "setWorktree", "tag", "tagTicket", "ticket", "toJSON", "transitionTicket",
   ]);
   assert.deepEqual(publicMethods(Queue.prototype), [
-    "findAttachment", "list", "load", "loadRequired", "oldestOpen", "oldestOpenTicket", "purgeClosed", "readArtifact", "readRequirements", "save", "writeArtifact", "writeAttachment", "writeRequirements",
+    "findAttachment", "list", "listDesign", "load", "loadRequired", "oldestOpen", "oldestOpenTicket", "purgeClosed", "readArtifact", "readDesign", "readRequirements", "save", "writeArtifact", "writeAttachment", "writeDesign", "writeRequirements",
   ]);
 });
 

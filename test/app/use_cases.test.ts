@@ -4,22 +4,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
-  claimIssue, createIssue, decideIssue, getIssue, listIssues, nextIssue, resetClaim, setArtifact, statusIssue,
+  claimIssue, createIssue, decideIssue, getIssue, listIssues, nextIssue, resetClaim, setArtifact, statusIssue, updateTags,
 } from "../../src/app/issue_use_cases.js";
 import { claimTicket, createTicket, decideTicket, getTicket, listTickets, statusTicket } from "../../src/app/ticket_use_cases.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
-const body = { project: "app", type: "Feat" as const, problem: "p", actor: "human" as const };
+// Issue classificada por padrão: o guard de addTicket exige risk+complexity para derivar a autonomia.
+// Feat·BAIXO·BAIXA → só Planning deriva HITL; Implement (o ticketBody abaixo) deriva AFK.
+const body = { project: "app", type: "Feat" as const, problem: "p", actor: "human" as const,
+  complexity: "BAIXA", risk: "BAIXO" };
 const ticketBody = { type: "Implement", objective: "o", task: "t", acceptance_criteria: "c" };
 const root = () => mkdtempSync(join(tmpdir(), "issues-test-"));
 
 const addTicket = (dir: string, issueId: string, actor = "pi") =>
   createTicket({ ...ticketBody, issueId, actor }, dir).tickets.at(-1)!.id;
 
-const closeConfirmation = (dir: string, issueId: string, actor = "pi") => {
+const closeConfirmation = async (dir: string, issueId: string, actor = "pi") => {
   const conf = getIssue(issueId, dir).tickets.find((t) => t.type === "Confirmation")!;
   claimTicket({ issueId, ticketId: conf.id, actor }, dir);
-  statusTicket({ issueId, ticketId: conf.id, actor,
+  await statusTicket({ issueId, ticketId: conf.id, actor,
     status: "CLOSED", comment: "verificado", closed_reason: "concluido" }, dir);
 };
 
@@ -86,15 +89,15 @@ test("next sem --id mantém FIFO pela Issue mais antiga", () => {
   assert.equal(nextIssue({ agent: "pi", project: "app" }, dir)?.issue.id, older.id);
 });
 
-test("ciclo completo Issue+Ticket até CLOSED via decisão humana", () => {
+test("ciclo completo Issue+Ticket até CLOSED via decisão humana", async () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "life" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
   const ticketId = addTicket(dir, issue.id);
   nextIssue({ agent: "pi", project: "app" }, dir);
-  statusTicket({ issueId: issue.id, ticketId, actor: "pi",
+  await statusTicket({ issueId: issue.id, ticketId, actor: "pi",
     status: "CLOSED", comment: "feito", closed_reason: "concluido", last: true }, dir);
-  closeConfirmation(dir, issue.id); // avança a Issue para AWAITING
+  await closeConfirmation(dir, issue.id); // avança a Issue para AWAITING
   decideIssue({ id: issue.id, human: true, status: "CLOSED", comment: "ok", closed_reason: "concluido" }, dir);
   const full = getIssue(issue.id, dir);
   assert.equal(full.status, "CLOSED");
@@ -123,13 +126,13 @@ test("CreateTicket recusa o tipo Confirmation (gerado pelo sistema)", () => {
   );
 });
 
-test("ClaimTicket humano, decisão humana e get/list de Tickets", () => {
+test("ClaimTicket humano, decisão humana e get/list de Tickets", async () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "tickets" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
   const ticketId = addTicket(dir, issue.id);
   claimTicket({ issueId: issue.id, ticketId, actor: "human" }, dir);
-  statusTicket({ issueId: issue.id, ticketId, actor: "human",
+  await statusTicket({ issueId: issue.id, ticketId, actor: "human",
     status: "AWAITING", comment: "revisar" }, dir);
   const reopened = decideTicket({ issueId: issue.id, ticketId, human: true,
     status: "OPEN", comment: "corrigir" }, dir);
@@ -170,6 +173,28 @@ test("Ticket decide exige --human e get de Ticket inexistente falha", () => {
   );
 });
 
+test("decideIssue rejeita status diferente de OPEN/CLOSED", () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "gate2" }, dir);
+  nextIssue({ agent: "pi", project: "app" }, dir);
+  addTicket(dir, issue.id);
+  assert.throws(
+    () => decideIssue({ id: issue.id, human: true, status: "AWAITING", comment: "x" }, dir),
+    /Invalid decision/,
+  );
+});
+
+test("decideTicket rejeita status diferente de OPEN/CLOSED", () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "tgate" }, dir);
+  nextIssue({ agent: "pi", project: "app" }, dir);
+  const ticketId = addTicket(dir, issue.id);
+  assert.throws(
+    () => decideTicket({ issueId: issue.id, ticketId, human: true, status: "CLAIMED", comment: "x" }, dir),
+    /Invalid decision/,
+  );
+});
+
 test("reset humano limpa o claim da Issue CLAIMED", () => {
   const dir = root();
   const issue = createIssue({ ...body, actor: "pi", title: "reset" }, dir);
@@ -183,7 +208,7 @@ test("reset humano limpa o claim da Issue CLAIMED", () => {
   );
 });
 
-test("devolução para OPEN carrega imagem: reset da Issue, decide-open e reopen do Ticket", () => {
+test("devolução para OPEN carrega imagem: reset da Issue, decide-open e reopen do Ticket", async () => {
   const dir = root();
   const img = () => ({ filename: "shot.png", mediaType: "image/png", bytes: Buffer.from([137, 80, 78, 71, 3]) });
   const issue = createIssue({ ...body, actor: "pi", title: "dev" }, dir);
@@ -197,27 +222,27 @@ test("devolução para OPEN carrega imagem: reset da Issue, decide-open e reopen
   nextIssue({ agent: "pi", project: "app" }, dir); // re-claim para criar Ticket
   const ticketId = addTicket(dir, issue.id);
   claimTicket({ issueId: issue.id, ticketId, actor: "human" }, dir);
-  statusTicket({ issueId: issue.id, ticketId, actor: "human", status: "AWAITING", comment: "revisar" }, dir);
+  await statusTicket({ issueId: issue.id, ticketId, actor: "human", status: "AWAITING", comment: "revisar" }, dir);
   const tDecide = decideTicket({ issueId: issue.id, ticketId, human: true, status: "OPEN", comment: "voltar", attachments: [img()] }, dir);
   const decideEntry = tDecide.tickets.find((t) => t.id === ticketId)!.thread.at(-1)!;
   assert.equal(decideEntry.status, "OPEN");
   assert.equal(decideEntry.attachments?.[0].kind, "image");
 
   claimTicket({ issueId: issue.id, ticketId, actor: "human" }, dir);
-  const tReopen = statusTicket({ issueId: issue.id, ticketId, actor: "human", status: "OPEN", comment: "reabrir", attachments: [img()] }, dir);
+  const tReopen = await statusTicket({ issueId: issue.id, ticketId, actor: "human", status: "OPEN", comment: "reabrir", attachments: [img()] }, dir);
   const reopenEntry = tReopen.tickets.find((t) => t.id === ticketId)!.thread.at(-1)!;
   assert.equal(reopenEntry.status, "OPEN");
   assert.equal(reopenEntry.attachments?.[0].kind, "image");
 });
 
-test("decideIssue AWAITING→OPEN carrega imagem", () => {
+test("decideIssue AWAITING→OPEN carrega imagem", async () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "dec" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
   const ticketId = addTicket(dir, issue.id);
   nextIssue({ agent: "pi", project: "app" }, dir); // claima o Ticket
-  statusTicket({ issueId: issue.id, ticketId, actor: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido", last: true }, dir);
-  closeConfirmation(dir, issue.id); // Issue -> AWAITING
+  await statusTicket({ issueId: issue.id, ticketId, actor: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido", last: true }, dir);
+  await closeConfirmation(dir, issue.id); // Issue -> AWAITING
   const reopened = decideIssue({ id: issue.id, human: true, status: "OPEN", comment: "voltar",
     attachments: [{ filename: "e.png", mediaType: "image/png", bytes: Buffer.from([137, 80, 78, 71, 4]) }] }, dir);
   const entry = reopened.thread.at(-1)!;
@@ -242,7 +267,7 @@ test("summary do quadro traz status_changed_at, tags e resumo mínimo de Tickets
   const ticketId = addTicket(dir, issue.id); // CLAIMED -> ON-GOING
   const [card] = listIssues({ project: "app" }, dir);
   assert.equal(card.status_changed_at, getIssue(issue.id, dir).status_changed_at);
-  assert.deepEqual(card.tags, { complexity: "ALTA" });
+  assert.deepEqual(card.tags, { complexity: "ALTA", risk: "BAIXO" });
   assert.deepEqual(card.tickets, [{ id: ticketId, type: "Implement", status: "OPEN", owner: null }]);
 });
 
@@ -336,4 +361,17 @@ test("erros não persistem mutação parcial", () => {
   const issue = createIssue({ ...body, title: "safe" }, dir);
   assert.throws(() => statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "x" }, dir));
   assert.equal(getIssue(issue.id, dir).status, "OPEN");
+});
+
+// updateTags é exportado: a CLI barra o actor ausente antes (--agent is required), mas o guard
+// da camada de aplicação é o que protege qualquer outro chamador do mesmo buraco.
+test("updateTags exige actor para taggear a Issue, e só o humano rebaixa", () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "tags", complexity: "ALTA", risk: "ALTO" }, dir);
+  assert.throws(() => updateTags({ issueId: issue.id, risk: "BAIXO" }, dir), /exige actor/);
+  assert.throws(() => updateTags({ issueId: issue.id, actor: "pi", risk: "BAIXO" }, dir), /rebaixar risk/);
+  assert.equal(getIssue(issue.id, dir).tags.risk, "ALTO"); // nada persistiu
+  updateTags({ issueId: issue.id, actor: "pi", human_need: "HITL" }, dir); // escalar: livre
+  updateTags({ issueId: issue.id, actor: "human", risk: "BAIXO" }, dir); // rebaixar: só humano
+  assert.equal(getIssue(issue.id, dir).tags.risk, "BAIXO");
 });

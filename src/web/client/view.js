@@ -120,6 +120,12 @@ export function renderLoading() { root().innerHTML = `<p class="loading" aria-li
 export function renderError(error) { root().innerHTML = `<main class="error" role="alert"><h1>Não foi possível ler as Issues</h1><p>${escapeHtml(error.message)}</p><button type="button" id="refresh">Tentar novamente</button></main>`; }
 export function root() { return document.querySelector("#app"); }
 
+// Atributos de um <details> cuja expansão persiste no state: a chave identifica o <details>
+// entre renders (handleToggle grava por ela) e `forced` deixa quem já força a abertura seguir forçando.
+export function detailsAttrs(key, forced = false) {
+  return ` data-details-id="${key}"${forced || state.expanded.has(key) ? " open" : ""}`;
+}
+
 export const tagLabels = { complexity: "Complexidade", human_need: "Humano", risk: "Risco" };
 export function tagsMarkup(tags) {
   const entries = Object.entries(tags ?? {});
@@ -129,12 +135,16 @@ export function tagsMarkup(tags) {
 }
 
 // Partials compartilhados entre a Issue e seus Tickets (detail_view + ticket_view).
+// A autonomia do Ticket é derivada da Issue e tagTicket rejeita o update: no escopo ticket o
+// select de human_need não é oferecido — seria um controle que o domínio recusa por definição.
 export function tagEditor(scope, tags, ticketId, status, open = false) {
   if (status === "CLOSED") return "";
   const ticketAttr = ticketId ? ` data-ticket-id="${ticketId}"` : "";
-  return `<details class="tag-editor"${open ? " open" : ""}><summary>Classificar ${scope === "issue" ? "Issue" : "Ticket"}</summary><form class="form tag-form" data-tag-scope="${scope}"${ticketAttr}>
+  const humanNeed = scope === "issue"
+    ? selectInput("human_need", tagLabels.human_need, TAG_VALUES.human_need, tags?.human_need ?? "", "Não alterar") : "";
+  return `<details class="tag-editor"${detailsAttrs(`tags:${ticketId ?? "issue"}`, open)}><summary>Classificar ${scope === "issue" ? "Issue" : "Ticket"}</summary><form class="form tag-form" data-tag-scope="${scope}"${ticketAttr}>
     ${selectInput("complexity", tagLabels.complexity, TAG_VALUES.complexity, tags?.complexity ?? "", "Não alterar")}
-    ${selectInput("human_need", tagLabels.human_need, TAG_VALUES.human_need, tags?.human_need ?? "", "Não alterar")}
+    ${humanNeed}
     ${selectInput("risk", tagLabels.risk, TAG_VALUES.risk, tags?.risk ?? "", "Não alterar")}
     <button ${state.busy ? "disabled" : ""}>Salvar classificação</button>
   </form></details>`;

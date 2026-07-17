@@ -5,10 +5,6 @@ description: >-
   agregado. Use quando o Ticket claimado tem type=Confirmation.
 ---
 
-# confirmation-phase (camada 1)
-
-Acionada quando o Ticket claimado tem **type=`Confirmation`**.
-
 Este Ticket é **gerado pelo sistema** ao fechar o último Ticket de uma Issue `ON-GOING`.
 Ele reabre a Issue na fila (`next`) para que alguém decida se o trabalho realmente terminou — sem ele, uma Issue `ON-GOING` sem Tickets `OPEN` ficaria presa.
 

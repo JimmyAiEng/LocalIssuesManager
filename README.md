@@ -116,6 +116,21 @@ issues list --project app --status OPEN --pretty
 
 ---
 
+## Referência de Comandos — Design (pacote por Ticket)
+
+| Comando | Função | Obrigatório |
+|---------|--------|-------------|
+| **design doc** | Gravar o `design.md` do Ticket de Design | `--issue` `--ticket` `--file` |
+| **design add** | Adicionar diagrama PlantUML (sintaxe validada; regravar substitui) | `--issue` `--ticket` `--kind` `--file` |
+| **get DESIGN** | Pacote agregado da Issue + veredito do gate | `--id <issueId>` |
+
+`--kind`: `class` · `component` · `package` · `activity` · `state` · `deployment`.
+
+Gate: o Ticket de Design só vai a `AWAITING` com `design.md` não vazio + ≥1 diagrama válido.
+Falhas saem no stderr como JSON `{"errors":[…]}` com exit 1, acumulando todas as pendências.
+
+---
+
 ## Referência de Comandos — Infraestrutura
 
 **Worktree** (sandbox git por Issue):

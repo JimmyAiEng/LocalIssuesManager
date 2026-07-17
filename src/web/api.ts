@@ -9,6 +9,7 @@ import {
   claimTicket as claimTicketCase, createTicket as createTicketCase,
   decideTicket as decideTicketCase, statusTicket as statusTicketCase,
 } from "../app/ticket_use_cases.js";
+import { DesignGateError } from "../domain/design_gate.js";
 import { ConflictError, DomainError, NotFoundError } from "../domain/domain_error.js";
 import { Queue } from "../domain/queue_repository.js";
 
@@ -84,7 +85,7 @@ function createTicket(response: ServerResponse, id: string, body: Body, root?: s
   const issue = createTicketCase({ issueId: id, type: text(body, "type"),
     objective: text(body, "objective"), task: text(body, "task"), acceptance_criteria: text(body, "acceptance_criteria"),
     artifacts: optionalText(body, "artifacts"), references: optionalText(body, "references"),
-    human_need: optionalText(body, "human_need"), actor: "human", attachments: decodeAttachments(body) }, root);
+    actor: "human", attachments: decodeAttachments(body) }, root);
   respond(response, 201, issue.toJSON());
 }
 
@@ -92,7 +93,7 @@ function claimIssue(response: ServerResponse, id: string, root?: string): void {
   respond(response, 200, claimIssueCase({ id }, root).toJSON());
 }
 
-function ticketAction(response: ServerResponse, route: string[], body: Body, root?: string): void {
+function ticketAction(response: ServerResponse, route: string[], body: Body, root?: string): void | Promise<void> {
   if (route[3] === "claim") return claimTicket(response, route[0], route[2], root);
   if (route[3] === "status") return statusTicket(response, route[0], route[2], body, root);
   if (route[3] === "decision") return decideTicket(response, route[0], route[2], body, root);
@@ -102,7 +103,8 @@ function ticketAction(response: ServerResponse, route: string[], body: Body, roo
 }
 
 function tag(response: ServerResponse, id: string, ticketId: string | undefined, body: Body, root?: string): void {
-  const issue = updateTags({ issueId: id, ticketId,
+  // actor "human" como todas as mutações desta API: o painel web é o teclado do humano.
+  const issue = updateTags({ issueId: id, ticketId, actor: "human",
     complexity: optionalText(body, "complexity"), human_need: optionalText(body, "human_need"), risk: optionalText(body, "risk") }, root);
   respond(response, 200, issue.toJSON());
 }
@@ -140,8 +142,8 @@ function claimTicket(response: ServerResponse, id: string, tid: string, root?: s
   respond(response, 200, issue.toJSON());
 }
 
-function statusTicket(response: ServerResponse, id: string, tid: string, body: Body, root?: string): void {
-  const issue = statusTicketCase({ issueId: id, ticketId: tid, actor: "human",
+async function statusTicket(response: ServerResponse, id: string, tid: string, body: Body, root?: string): Promise<void> {
+  const issue = await statusTicketCase({ issueId: id, ticketId: tid, actor: "human",
     status: text(body, "status"), comment: text(body, "comment"), closed_reason: optionalText(body, "closed_reason"),
     attachments: decodeAttachments(body) }, root);
   respond(response, 200, issue.toJSON());
@@ -212,6 +214,8 @@ function respond(response: ServerResponse, status: number, value: object | objec
 function respondError(response: ServerResponse, error: unknown): void {
   const message = error instanceof Error ? error.message : "Unexpected error";
   const status = errorStatus(error);
+  // DesignGateError (DomainError → 400) mantém o payload estruturado do gate no corpo.
+  if (error instanceof DesignGateError) return respond(response, status, { error: message, errors: error.errors });
   respond(response, status, { error: status === 500 ? "Internal server error" : message });
 }
 

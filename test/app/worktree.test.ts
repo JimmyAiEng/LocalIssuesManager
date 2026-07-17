@@ -33,3 +33,23 @@ test("worktree add cria a worktree e grava o path; remove limpa", () => {
   // persistido em disco
   assert.equal(getIssue(issue.id, root).worktree, null);
 });
+
+test("removeWorktree propaga erro claro quando o git falha (worktree já removida por fora)", () => {
+  const repo = mkdtempSync(join(tmpdir(), "wt-repo-fail-"));
+  const root = mkdtempSync(join(tmpdir(), "wt-store-fail-"));
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
+  git("init", "-b", "main");
+  git("config", "user.email", "t@t");
+  git("config", "user.name", "t");
+  git("commit", "--allow-empty", "-m", "init");
+
+  const issue = createIssue({ title: "wt-fail", project: "app", type: "Feat", problem: "p", actor: "human" }, root);
+  const added = addWorktree({ issueId: issue.id, cwd: repo }, root);
+  // remove a worktree por fora (git), deixando a Issue com um worktree.path que o git não reconhece mais
+  execFileSync("git", ["worktree", "remove", added.worktree!.path, "--force"], { cwd: repo });
+
+  assert.throws(
+    () => removeWorktree({ issueId: issue.id, cwd: repo }, root),
+    (error: unknown) => error instanceof Error && /git worktree remove .* falhou:/.test(error.message),
+  );
+});

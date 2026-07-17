@@ -4,6 +4,10 @@ export const state = {
   ticketPanel: null, ticketDraft: emptyTicketDraft(), showTicketForm: false,
   commentPanel: null, commentDraft: emptyCommentDraft(),
   confirmClose: false, threadExpanded: false,
+  // Chaves dos <details> abertos (data-details-id). Fora do DOM porque renderDetail reescreve
+  // innerHTML inteiro; sem isso a expansão morre a cada re-render. Não é estado de ação:
+  // clearActionState não a limpa — só a troca de Issue (loadDetail), cujas chaves são de outra.
+  expanded: new Set(),
   feedback: null, errors: {}, busy: false,
 };
 
@@ -11,6 +15,6 @@ export function emptyFilters() { return { title: "", project: "", type: "", owne
 export function loadFilters() { return { ...emptyFilters(), ...JSON.parse(sessionStorage.getItem("issues.filters") ?? "{}") }; }
 export function saveFilters() { sessionStorage.setItem("issues.filters", JSON.stringify(state.filters)); }
 export function emptyDraft() { return { title: "", project: "", type: "", problem: "", artifacts: "", acceptance_criteria: "", comment: "", closed_reason: "", complexity: "", human_need: "", risk: "" }; }
-export function emptyTicketDraft() { return { type: "", objective: "", task: "", acceptance_criteria: "", artifacts: "", references: "", human_need: "" }; }
+export function emptyTicketDraft() { return { type: "", objective: "", task: "", acceptance_criteria: "", artifacts: "", references: "" }; }
 export function emptyCommentDraft() { return { comment: "" }; }
 export function clearActionState() { state.panel = null; state.ticketPanel = null; state.showTicketForm = false; state.commentPanel = null; state.commentDraft = emptyCommentDraft(); state.confirmClose = false; state.errors = {}; state.feedback = null; state.busy = false; }

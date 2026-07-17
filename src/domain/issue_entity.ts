@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { AttachmentData } from "./attachment_entity.js";
 import { DomainError } from "./domain_error.js";
-import { assertTicketAutonomy, Ticket, type CreateTicket, type TicketData } from "./ticket_entity.js";
-import { applyTags, assertDecision, required, threadEntry, TICKET_TYPES, type Actor, type AgentId, type ClosedReason, type Decision, type HumanNeed, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type TicketType, type Thread, type Worktree } from "./value_objects.js";
+import { requiredHumanNeed, Ticket, type CreateTicket, type TicketData } from "./ticket_entity.js";
+import { applyTags, assertDecision, assertNoDowngrade, required, threadEntry, TICKET_TYPES, type Actor, type AgentId, type ClosedReason, type Decision, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type TicketType, type Thread, type Worktree } from "./value_objects.js";
 
 export type Phase = { status: IssueStatus; timestamp: string };
 export type CreateIssue = {
@@ -66,16 +66,16 @@ export class Issue implements IssueData {
       throw new DomainError(`Expected CLAIMED or ON-GOING, got ${this.status}`);
     }
     if (ticket.issue_id !== this.id) throw new DomainError("Ticket belongs to another Issue");
-    assertTicketAutonomy(this.tags.human_need, ticket.type, ticket.tags.human_need);
+    // A heurística de autonomia precisa de entrada: sem classificação não há como derivar supervisão.
+    if (!this.tags.risk || !this.tags.complexity) throw new DomainError("Issue sem classificação: risk e complexity são obrigatórios para criar Ticket");
     const blocker = this.phaseBlocker(ticket.type);
-    if (blocker) {
-      throw new DomainError(`Ticket de ${ticket.type} bloqueado: ${blocker.type} da fase anterior não está CLOSED`);
-    }
+    if (blocker) throw new DomainError(`Ticket de ${ticket.type} bloqueado: ${blocker.type} da fase anterior não está CLOSED`);
     for (const depId of ticket.depends_on) {
       if (!this.tickets.some((candidate) => candidate.id === depId)) {
         throw new DomainError(`Dependency not found: ${depId}`);
       }
     }
+    this.#deriveAutonomy(ticket); // só após todas as validações: addTicket rejeitado não marca o Ticket
     this.tickets.push(ticket);
     if (this.status === "CLAIMED") this.#changeStatus("ON-GOING", now);
     else this.#bumpRevision();
@@ -99,12 +99,26 @@ export class Issue implements IssueData {
     this.#bumpRevision();
   }
 
-  tag(updates: TagUpdates): void {
+  // Retag nunca é rejeitado por causa de autonomia: informação nova sobre a Issue não deve esbarrar
+  // num Ticket antigo. A autonomia derivada é recomputada para não ficar stale em relação às tags.
+  // A tag da Issue é a entrada da autonomia derivada (requiredHumanNeed lê issue.tags): rebaixá-la
+  // é o agente recuperando a caneta sobre a própria supervisão pela porta dos fundos. Por isso a
+  // mutação tem dono: IA só escala, humano faz nos dois sentidos.
+  tag(updates: TagUpdates, actor: Actor): void {
     if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
-    const tags = applyTags(this.tags, updates);
-    for (const ticket of this.tickets) assertTicketAutonomy(tags.human_need, ticket.type, ticket.tags.human_need);
-    this.tags = tags;
+    const next = applyTags(this.tags, updates); // valida enums antes de julgar severidade
+    if (actor !== "human") assertNoDowngrade(this.tags, next);
+    this.tags = next; // ordem load-bearing: #deriveAutonomy lê this.tags
+    for (const ticket of this.tickets) {
+      if (ticket.status !== "CLOSED") this.#deriveAutonomy(ticket); // CLOSED é imutável: registra a decisão da época
+    }
     this.#bumpRevision();
+  }
+
+  // A autonomia do Ticket é derivada da Issue, nunca declarada: o agregado raiz é a única fonte
+  // autoritativa das tags, e é ele quem estampa. Serve addTicket, tag (recompute) e #confirmWhenDone.
+  #deriveAutonomy(ticket: Ticket): void {
+    ticket.tag({ human_need: requiredHumanNeed(this, ticket.type) });
   }
 
   // Registra a worktree git da Issue; todos os Tickets resolvem para ela lendo issue.worktree.
@@ -121,10 +135,8 @@ export class Issue implements IssueData {
   }
 
   tagTicket(ticketId: string, updates: TagUpdates): void {
-    const ticket = this.ticket(ticketId);
-    const tags = applyTags(ticket.tags, updates);
-    assertTicketAutonomy(this.tags.human_need, ticket.type, tags.human_need);
-    ticket.tag(updates);
+    if (updates.human_need) throw new DomainError("human_need do Ticket é derivado da Issue (type × risk × complexity), não pode ser marcado");
+    this.ticket(ticketId).tag(updates);
     this.#bumpRevision();
   }
 
@@ -217,12 +229,15 @@ export class Issue implements IssueData {
       return;
     }
     if (!closed.last) return; // só a fase final (marcada --last) dispara o Confirmation
-    // Herdar human_need da Issue mantém o Confirmation válido numa Issue HITL (assertTicketAutonomy exige tag em todo Ticket).
-    this.tickets.push(Ticket.create(Issue.#confirmationTicket(this.id, actor, this.tags.human_need), now)); // mesma operação do close: sem #bumpRevision extra
+    // Não passa por addTicket de propósito: Issue legada não classificada precisa conseguir destravar
+    // (a função de autonomia é total e deriva AFK). A tag é derivada, não copiada da Issue.
+    const confirmation = Ticket.create(Issue.#confirmationTicket(this.id, actor), now);
+    this.#deriveAutonomy(confirmation);
+    this.tickets.push(confirmation); // mesma operação do close: sem #bumpRevision extra
   }
 
-  static #confirmationTicket(issueId: string, actor: Actor, human_need?: HumanNeed): CreateTicket {
-    return { issue_id: issueId, type: "Confirmation", actor, human_need,
+  static #confirmationTicket(issueId: string, actor: Actor): CreateTicket {
+    return { issue_id: issueId, type: "Confirmation", actor,
       objective: "Confirmar se a Issue foi resolvida",
       task: "Verifique se o problema da Issue foi resolvido pelos Tickets concluídos. Se sim, mova a Issue para AWAITING; se não, crie os Tickets necessários para concluir o trabalho.",
       acceptance_criteria: "Issue movida para AWAITING com o resumo da verificação, ou novos Tickets cobrindo o trabalho restante." };

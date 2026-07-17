@@ -1,6 +1,6 @@
 export const state = {
   issues: [], filters: loadFilters(), refreshedAt: null, decisionsOpen: false,
-  issue: null, requirements: null, draft: emptyDraft(), panel: null,
+  issue: null, requirements: null, design: null, draft: emptyDraft(), panel: null,
   ticketPanel: null, ticketDraft: emptyTicketDraft(), showTicketForm: false,
   commentPanel: null, commentDraft: emptyCommentDraft(),
   confirmClose: false, threadExpanded: false,

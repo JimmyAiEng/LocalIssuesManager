@@ -16,7 +16,7 @@ export function renderDetail() {
   const owner = issue.owner ? `Owner: ${escapeHtml(issue.owner)}` : "Sem Owner";
   const closed = issue.closed_reason ? `<section class="box"><h2>Motivo de fechamento</h2><p class="preserve">${escapeHtml(issue.closed_reason)}</p></section>` : "";
   const actions = humanActions(issue.status).length ? `<section class="actionbar"><h2>Ações</h2>${actionsPanel(issue)}</section>` : "";
-  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escapeHtml(issue.title)}</h1><p class="meta">Projeto: ${escapeHtml(issue.project)} · Tipo: ${escapeHtml(issue.type)} · ${owner}</p><p class="meta">ID: <code>${escapeHtml(issue.id)}</code> <button type="button" class="copy-id" data-copy-id="${escapeHtml(issue.id)}">Copiar ID</button> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}${tagEditor("issue", issue.tags, null, issue.status)}</header>${detailStepper(issue)}${closed}${mdField("Problema", issue.problem)}${artifactSection(issue)}${mdField("Artefatos", issue.artifacts)}${criteriaField(issue.acceptance_criteria)}${requirementsSection(issue)}${ticketsSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
+  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escapeHtml(issue.title)}</h1><p class="meta">Projeto: ${escapeHtml(issue.project)} · Tipo: ${escapeHtml(issue.type)} · ${owner}</p><p class="meta">ID: <code>${escapeHtml(issue.id)}</code> <button type="button" class="copy-id" data-copy-id="${escapeHtml(issue.id)}">Copiar ID</button> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}${tagEditor("issue", issue.tags, null, issue.status)}</header>${detailStepper(issue)}${closed}${mdField("Problema", issue.problem)}${artifactSection(issue)}${mdField("Artefatos", issue.artifacts)}${criteriaField(issue.acceptance_criteria)}${requirementsSection(issue)}${designSection(issue)}${ticketsSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
 }
 
 // Pipeline Planning→Deploy no topo do detalhe; fase com Ticket AWAITING sinaliza gate pendente (âmbar).
@@ -80,6 +80,47 @@ function requirementsSection(issue) {
   const delivered = issue.tickets?.some((ticket) => ticket.type === "Planning" && ticket.status !== "OPEN");
   if (!delivered || issue.status === "CLOSED") return "";
   return `<section class="box requirements"><h2>Requisitos</h2><p class="warn" role="alert">Nenhum requisito persistido — o Ticket Planning deveria ter entregue Features Gherkin via <code>issues requirements set</code>.</p></section>`;
+}
+
+// Diagramas via <img>: a rota devolve image/svg+xml e <img> não executa script no SVG —
+// injetar o SVG no innerHTML abriria o buraco que escapeHtml fecha no resto do client.
+function designSection(issue) {
+  const tickets = state.design?.tickets ?? [];
+  const delivered = issue.tickets?.filter((ticket) => ticket.type === "Design" && ticket.status !== "OPEN") ?? [];
+  const packages = tickets.filter((entry) => entry.design_md !== null || kindsOf(entry).length);
+  if (!packages.length) {
+    if (!delivered.length || issue.status === "CLOSED") return "";
+    return `<section class="box design"><h2>Design</h2><p class="warn" role="alert">Nenhum design persistido — o Ticket Design deveria ter entregue a spec e os diagramas via <code>issues design doc</code> e <code>issues design add</code>.</p></section>`;
+  }
+  const many = packages.length > 1;
+  return packages.map((entry) => {
+    const kinds = kindsOf(entry);
+    const diagrams = kinds.length
+      ? `<div class="diagrams">${kinds.map((kind) => figure(issue, entry, kind)).join("")}</div>`
+      : `<p class="warn" role="alert">Spec sem diagrama — use <code>issues design add</code>.</p>`;
+    const doc = entry.design_md ? `<div class="md">${renderMarkdown(entry.design_md)}</div>` : "";
+    // Sempre aberto, como as seções irmãs Artefato e Requisitos: o diagrama tem de estar à vista,
+    // é o que a Issue pede. O colapso não persiste entre renders — mesma limitação das irmãs.
+    const label = many ? `Design · Ticket ${escapeHtml(entry.ticketId.slice(0, 8))}` : "Design";
+    return `<details class="box design" open><summary>${label}</summary>${doc}${diagrams}</details>`;
+  }).join("");
+}
+
+// Diagrama inválido no disco não vira <img> (a rota .svg responde 400 e o browser mostra ícone
+// quebrado, sem dizer o porquê): o erro do gate já veio no pacote, então mostra-se o erro.
+// Sem loading="lazy": a seção fica abaixo da dobra e lazy só dispararia o request quando o
+// humano rolasse até lá — aí ele espera o cold start do engine olhando um quadro vazio.
+function figure(issue, entry, kind) {
+  const error = (entry.validation?.errors ?? []).find((item) => item.path === `${kind}.puml`);
+  const line = error?.line ? ` (linha ${error.line})` : "";
+  const body = error
+    ? `<p class="warn" role="alert">${escapeHtml(kind)}.puml inválido${line}: ${escapeHtml(error.message)}</p>`
+    : `<img src="/api/issues/${encodeURIComponent(issue.id)}/design/${encodeURIComponent(entry.ticketId)}/${encodeURIComponent(kind)}.svg" alt="Diagrama ${escapeHtml(kind)} do Design">`;
+  return `<figure>${body}<figcaption>${escapeHtml(kind)}</figcaption></figure>`;
+}
+
+function kindsOf(entry) {
+  return Object.keys(entry.diagrams ?? {}).filter((kind) => entry.diagrams[kind] !== null);
 }
 
 function criteriaField(value) {

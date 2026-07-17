@@ -46,6 +46,19 @@ a { color: var(--accent); }
 .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-3); }
 .box > h2 { margin: 0 0 var(--sp-2); font-size: .95rem; letter-spacing: .01em; color: var(--ink); }
 
+/* ---------- Diagramas do Design ----------
+   O PlantUML desenha traço escuro sobre fundo transparente: num tema dark o diagrama
+   sumiria. A figure dá o fundo claro que o SVG assume. */
+.diagrams { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--sp-3); margin-top: var(--sp-2); }
+.diagrams figure { margin: 0; max-width: 100%; }
+/* max-width, nunca width: o SVG do PlantUML traz tamanho natural (ex.: 92x173) e esticá-lo
+   até a largura do painel ampliaria um diagrama pequeno em várias vezes. Encolhe se não couber. */
+.diagrams img {
+  display: block; max-width: 100%; height: auto; background: #fff;
+  border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-2);
+}
+.diagrams figcaption { margin-top: .4rem; font-family: var(--mono); font-size: .72rem; color: var(--dim); }
+
 /* ---------- Badge/pill de status (RF4) ---------- */
 .badge {
   display: inline-flex; align-items: center; gap: .45rem; font-family: var(--mono);

@@ -13,6 +13,8 @@
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",
   "mutate": ["src/**/*.ts", "!src/**/*.d.ts"],
+  "ignorePatterns_comment": "Os <agente>/skills são symlinks para ./skills (npm run skills:link); o sandbox do Stryker tenta copiá-los como arquivo e quebra com EISDIR.",
+  "ignorePatterns": [".agents/skills", ".claude/skills", ".codex/skills", ".cursor/skills", ".pi/skills"],
   "reporters": ["clear-text", "progress", "html"],
   "htmlReporter": {
     "fileName": "reports/mutation/mutation.html"

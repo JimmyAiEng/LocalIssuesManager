@@ -3,7 +3,7 @@ import { api } from "./http.js";
 import { renderBoard, renderError, renderLoading, renderNewIssue, root } from "./view.js";
 import { renderDetail } from "./detail_view.js";
 import {
-  claimIssue, claimTicket, fetchRequirements, performClose, readForm, refreshIssue,
+  claimIssue, claimTicket, fetchDesign, fetchRequirements, performClose, readForm, refreshIssue,
   submitAction, submitComment, submitCreate, submitCreateTicket, submitTags, submitTicketAction,
 } from "./mutations.js";
 
@@ -33,9 +33,10 @@ async function loadDetail(id) {
   }
   root().innerHTML = `<p class="loading" aria-live="polite">Carregando Issue…</p>`;
   try {
-    const [issue, requirements] = await Promise.all([api(`/api/issues/${id}`), fetchRequirements(id)]);
+    const [issue, requirements, design] = await Promise.all([api(`/api/issues/${id}`), fetchRequirements(id), fetchDesign(id)]);
     state.issue = issue;
     state.requirements = requirements;
+    state.design = design;
     renderDetail();
   } catch (error) { renderError(error); }
 }

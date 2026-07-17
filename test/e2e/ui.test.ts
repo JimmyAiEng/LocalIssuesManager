@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
+import { Queue } from "../../src/domain/queue_repository.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
 // E2E de UI real: servidor HTTP real (startWebServer, caminho dev via tsx) + Chromium headless
@@ -525,6 +526,100 @@ test("UI-11d: mudança só nos Requisitos (Issue idêntica) atravessa o guard e 
       await page.locator(".requirements").waitFor();
       assert.match(await page.locator(".requirements").innerText(), /Requisitos persistidos/);
     });
+});
+
+// Regressão do bug "PlantUML do Design não aparece no Web": prova no browser real que o
+// diagrama entregue pela CLI chega renderizado — <img> que decodifica de fato (naturalWidth>0),
+// e não apenas uma tag presente apontando para imagem quebrada.
+test("UI-12: diagrama PlantUML entregue no Design aparece renderizado no detalhe", async () => {
+  const seeded = { id: "" };
+  await withUI((root) => {
+    const id = claimed(root, { title: "Com design", project: "api", type: "Fix" });
+    const ticketId = JSON.parse(cli(["ticket", "create", "--issue", id, "--type", "Design",
+      "--objective", "Desenhar", "--task", "spec", "--acceptance-criteria", "ok", "--agent", "pi"], root)
+    ).tickets[0].id as string;
+    const doc = join(root, "design.md");
+    writeFileSync(doc, "# Spec do Design\nO parágrafo da spec.");
+    cli(["design", "doc", "--issue", id, "--ticket", ticketId, "--file", doc], root);
+    const puml = join(root, "class.puml");
+    writeFileSync(puml, "@startuml\nclass Pedido\nPedido --> Item\n@enduml");
+    cli(["design", "add", "--issue", id, "--ticket", ticketId, "--kind", "class", "--file", puml], root);
+    seeded.id = id;
+  }, async (page, url) => {
+    await page.setViewportSize({ width: 1280, height: 400 }); // seção de Design abaixo da dobra
+    await page.goto(`${url}/issues/${seeded.id}`);
+    const design = page.locator(".box.design");
+    await design.waitFor();
+    assert.match(await design.innerText(), /Spec do Design/); // design.md renderizado
+    assert.equal(await design.locator("figcaption").innerText(), "class");
+
+    const img = design.locator("img");
+    await img.waitFor();
+    assert.match(await img.getAttribute("src") ?? "", /\/design\/[0-9a-f-]+\/class\.svg$/);
+    // Guard de atributo, não de comportamento, de propósito: numa Issue real a seção de Design
+    // fica longe da dobra e o lazy nunca dispara o request — mas o limiar do Chromium é
+    // generoso e carrega assim mesmo em página curta, então só o atributo pega a regressão.
+    assert.notEqual(await img.getAttribute("loading"), "lazy");
+    // Carrega sem rolagem e decodifica: o <img> só decodifica se a rota devolveu SVG de
+    // verdade — pega tanto JSON servido como image/svg+xml quanto request adiada por lazy.
+    await page.waitForFunction(() => {
+      const node = document.querySelector(".box.design img") as HTMLImageElement | null;
+      return !!node && node.complete && node.naturalWidth > 0;
+    }, undefined, { timeout: 60000 });
+    await assert.doesNotReject(img.evaluate((node: HTMLImageElement) => node.decode()));
+    // Tamanho natural preservado (não esticado até a largura do painel).
+    assert.ok(await img.evaluate((node: HTMLImageElement) => node.clientWidth <= node.naturalWidth + 24));
+  });
+});
+
+// Ausência nunca é silêncio (mesma regra da seção de Requisitos).
+test("UI-12b: Design entregue sem diagrama avisa em vez de omitir a seção", async () => {
+  const seeded = { id: "" };
+  await withUI((root) => {
+    const id = claimed(root, { title: "Design vazio", project: "api", type: "Fix" });
+    const ticketId = JSON.parse(cli(["ticket", "create", "--issue", id, "--type", "Design",
+      "--objective", "Desenhar", "--task", "spec", "--acceptance-criteria", "ok", "--agent", "pi"], root)
+    ).tickets[0].id as string;
+    // Ticket sai de OPEN sem pacote de design: o gate barra AWAITING, então CLOSED direto (AFK).
+    cli(["ticket", "claim", "--issue", id, "--id", ticketId, "--agent", "pi"], root);
+    cli(["ticket", "status", "--issue", id, "--id", ticketId, "--agent", "pi",
+      "--status", "CLOSED", "--reason", "concluido", "--comment", "sem pacote"], root);
+    seeded.id = id;
+  }, async (page, url) => {
+    await page.goto(`${url}/issues/${seeded.id}`);
+    const warn = page.locator(".box.design .warn");
+    await warn.waitFor();
+    assert.match(await warn.innerText(), /Nenhum design persistido/);
+    assert.equal(await page.locator(".diagrams").count(), 0);
+  });
+});
+
+// .puml inválido no disco (edição à mão da fila local, ou entrega corrompida): a rota .svg
+// responde 400 e o <img> viraria ícone quebrado — mudo. O erro do gate já está no pacote:
+// mostrar, nunca silenciar (mesma regra da seção de Requisitos).
+test("UI-12c: diagrama inválido mostra o erro do gate em vez de imagem quebrada", async () => {
+  const seeded = { id: "" };
+  await withUI((root) => {
+    const id = claimed(root, { title: "Design quebrado", project: "api", type: "Fix" });
+    const ticketId = JSON.parse(cli(["ticket", "create", "--issue", id, "--type", "Design",
+      "--objective", "Desenhar", "--task", "spec", "--acceptance-criteria", "ok", "--agent", "pi"], root)
+    ).tickets[0].id as string;
+    const doc = join(root, "design.md");
+    writeFileSync(doc, "# Spec com diagrama quebrado");
+    cli(["design", "doc", "--issue", id, "--ticket", ticketId, "--file", doc], root);
+    // Direto no repositório: `issues design add` valida e recusaria este fonte.
+    new Queue(root).writeDesign("api", ticketId, "class.puml", "@startuml\nisto !! quebrado\n@enduml");
+    seeded.id = id;
+  }, async (page, url) => {
+    await page.goto(`${url}/issues/${seeded.id}`);
+    const design = page.locator(".box.design");
+    await design.waitFor();
+    const warn = design.locator(".warn");
+    await warn.waitFor();
+    assert.match(await warn.innerText(), /class\.puml inválido/);
+    assert.match(await warn.innerText(), /Syntax Error/); // a mensagem real do engine
+    assert.equal(await design.locator("img").count(), 0); // nada de <img> que daria 400
+  });
 });
 
 const gherkinFeature = [

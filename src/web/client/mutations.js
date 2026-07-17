@@ -232,6 +232,11 @@ export async function fetchRequirements(id) {
   try { return await api(`/api/issues/${id}/requirements`); } catch { return null; }
 }
 
+// Pacote de Design (design.md + diagramas). Mesmo contrato de fetchRequirements: falha → null.
+export async function fetchDesign(id) {
+  try { return await api(`/api/issues/${id}/design`); } catch { return null; }
+}
+
 export async function refreshIssue() {
   const draft = { ...state.draft };
   const panel = state.panel;
@@ -240,13 +245,15 @@ export async function refreshIssue() {
   const commentDraft = { ...state.commentDraft };
   try {
     const id = state.issue.id;
-    const [issue, requirements] = await Promise.all([api(`/api/issues/${id}`), fetchRequirements(id)]);
+    const [issue, requirements, design] = await Promise.all([api(`/api/issues/${id}`), fetchRequirements(id), fetchDesign(id)]);
     // Só re-renderiza se o JSON mudou (mesmo contrato de pollBoard): re-render reescreve o
     // innerHTML e levaria junto seleção de texto e rolagem de quem só está lendo.
     if (JSON.stringify(issue) === JSON.stringify(state.issue)
-      && JSON.stringify(requirements) === JSON.stringify(state.requirements)) return;
+      && JSON.stringify(requirements) === JSON.stringify(state.requirements)
+      && JSON.stringify(design) === JSON.stringify(state.design)) return;
     state.issue = issue;
     state.requirements = requirements;
+    state.design = design;
     state.draft = draft;
     state.commentDraft = commentDraft;
     state.commentPanel = commentStillValid(commentPanel) ? commentPanel : null;

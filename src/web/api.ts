@@ -4,12 +4,14 @@ import {
   addComment, claimIssue as claimIssueCase, createIssue, decideIssue, getIssue, type IncomingAttachment,
   listIssues, resetClaim, statusIssue, updateTags,
 } from "../app/issue_use_cases.js";
+import { getDesignPackage } from "../app/design_use_cases.js";
+import { renderSvg, sourceHash } from "../app/plantuml_check.js";
 import { getRequirements } from "../app/requirements_use_cases.js";
 import {
   claimTicket as claimTicketCase, createTicket as createTicketCase,
   decideTicket as decideTicketCase, statusTicket as statusTicketCase,
 } from "../app/ticket_use_cases.js";
-import { DesignGateError } from "../domain/design_gate.js";
+import { DESIGN_KINDS, DesignGateError } from "../domain/design_gate.js";
 import { ConflictError, DomainError, NotFoundError } from "../domain/domain_error.js";
 import { Queue } from "../domain/queue_repository.js";
 
@@ -37,11 +39,7 @@ async function dispatch(request: IncomingMessage, response: ServerResponse, root
     return serveAttachment(response, decodeURIComponent(url.pathname.slice("/api/attachments/".length)), root);
   }
   const route = routeParts(url.pathname);
-  if (request.method === "GET" && route.length === 0) return list(response, url, root);
-  if (request.method === "GET" && route.length === 1) return get(response, route[0], root);
-  if (request.method === "GET" && route.length === 2 && route[1] === "requirements") {
-    return respond(response, 200, getRequirements({ issueId: route[0] }, root));
-  }
+  if (request.method === "GET") return getAction(request, response, url, route, root);
   const body = await readBody(request);
   if (request.method !== "POST") return respond(response, 404, { error: "Not found" });
   if (route.length === 0) return create(response, body, root);
@@ -50,6 +48,23 @@ async function dispatch(request: IncomingMessage, response: ServerResponse, root
   if (route.length === 2 && route[1] === "tickets") return createTicket(response, route[0], body, root);
   if (route.length === 4 && route[1] === "tickets") return ticketAction(response, route, body, root);
   return issueAction(response, route, body, root);
+}
+
+// Rotas de leitura. GET sem match cai no 404 — mesmo desfecho de antes, quando a
+// ausência de match seguia para o ramo POST e batia no "Not found".
+async function getAction(
+  request: IncomingMessage, response: ServerResponse, url: URL, route: string[], root?: string,
+): Promise<void> {
+  if (route.length === 0) return list(response, url, root);
+  if (route.length === 1) return get(response, route[0], root);
+  if (route.length === 2 && route[1] === "requirements") {
+    return respond(response, 200, getRequirements({ issueId: route[0] }, root));
+  }
+  if (route.length === 2 && route[1] === "design") {
+    return respond(response, 200, await getDesignPackage({ issueId: route[0] }, root));
+  }
+  if (route.length === 4 && route[1] === "design") return serveDiagram(request, response, route, root);
+  respond(response, 404, { error: "Not found" });
 }
 
 function issueAction(response: ServerResponse, route: string[], body: Body, root?: string): void {
@@ -126,6 +141,30 @@ function decodeAttachments(body: Body): IncomingAttachment[] {
     }
     return { filename: attachment.filename, mediaType: attachment.mediaType, bytes: Buffer.from(attachment.data, "base64") };
   });
+}
+
+// SVG do diagrama de um Ticket de Design. Servido como recurso próprio para o client
+// embutir via <img> (que não executa script no SVG) em vez de injetar no innerHTML.
+// ETag = hash do fonte: o browser revalida barato e o diagrama não pisca a cada poll.
+async function serveDiagram(request: IncomingMessage, response: ServerResponse, route: string[], root?: string): Promise<void> {
+  const [issueId, , ticketId, file] = route;
+  const kind = file.endsWith(".svg") ? file.slice(0, -".svg".length) : "";
+  if (!(DESIGN_KINDS as readonly string[]).includes(kind)) return respond(response, 404, { error: "Not found" });
+  // ticketId vira segmento de caminho em disco: sem este guard, "../.." escapa da fila
+  // e serve qualquer <kind>.puml da máquina. Mesma checagem de serveAttachment.
+  if (!UUID.test(ticketId)) return respond(response, 404, { error: "Not found" });
+  const queue = new Queue(root);
+  const issue = queue.loadRequired(issueId); // inexistente → 404 de domínio
+  const source = queue.readDesign(issue.project, ticketId, `${kind}.puml`);
+  if (source === null) return respond(response, 404, { error: `Diagrama ${kind}.puml não entregue no Ticket ${ticketId}` });
+  const etag = `"${sourceHash(source)}"`;
+  if (request.headers["if-none-match"] === etag) {
+    response.writeHead(304, { etag, "cache-control": "no-cache" });
+    return void response.end();
+  }
+  const svg = Buffer.from(await renderSvg(source));
+  response.writeHead(200, { "content-type": "image/svg+xml", "content-length": svg.length, etag, "cache-control": "no-cache" });
+  response.end(svg);
 }
 
 function serveAttachment(response: ServerResponse, id: string, root?: string): void {

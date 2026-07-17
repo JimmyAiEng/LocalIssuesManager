@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { addDesignDiagram, setDesignDoc } from "../../src/app/design_use_cases.js";
 import { nextIssue, setArtifact } from "../../src/app/issue_use_cases.js";
 import { setRequirements } from "../../src/app/requirements_use_cases.js";
 import { claimTicket, statusTicket } from "../../src/app/ticket_use_cases.js";
@@ -270,6 +271,72 @@ test("API GET /issues/:id/requirements devolve requisitos persistidos (200) e 40
   assert.equal(ok.status, 200);
   assert.deepEqual(ok.body.features, JSON.parse(VALID_REQ).features);
 }));
+
+// Regressão: o pacote de Design existia no app mas o Web não tinha rota — os diagramas
+// nunca chegavam ao painel. O 404 de Issue inexistente prova que a rota existe (mensagem
+// de domínio) e não é o fallthrough genérico do roteador.
+test("API GET /issues/:id/design devolve o pacote de Design com os diagramas (200)", async () => withWeb(async (url, root) => {
+  const id = await withDesign(url, root);
+  const ok = await request(url, "GET", `/api/issues/${id}/design`);
+  assert.equal(ok.status, 200);
+  const tickets = ok.body.tickets as { design_md: string; diagrams: Record<string, string | null> }[];
+  assert.equal(tickets.length, 1);
+  assert.equal(tickets[0].design_md, "# design web");
+  assert.ok(tickets[0].diagrams.class?.includes("@startuml"));
+
+  const missing = await request(url, "GET", "/api/issues/00000000-0000-4000-8000-000000000000/design");
+  assert.equal(missing.status, 404);
+  assert.notEqual(missing.body.error, "Not found"); // mensagem de domínio, não fallthrough
+}));
+
+test("API GET /issues/:id/design/:tid/:kind.svg renderiza o PlantUML (200 image/svg+xml)", async () => withWeb(async (url, root) => {
+  const id = await withDesign(url, root);
+  const tid = (await request(url, "GET", `/api/issues/${id}/design`)).body.tickets as { ticketId: string }[];
+  const svg = await fetch(`${url}/api/issues/${id}/design/${tid[0].ticketId}/class.svg`);
+  assert.equal(svg.status, 200);
+  assert.equal(svg.headers.get("content-type"), "image/svg+xml");
+  const body = await svg.text();
+  assert.ok(body.startsWith("<svg"), `corpo deve ser SVG cru, veio: ${body.slice(0, 40)}`);
+
+  // ETag: o browser revalida e leva 304 — sem isso o diagrama re-baixa a cada poll do detalhe.
+  const etag = svg.headers.get("etag");
+  assert.ok(etag);
+  const revalidated = await fetch(svg.url, { headers: { "if-none-match": etag } });
+  assert.equal(revalidated.status, 304);
+
+  const absent = await fetch(`${url}/api/issues/${id}/design/${tid[0].ticketId}/state.svg`);
+  assert.equal(absent.status, 404); // kind válido, diagrama não entregue
+  const bad = await fetch(`${url}/api/issues/${id}/design/${tid[0].ticketId}/nope.svg`);
+  assert.equal(bad.status, 404); // kind inexistente
+}));
+
+// O ticketId da URL vira segmento de caminho (design/<ticketId>/<kind>.puml): sem o guard de
+// UUID, "../../../" sai da fila e serve qualquer <kind>.puml da máquina como diagrama.
+test("API não deixa o ticketId da rota .svg escapar da fila por path traversal", async () => withWeb(async (url, root) => {
+  const id = await withDesign(url, root);
+  const secret = join(root, "segredo");
+  mkdirSync(secret, { recursive: true });
+  writeFileSync(join(secret, "class.puml"), "@startuml\nclass SEGREDO_VAZADO\n@enduml", "utf8");
+  const traversal = encodeURIComponent("../../../segredo"); // root/projects/<p>/design/<tid> → root
+  const leaked = await fetch(`${url}/api/issues/${id}/design/${traversal}/class.svg`);
+  assert.equal(leaked.status, 404);
+  assert.doesNotMatch(await leaked.text(), /SEGREDO_VAZADO/);
+}));
+
+// Issue com Ticket Design portando design.md + class.puml entregues.
+async function withDesign(url: string, root: string): Promise<string> {
+  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
+  nextIssue({ agent: "pi", project: "web" }, root);
+  const created = await request(url, "POST", `/api/issues/${id}/tickets`, { ...ticketInput, type: "Design" });
+  const tid = (created.body.tickets as { id: string }[])[0].id;
+  const doc = join(root, "design.md");
+  writeFileSync(doc, "# design web", "utf8");
+  setDesignDoc({ issueId: id, ticketId: tid, file: doc }, root);
+  const puml = join(root, "class.puml");
+  writeFileSync(puml, "@startuml\nclass A\nA --> B\n@enduml", "utf8");
+  await addDesignDiagram({ issueId: id, ticketId: tid, kind: "class", file: puml }, root);
+  return id;
+}
 
 async function withWeb(run: (url: string, root: string) => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "issues-web-"));

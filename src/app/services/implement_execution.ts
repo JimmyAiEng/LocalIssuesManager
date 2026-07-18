@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { DomainError } from "../domain/domain_error.js";
-import type { CheckFailure } from "./project_use_cases.js";
+import { DomainError } from "../../domain/domain_error.js";
+import type { CheckFailure } from "./project_checks.js";
 
 // Commit da worktree para o enforcement de TDD: sha, assunto e arquivos tocados.
 export type Commit = { sha: string; subject: string; files: string[] };

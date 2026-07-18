@@ -3,8 +3,8 @@ import test from "node:test";
 import { MediaArtifact } from "../../src/domain/artifacts/media_artifact.js";
 import { Issue } from "../../src/domain/issue_entity.js";
 import { ACTION_TYPES, type ActionType, type IssueType } from "../../src/domain/value_objects.js";
-import type { IssueView, RelatedView } from "../../src/app/issue_use_cases.js";
-import { composePrompt } from "../../src/app/prompt_composition.js";
+import type { IssueView, RelatedView } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { composePrompt } from "../../src/app/services/use_cases/prompt_composition.js";
 
 function makeView(action: ActionType = "Implement", extra: Partial<IssueView> = {}, type: IssueType = "Feat"): IssueView {
   const issue = Issue.create({ title: "T", project: "demo", type, action,
@@ -15,7 +15,7 @@ function makeView(action: ActionType = "Implement", extra: Partial<IssueView> = 
 test("cabeçalho aponta a action e as seções vêm na ordem correta", () => {
   const text = composePrompt(makeView());
   assert.match(text, /Issue com action `Implement`/);
-  const positions = ["sdlc-workflow", "## Issue", "issues next --prompt"]
+  const positions = ["sdlc-workflow", "## Issue"]
     .map((header) => text.indexOf(header));
   assert.ok(positions.every((pos) => pos >= 0), "todas as seções presentes");
   assert.deepEqual(positions, [...positions].sort((a, b) => a - b), "seções em ordem crescente");
@@ -25,7 +25,8 @@ test("prompt é mínimo: sem catálogo de comandos nem instruções de fase (fic
   const text = composePrompt(makeView());
   assert.doesNotMatch(text, /## Comandos/);
   assert.doesNotMatch(text, /## SDLC/);
-  assert.match(text, /issues next --prompt/); // único comando: o loop
+  // Nem convite para encadear Issues: quem decide se há próxima é o loop externo, não o prompt.
+  assert.doesNotMatch(text, /issues next/);
 });
 
 test("cada ActionType aparece no cabeçalho e na seção Issue", () => {
@@ -84,11 +85,11 @@ test("Issue Implement filha recebe o plano do Design pai no prompt", () => {
     /Plano de implementação/);
 });
 
-test("Issue Design filha recebe sua Feature no prompt", () => {
-  const features = ["Feature: Login\n  Scenario: ok", "Feature: Logout\n  Scenario: ok"];
+test("Issue Design recebe a sua Feature no prompt", () => {
+  const features = ["Feature: Login\n  Scenario: ok"];
   const text = composePrompt(makeView("Design", { features }));
   assert.match(text, /## Feature desta Issue Design/);
-  assert.match(text, /Feature: Login[\s\S]*Feature: Logout/);
+  assert.match(text, /Feature: Login/);
   assert.doesNotMatch(composePrompt(makeView("Design")), /## Feature/);
 });
 

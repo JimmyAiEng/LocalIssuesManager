@@ -4,9 +4,9 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createIssue, getIssue } from "../../src/app/issue_use_cases.js";
-import { createProject } from "../../src/app/project_use_cases.js";
-import { addWorktree, removeWorktree } from "../../src/app/worktree_use_cases.js";
+import { createIssue, getIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
+import { addWorktree, removeWorktree } from "../../src/app/services/use_cases/worktree_use_cases.js";
 
 function gitRepo(prefix: string): string {
   const repo = mkdtempSync(join(tmpdir(), prefix));

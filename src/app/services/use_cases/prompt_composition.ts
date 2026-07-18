@@ -1,7 +1,7 @@
-import { extForMediaType } from "../domain/artifacts/media_artifact.js";
-import type { ImplementationPlan } from "../domain/artifacts/implementation_plan_artifact.js";
-import { projectSegment } from "../domain/queue_repository.js";
-import type { Tags, Thread } from "../domain/value_objects.js";
+import { extForMediaType } from "../../../domain/artifacts/media_artifact.js";
+import type { ImplementationPlan } from "../../../domain/artifacts/implementation_plan_artifact.js";
+import { projectSegment } from "../../../domain/queue_repository.js";
+import type { Tags, Thread } from "../../../domain/value_objects.js";
 import type { IssueView, RelatedView } from "./issue_use_cases.js";
 
 // Prompt mínimo: os padrões de workflow vivem nas skills (sdlc-workflow + skill da action).
@@ -16,7 +16,6 @@ export function composePrompt(issue: IssueView): string {
   if (issue.features?.length) sections.push(featureSection(issue.features));
   if (issue.ancestors.length) sections.push(ancestorSection(issue.ancestors));
   if (issue.related.length) sections.push(relatedSection(issue.related));
-  sections.push("Ao encerrar esta Issue, reivindique a próxima: `issues next --prompt --project <projeto> --agent <agente>`.");
   return sections.join("\n\n");
 }
 

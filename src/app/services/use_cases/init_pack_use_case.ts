@@ -4,7 +4,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AGENT_IDS, type AgentId } from "../domain/value_objects.js";
+import { AGENT_IDS, type AgentId } from "../../../domain/value_objects.js";
 
 const SKILLS_DIRECTORY = join(".agents", "skills");
 /** Relative from `<harnessDir>/skills` → `.agents/skills`. */

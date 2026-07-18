@@ -3,11 +3,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { addDesignDiagram, getDesignPackage, setArchitectureChanged, setDesignDoc } from "../../src/app/design_use_cases.js";
-import { decomposeIssue } from "../../src/app/decomposition_use_cases.js";
-import { createIssue, decideIssue, getIssue, nextIssue, statusIssue } from "../../src/app/issue_use_cases.js";
-import { setPlan } from "../../src/app/plan_use_cases.js";
-import { createProject } from "../../src/app/project_use_cases.js";
+import { addDesignDiagram, getDesignPackage, setArchitectureChanged, setDesignDoc } from "../../src/app/services/use_cases/design_use_cases.js";
+import { decomposeIssue } from "../../src/app/services/use_cases/decomposition_use_cases.js";
+import { createIssue, decideIssue, getIssue, nextIssue, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { setPlan } from "../../src/app/services/use_cases/plan_use_cases.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { DesignGateError } from "../../src/domain/gates/design_gate.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 

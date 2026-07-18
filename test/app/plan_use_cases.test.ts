@@ -3,11 +3,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { addDesignDiagram, setArchitectureChanged, setDesignDoc } from "../../src/app/design_use_cases.js";
-import { decomposeIssue } from "../../src/app/decomposition_use_cases.js";
-import { createIssue, nextIssue, statusIssue } from "../../src/app/issue_use_cases.js";
-import { getPlan, setPlan } from "../../src/app/plan_use_cases.js";
-import { createProject } from "../../src/app/project_use_cases.js";
+import { addDesignDiagram, setArchitectureChanged, setDesignDoc } from "../../src/app/services/use_cases/design_use_cases.js";
+import { decomposeIssue } from "../../src/app/services/use_cases/decomposition_use_cases.js";
+import { createIssue, nextIssue, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { getPlan, setPlan } from "../../src/app/services/use_cases/plan_use_cases.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { DomainError, NotFoundError } from "../../src/domain/domain_error.js";
 
 const VALID_CLASS = "@startuml\nclass A\n@enduml";

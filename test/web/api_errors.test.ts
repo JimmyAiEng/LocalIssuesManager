@@ -4,8 +4,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { nextIssue } from "../../src/app/issue_use_cases.js";
-import { createProject } from "../../src/app/project_use_cases.js";
+import { nextIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
 // Cobertura de rota x erro complementar ao api.test.ts (happy paths): 400/404 e a

@@ -18,7 +18,6 @@ Se encontrar problema grave, crie uma nova Issue (`Design` ou `Implement`) relac
 
 - Cada requisito/critério de aceitação confrontado com o comportamento real do produto (rodar > ler).
 - Integração entre as fatias entregues (o conjunto funciona junto, não só cada fatia isolada).
-- Registre o veredicto e os achados no Artefato: `issues artifact --id <id> --file <qa.md>` (≤300 palavras).
 
 ## Heurísticas
 
@@ -26,8 +25,43 @@ Se encontrar problema grave, crie uma nova Issue (`Design` ou `Implement`) relac
 - Preferir **outro** harness/modelo que o da implementação — recomendado, não obrigatório.
 - **Como** validar (perspectivas, ferramentas, cobertura) é decisão do agente.
 
+## Entrega — o Artefato do veredito
+
+O gate exige este artefato persistido: sem ele a Issue não conclui (nem AFK nem para decisão humana).
+
+```bash
+issues artifact --id <id> --file ./artifact.md
+```
+
+O **nome do arquivo é irrelevante** (o conteúdo é gravado na Issue); use `./artifact.md` e não gaste tempo decidindo.
+Máximo 300 palavras.
+Esqueleto:
+
+```markdown
+# Veredito
+
+APROVADO | APROVADO com ressalva | REPROVADO
+
+## Requisito × comportamento
+
+- Feature "<nome>" / <cenário>: OK — <o que você observou rodando>
+- Feature "<nome>" / <cenário>: FALHA — <o que aconteceu de fato>
+
+## Achados
+
+- <achado + a Issue criada para resolvê-lo, ou "Nenhum">
+
+## Como validei
+
+<comandos rodados e o que foi exercitado de verdade>
+```
+
 ## Encerramento
 
-O gate de conclusão exige o Artefato .md persistido com o resultado da validação requisito×comportamento — sem ele a Issue não conclui (nem AFK nem para decisão humana).
-Grave o veredito antes de concluir: `issues artifact --id <id> --file <qa.md>` (≤300 palavras).
-Depois conclua: `issues status --id <id> --agent <ia> --status AWAITING|CLOSED --comment "<veredicto + achados>" [--reason concluido]`.
+```bash
+issues status --id <id> --agent <ia> --status CLOSED \
+  --comment "<veredicto + achados>" --reason concluido
+```
+
+Use `--status AWAITING` (sem `--reason`) se a Issue é HITL, `risk=ALTO` ou `complexity=ALTA`.
+Concluída a Issue, **encerre a sessão**: não busque outra Issue.

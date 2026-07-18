@@ -3,7 +3,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { initPack, linkPackSkillsForDogfood } from "../../src/app/init_pack_use_case.js";
+import { initPack, linkPackSkillsForDogfood } from "../../src/app/services/use_cases/init_pack_use_case.js";
 
 const target = () => mkdtempSync(join(tmpdir(), "issues-init-"));
 const POINTER =

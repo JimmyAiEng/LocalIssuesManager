@@ -6,7 +6,7 @@ import { ImplementationPlanArtifact } from "../../src/domain/artifacts/implement
 const VALID = {
   objetivo: "Extrair o parser de plano para o domínio",
   passos: ["Criar implementation_plan.ts", "Escrever os testes", "Ligar o gate"],
-  arquivos: ["src/domain/artifacts/implementation_plan_artifact.ts", "src/app/plan_use_cases.ts"],
+  arquivos: ["src/domain/artifacts/implementation_plan_artifact.ts", "src/app/services/use_cases/plan_use_cases.ts"],
   criterio_pronto: "npm test verde e gate de Design exige plano",
 };
 

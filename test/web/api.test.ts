@@ -3,10 +3,10 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { addDesignDiagram, setDesignDoc } from "../../src/app/design_use_cases.js";
-import { nextIssue, setArtifact, statusIssue } from "../../src/app/issue_use_cases.js";
-import { createProject } from "../../src/app/project_use_cases.js";
-import { setRequirements } from "../../src/app/requirements_use_cases.js";
+import { addDesignDiagram, setDesignDoc } from "../../src/app/services/use_cases/design_use_cases.js";
+import { nextIssue, setArtifact, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
+import { setRequirements } from "../../src/app/services/use_cases/requirements_use_cases.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
 const input = { title: "Web issue", project: "web", type: "Fix", action: "QA", problem: "p" };

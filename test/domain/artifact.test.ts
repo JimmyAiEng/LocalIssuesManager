@@ -31,7 +31,7 @@ test("DocumentArtifact aplica limite e cria metadata", () => {
   assert.equal(artifact.created_at, "2026-01-01T00:00:00.000Z");
 });
 
-test("RequirementArtifact representa o PRD como conjunto de Features", () => {
+test("RequirementArtifact representa os Requirements como conjunto de Features", () => {
   assert.deepEqual(RequirementArtifact.validate(JSON.stringify({ features: [feature] })),
     { features: [feature] });
 });

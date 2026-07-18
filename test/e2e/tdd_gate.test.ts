@@ -5,9 +5,9 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createIssue, getIssue, nextIssue, statusIssue } from "../../src/app/issue_use_cases.js";
-import { createProject } from "../../src/app/project_use_cases.js";
-import { addWorktree } from "../../src/app/worktree_use_cases.js";
+import { createIssue, getIssue, nextIssue, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
+import { addWorktree } from "../../src/app/services/use_cases/worktree_use_cases.js";
 
 // Repo git real com um commit inicial; a worktree da Issue forka daqui.
 function gitRepo(): string {

@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { getDesignPackage } from "../app/design_use_cases.js";
+import { getDesignPackage } from "../app/services/use_cases/design_use_cases.js";
 import {
   addComment, claimIssue as claimIssueCase, createIssue, decideIssue, getIssue, type IncomingAttachment,
   listIssues, resetClaim, statusIssue, updateTags,
-} from "../app/issue_use_cases.js";
-import { renderSvg, sourceHash } from "../app/plantuml_check.js";
-import { getRequirements } from "../app/requirements_use_cases.js";
+} from "../app/services/use_cases/issue_use_cases.js";
+import { renderSvg, sourceHash } from "../app/services/uml-validation/plantuml_check.js";
+import { getRequirements } from "../app/services/use_cases/requirements_use_cases.js";
 import { DESIGN_KINDS, DesignGateError } from "../domain/gates/design_gate.js";
 import { ConflictError, DomainError, NotFoundError } from "../domain/domain_error.js";
 import { Queue } from "../domain/queue_repository.js";

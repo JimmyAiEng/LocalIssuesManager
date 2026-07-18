@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkSyntax, renderSvg, sourceHash } from "../../src/app/plantuml_check.js";
+import { checkSyntax, renderSvg, sourceHash } from "../../src/app/services/uml-validation/plantuml_check.js";
 
 const VALID_CLASS = "@startuml\nclass A\nA --> B\n@enduml";
 const INVALID = "@startuml\nthis is !! broken\n@enduml";

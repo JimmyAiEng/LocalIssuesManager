@@ -1,20 +1,20 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
-import { mediaTypeForExt } from "../domain/artifacts/media_artifact.js";
-import { DocumentArtifact } from "../domain/artifacts/document_artifact.js";
-import { DomainError } from "../domain/domain_error.js";
-import type { ImplementationPlan } from "../domain/artifacts/implementation_plan_artifact.js";
-import { Issue, type IssueData, type Phase } from "../domain/issue_entity.js";
-import { Queue } from "../domain/queue_repository.js";
+import { mediaTypeForExt } from "../../../domain/artifacts/media_artifact.js";
+import { DocumentArtifact } from "../../../domain/artifacts/document_artifact.js";
+import { DomainError } from "../../../domain/domain_error.js";
+import type { ImplementationPlan } from "../../../domain/artifacts/implementation_plan_artifact.js";
+import { Issue, type IssueData, type Phase } from "../../../domain/issue_entity.js";
+import { Queue } from "../../../domain/queue_repository.js";
 import {
   type ActionType, type Actor, assertBrief, inverseKind, parseActionType, parseActor, parseAgentId, parseClosedReason,
   parseIssueStatus, parseIssueType, parseRelationKind, parseRole, type RelationKind, type Tags, type TagUpdates,
-} from "../domain/value_objects.js";
-import { type IncomingAttachment, persistableAttachments } from "./attachments.js";
+} from "../../../domain/value_objects.js";
+import { type IncomingAttachment, persistableAttachments } from "../attachments.js";
 import { readPlanForView } from "./plan_use_cases.js";
 import { requireProject } from "./project_use_cases.js";
 import { featureForDesignChild } from "./requirements_use_cases.js";
-import { completeIssue, validateWorkflowDelivery } from "./services/workflows/index.js";
+import { closeByHuman, deliverByAgent } from "../workflows/index.js";
 
 export type CreateInput = {
   title: string; project: string; type: string; action: string; problem: string;
@@ -135,30 +135,9 @@ export async function statusIssue(input: StatusInput, root?: string): Promise<Is
   const issue = queue.loadRequired(input.id);
   if (input.human && input.agent) throw new DomainError("Choose --human or --agent");
   if (input.human) await closeByHuman(queue, issue, input);
-  else await transitionByAgent(queue, issue, input);
+  else await deliverByAgent(queue, issue, input);
   queue.save(issue);
   return issue;
-}
-
-// IA entrega com evidência: AWAITING (decisão humana) ou CLOSED (autonomia AFK). Nas duas
-// saídas o gate da action precisa passar — a entrega esperada da Issue tem que existir.
-async function transitionByAgent(queue: Queue, issue: Issue, input: StatusInput): Promise<void> {
-  const agent = parseAgentId(input.agent ?? "");
-  if (input.status !== "AWAITING" && input.status !== "CLOSED") {
-    throw new DomainError("IA: use status AWAITING (enviar para decisão humana) ou CLOSED com reason");
-  }
-  await completeIssue(queue, issue, input.status, input.comment);
-  const role = input.role ? parseRole(input.role) : undefined; // papel especializado audita a transição
-  if (input.status === "AWAITING") return issue.submit(agent, input.comment, input.now, [], role);
-  if (!input.closed_reason) throw new DomainError("Closed reason is required");
-  issue.closeByAgent(agent, input.comment, parseClosedReason(input.closed_reason), input.now, [], role);
-}
-
-async function closeByHuman(queue: Queue, issue: Issue, input: StatusInput): Promise<void> {
-  if (input.status !== "CLOSED" || !input.closed_reason) throw new DomainError("Human status supports CLOSED with reason");
-  const reason = parseClosedReason(input.closed_reason);
-  if (reason === "concluido") await validateWorkflowDelivery(queue, issue, input.comment);
-  issue.closeByHuman(input.comment, reason, input.now);
 }
 
 export type DecideInput = {

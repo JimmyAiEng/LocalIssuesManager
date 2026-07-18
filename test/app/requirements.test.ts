@@ -3,15 +3,16 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { decomposeIssue } from "../../src/app/decomposition_use_cases.js";
-import { createIssue, nextIssue, statusIssue } from "../../src/app/issue_use_cases.js";
-import { createProject } from "../../src/app/project_use_cases.js";
-import { getPrd, getRequirements, setPrd, setRequirements } from "../../src/app/requirements_use_cases.js";
+import { decomposeIssue } from "../../src/app/services/use_cases/decomposition_use_cases.js";
+import { createIssue, nextIssue, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
+import { getRequirements, setRequirements } from "../../src/app/services/use_cases/requirements_use_cases.js";
 import { DomainError, NotFoundError } from "../../src/domain/domain_error.js";
 
 const body = { project: "app", type: "Feat" as const, action: "Planning", problem: "p", actor: "human" as const };
 const FEATURE = "Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel";
 const VALID = JSON.stringify({ features: [FEATURE] });
+const THREE = JSON.stringify({ features: [FEATURE, FEATURE.replace(/Login/g, "Logout"), FEATURE.replace(/Login/g, "Cadastro")] });
 const INVALID = JSON.stringify({ features: ["Feature: Login\n  Scenario: sem user story\n    Given a"] });
 
 const root = (): string => {
@@ -29,6 +30,7 @@ const planningClaimed = (dir: string): string => {
   nextIssue({ agent: "pi", id: issue.id }, dir);
   return issue.id;
 };
+// Uma filha Design por Feature: o casamento é pelo nome da Feature contido no título da filha.
 const decomposeInto = (dir: string, issueId: string, features: string[]): void => {
   const path = join(dir, `decomp-${issueId}.json`);
   const children = features.map((name) =>
@@ -44,14 +46,6 @@ test("set/get Requirements persiste conjunto Gherkin válido", () => {
   assert.deepEqual(getRequirements({ issueId: issue.id }, dir), saved);
 });
 
-test("PRD e Requirements são aliases do mesmo Artifact", () => {
-  const dir = root();
-  const issue = createIssue({ ...body, title: "t" }, dir);
-  const saved = setPrd({ issueId: issue.id, file: file(dir, VALID) }, dir);
-  assert.deepEqual(getPrd({ issueId: issue.id }, dir), saved);
-  assert.deepEqual(getRequirements({ issueId: issue.id }, dir), saved);
-});
-
 test("RequirementArtifact rejeita conteúdo inválido e action incorreta", () => {
   const dir = root();
   const planning = createIssue({ ...body, title: "t" }, dir);
@@ -61,7 +55,7 @@ test("RequirementArtifact rejeita conteúdo inválido e action incorreta", () =>
   assert.throws(() => setRequirements({ issueId: qa.id, file: file(dir, VALID) }, dir), /não é de Planning/);
 });
 
-test("RequirementArtifact limita o PRD a 5 Features", () => {
+test("RequirementArtifact limita os Requirements a 5 Features", () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "t" }, dir);
   assert.throws(() => setRequirements({ issueId: issue.id,
@@ -78,11 +72,17 @@ test("gate Planning exige RequirementArtifact e uma filha Design por Feature", a
   assert.equal(issue.status, "AWAITING");
 });
 
-test("gate Planning aponta a primeira Feature ainda não decomposta", async () => {
+test("gate Planning aponta a primeira Feature ainda não coberta por filha Design", async () => {
   const dir = root();
   const issueId = planningClaimed(dir);
-  const three = JSON.stringify({ features: [FEATURE, FEATURE.replace(/Login/g, "Logout"), FEATURE.replace(/Login/g, "Cadastro")] });
-  setRequirements({ issueId, file: file(dir, three) }, dir);
+  setRequirements({ issueId, file: file(dir, THREE) }, dir);
   decomposeInto(dir, issueId, ["Login", "Logout"]);
-  await assert.rejects(statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir), /Feature "Cadastro"/);
+  await assert.rejects(statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir), /não fecha sem decompor a Feature "Cadastro"/);
+});
+
+test("gate Planning sem filha Design manda decompor", async () => {
+  const dir = root();
+  const issueId = planningClaimed(dir);
+  setRequirements({ issueId, file: file(dir, VALID) }, dir);
+  await assert.rejects(statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir), /issues decompose/);
 });

@@ -4,7 +4,7 @@ import { existsSync, lstatSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { createProject } from "../../src/app/project_use_cases.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
 // E2E pela superfície humana real (servidor web HTTP) e pela infra (`issues init`, `web`).

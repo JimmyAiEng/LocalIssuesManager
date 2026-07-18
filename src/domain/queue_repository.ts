@@ -99,8 +99,6 @@ export class Queue {
   readRequirements(project: string, issueId: string): string | null {
     return this.artifacts.readText(project, { issueId, type: "requirement" });
   }
-  writePrd(project: string, issueId: string, content: string): void { this.writeRequirements(project, issueId, content); }
-  readPrd(project: string, issueId: string): string | null { return this.readRequirements(project, issueId); }
   writeAttachment(project: string, attachment: MediaArtifactData, bytes: Buffer): void {
     this.artifacts.writeMedia(project, attachment, bytes);
   }

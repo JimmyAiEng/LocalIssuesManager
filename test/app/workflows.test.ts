@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { statusIssue } from "../../src/app/issue_use_cases.js";
+import { statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
 import { completeIssue } from "../../src/app/services/workflows/index.js";
 import { DesignGateError } from "../../src/domain/gates/design_gate.js";
 import { Issue } from "../../src/domain/issue_entity.js";
@@ -54,6 +54,32 @@ test("GatePolicy impede CLOSED com supervisão e permite AWAITING", async () => 
   issue.tag({ risk: "ALTO" }, "human");
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /decisão humana/);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
+});
+
+// Abandono pela IA: sem entrega prevista, o gate da action não se aplica — mas a supervisão
+// humana (HITL/risco ALTO) continua barrando o CLOSED e empurrando a Issue para AWAITING.
+test("abandono da IA pula o gate da action nas duas saídas", async () => {
+  const closed = context("Planning");
+  const issue = await statusIssue({ id: closed.issue.id, agent: "pi", status: "CLOSED",
+    comment: "criada errada, abandonando", closed_reason: "obsoleto" }, closed.root);
+  assert.equal(issue.status, "CLOSED");
+  const hitl = context("Planning");
+  hitl.issue.tag({ human_need: "HITL" }, "human");
+  hitl.queue.save(hitl.issue);
+  const awaiting = await statusIssue({ id: hitl.issue.id, agent: "pi", status: "AWAITING",
+    comment: "criada errada", closed_reason: "errado" }, hitl.root);
+  assert.equal(awaiting.status, "AWAITING");
+});
+
+test("abandono não afrouxa o gate de entrega nem a decisão humana", async () => {
+  const concluded = context("Planning");
+  await assert.rejects(statusIssue({ id: concluded.issue.id, agent: "pi", status: "CLOSED",
+    comment: "feito", closed_reason: "concluido" }, concluded.root), /sem requisitos/);
+  const hitl = context("Planning");
+  hitl.issue.tag({ human_need: "HITL" }, "human");
+  hitl.queue.save(hitl.issue);
+  await assert.rejects(statusIssue({ id: hitl.issue.id, agent: "pi", status: "CLOSED",
+    comment: "abandonando", closed_reason: "obsoleto" }, hitl.root), /decisão humana/);
 });
 
 test("fechamento humano concluido exige entrega; cancelamento preserva override", async () => {

@@ -36,11 +36,17 @@ Docker indisponível com `--container` configurado gera erro explícito na concl
 
 ## Heurísticas
 
-- Fatia grande → feche esta Issue e crie Issues `Implement` de continuação, relacionadas.
+- Fatia grande → crie Issues `Implement` de continuação, relacionadas, e abandone esta (`--reason obsoleto`).
 - Review interno **não** substitui uma Issue `QA` para o conjunto.
 - **Como** implementar (ferramentas, desenho do teste) é decisão do agente.
 
 ## Encerramento
 
-Conclua com a evidência (o que foi implementado, passos, decisões):
-`issues status --id <id> --agent <ia> --status AWAITING|CLOSED --comment "<evidência>" [--reason concluido]`.
+```bash
+issues status --id <id> --agent <ia> --status CLOSED \
+  --comment "<evidência: o que foi implementado, passos, decisões>" --reason concluido
+```
+
+Use `--status AWAITING` (sem `--reason`) se a Issue é HITL, `risk=ALTO` ou `complexity=ALTA`.
+Esta action não tem artefato obrigatório: a evidência vai no `--comment`.
+Concluída a Issue, **encerre a sessão**: não busque outra Issue.

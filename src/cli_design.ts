@@ -1,6 +1,6 @@
 import {
   addDesignDiagram, DesignGateError, getDesignPackage, setArchitectureChanged, setDesignDoc,
-} from "./app/design_use_cases.js";
+} from "./app/services/use_cases/design_use_cases.js";
 
 type Flags = Record<string, string | boolean>;
 

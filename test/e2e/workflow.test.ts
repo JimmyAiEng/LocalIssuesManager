@@ -87,10 +87,10 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> QA -> D
   assert.match(noChildren.stderr, /não fecha sem decompor a Feature/);
 
   const [designArch, designShortcut] = decompose(vars, planning, [
-    { title: "Design Login", type: "Feat", action: "Design", problem: "desenhar auth" },
-    { title: "Design Cadastro", type: "Feat", action: "Design", problem: "desenhar registro" },
+    { title: "Desenho de Login", type: "Feat", action: "Design", problem: "desenhar auth" },
+    { title: "Desenho de Cadastro", type: "Feat", action: "Design", problem: "desenhar registro" },
   ]);
-  // Com as 2 filhas Design (uma por Feature), o Planning fecha AFK.
+  // Com as 2 filhas Design particionando as Features (títulos livres), o Planning fecha AFK.
   assert.equal(closeAgent(vars, planning).status, "CLOSED");
 
   // === DESIGN A (Autenticacao): architecture_changed=true — exige 4 níveis UML + aceite humano ==

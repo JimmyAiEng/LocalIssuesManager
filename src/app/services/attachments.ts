@@ -1,4 +1,4 @@
-import { MediaArtifact } from "../domain/artifacts/media_artifact.js";
+import { MediaArtifact } from "../../domain/artifacts/media_artifact.js";
 
 export type IncomingAttachment = { filename: string; mediaType: string; bytes: Buffer };
 export type PersistableAttachment = { entity: MediaArtifact; bytes: Buffer };

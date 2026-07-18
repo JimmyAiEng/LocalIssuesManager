@@ -1,15 +1,16 @@
-import { initPack, linkPackSkillsForDogfood } from "./app/init_pack_use_case.js";
+import { initPack, linkPackSkillsForDogfood } from "./app/services/use_cases/init_pack_use_case.js";
 import {
   addComment, artifactFromFile, attachmentFromFile, createIssue, decideIssue, getIssue,
   type IncomingAttachment, type IssueView, listIssues, nextIssue, relateIssues, resetClaim,
   setArtifact, statusIssue, updateTags,
-} from "./app/issue_use_cases.js";
-import { decomposeIssue } from "./app/decomposition_use_cases.js";
-import { CHECK_ORDER, createProject, listProjects, type ProjectChecks } from "./app/project_use_cases.js";
-import { getPlan, setPlan } from "./app/plan_use_cases.js";
-import { composePrompt } from "./app/prompt_composition.js";
-import { getPrd, getRequirements, setPrd, setRequirements } from "./app/requirements_use_cases.js";
-import { addWorktree, removeWorktree } from "./app/worktree_use_cases.js";
+} from "./app/services/use_cases/issue_use_cases.js";
+import { decomposeIssue } from "./app/services/use_cases/decomposition_use_cases.js";
+import { createProject, listProjects, type ProjectChecks } from "./app/services/use_cases/project_use_cases.js";
+import { CHECK_ORDER } from "./app/services/project_checks.js";
+import { getPlan, setPlan } from "./app/services/use_cases/plan_use_cases.js";
+import { composePrompt } from "./app/services/use_cases/prompt_composition.js";
+import { getRequirements, setRequirements } from "./app/services/use_cases/requirements_use_cases.js";
+import { addWorktree, removeWorktree } from "./app/services/use_cases/worktree_use_cases.js";
 import { printDesignPackage, reportCliError, runDesign } from "./cli_design.js";
 import { openBrowser, startWebServer } from "./web/server.js";
 
@@ -22,7 +23,6 @@ export function main(argv = process.argv.slice(2)): void | Promise<void> {
     if (command === "project") return void runProject(raw);
     if (command === "worktree") return void runWorktree(raw);
     if (command === "requirements") return void runRequirements(raw);
-    if (command === "prd") return void runPrd(raw);
     if (command === "plan") return void runPlan(raw);
     if (command === "design") return void runDesign(raw);
     if (command === "get" && raw[0] && !raw[0].startsWith("--")) raw.unshift("--target"); // get DESIGN|REQUIREMENTS posicional
@@ -94,16 +94,6 @@ function requirements(sub: string | undefined, options: Options): Result {
   throw new Error("Usage: issues requirements set --id <issueId> --file <req.json>");
 }
 
-function runPrd(raw: string[]): void {
-  const options = parseOptions(raw.slice(1));
-  print(prd(raw[0], options), Boolean(options.pretty));
-}
-
-function prd(sub: string | undefined, options: Options): Result {
-  if (sub === "set") return setPrd({ issueId: value(options, "id"), file: value(options, "file") });
-  throw new Error("Usage: issues prd set --id <issueId> --file <requirements.json> (alias de requirements set)");
-}
-
 function runPlan(raw: string[]): void {
   const options = parseOptions(raw.slice(1));
   print(plan(raw[0], options), Boolean(options.pretty));
@@ -127,7 +117,7 @@ function execute(command: string | undefined, options: Options): Result {
   if (command === "list") return list(options);
   if (command === "artifact") return issueArtifact(options);
   if (command === "init") return init(options);
-  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|relate|decompose|get|list|artifact|requirements|prd|plan|design|project|worktree|web|init> [flags]");
+  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|relate|decompose|get|list|artifact|requirements|plan|design|project|worktree|web|init> [flags]");
 }
 
 function create(options: Options): Result {
@@ -215,7 +205,6 @@ function get(options: Options): Result {
   const id = value(options, "id");
   const target = optional(options, "target");
   if (target === "REQUIREMENTS") return getRequirements({ issueId: id });
-  if (target === "PRD") return getPrd({ issueId: id });
   if (target === "PLAN") return getPlan({ issueId: id });
   return getIssue(id); // IssueView pronta (com artefato e relacionadas)
 }

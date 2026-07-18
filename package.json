@@ -27,7 +27,7 @@
     "prepare": "npm run build",
     "check:fitness": "node --import tsx --test test/architecture/fitness.test.ts",
     "diagrams": "node --import tsx docs/diagrams/render.ts",
-    "skills:link": "node --import tsx -e \"import { linkPackSkillsForDogfood } from './src/app/init_pack_use_case.ts'; for (const line of linkPackSkillsForDogfood()) console.log(line)\""
+    "skills:link": "node --import tsx -e \"import { linkPackSkillsForDogfood } from './src/app/services/use_cases/init_pack_use_case.ts'; for (const line of linkPackSkillsForDogfood()) console.log(line)\""
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",

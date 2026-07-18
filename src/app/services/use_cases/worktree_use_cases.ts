@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
-import { DomainError } from "../domain/domain_error.js";
-import type { Issue } from "../domain/issue_entity.js";
-import { Queue } from "../domain/queue_repository.js";
+import { DomainError } from "../../../domain/domain_error.js";
+import type { Issue } from "../../../domain/issue_entity.js";
+import { Queue } from "../../../domain/queue_repository.js";
 
 export type WorktreeInput = { issueId: string; path?: string; cwd?: string };
 

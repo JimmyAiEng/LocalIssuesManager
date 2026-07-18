@@ -4,8 +4,8 @@ import { existsSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { createIssue } from "../../src/app/issue_use_cases.js";
-import { createProject } from "../../src/app/project_use_cases.js";
+import { createIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { ConflictError } from "../../src/domain/domain_error.js";
 import { MAX_MEDIA_SIZE } from "../../src/domain/artifacts/media_artifact.js";
 import { Queue } from "../../src/domain/queue_repository.js";
@@ -145,6 +145,25 @@ test("falha: Issue Planning não conclui sem requisitos válidos persistidos —
   const { status, stderr } = fail(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "pronto"], root);
   assert.notEqual(status, 0);
   assert.match(stderr, /não pode ser concluída sem requisitos/);
+});
+
+// Contraponto do gate acima: abandonar (reason ≠ concluido) não cobra a entrega que não existirá,
+// senão o agente que criou a Issue errada não teria como se corrigir e a deixaria órfã.
+test("abandono: IA fecha Issue Planning sem requisitos com reason obsoleto — CLI", () => {
+  const root = newRoot();
+  const id = claimedIssueCLI(root, ["--action", "Planning"]);
+  const closed = JSON.parse(run(["status", "--id", id, "--agent", "pi", "--status", "CLOSED",
+    "--reason", "obsoleto", "--comment", "criada errada, abandonando"], root)) as { status: string };
+  assert.equal(closed.status, "CLOSED");
+});
+
+test("falha: abandono com reason fora do enum — CLI", () => {
+  const root = newRoot();
+  const id = claimedIssueCLI(root, ["--action", "Planning"]);
+  const { status, stderr } = fail(["status", "--id", id, "--agent", "pi", "--status", "CLOSED",
+    "--reason", "porque-sim", "--comment", "x"], root);
+  assert.notEqual(status, 0);
+  assert.match(stderr, /Invalid closed reason: porque-sim/);
 });
 
 test("falha: Issue Implement não conclui sem worktree — CLI", () => {

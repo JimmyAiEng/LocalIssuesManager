@@ -6,8 +6,9 @@ import test from "node:test";
 import {
   claimIssue, createIssue, decideIssue, getIssue, listIssues, nextIssue, relateIssues, resetClaim,
   setArtifact, statusIssue, updateTags,
-} from "../../src/app/issue_use_cases.js";
-import { type CommandRunner, createProject, dockerArgv, listProjects, runProjectChecks } from "../../src/app/project_use_cases.js";
+} from "../../src/app/services/use_cases/issue_use_cases.js";
+import { createProject, listProjects } from "../../src/app/services/use_cases/project_use_cases.js";
+import { type CommandRunner, dockerArgv, runProjectChecks } from "../../src/app/services/project_checks.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
 // QA não tem gate de conclusão: os testes genéricos de fluxo usam essa action.

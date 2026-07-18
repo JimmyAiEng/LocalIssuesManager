@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderSvg } from "../../src/app/plantuml_check.js";
+import { renderSvg } from "../../src/app/services/uml-validation/plantuml_check.js";
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const TITLES: Record<string, string> = {

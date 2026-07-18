@@ -3,11 +3,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { decomposeIssue } from "../../src/app/decomposition_use_cases.js";
-import { createIssue, getIssue } from "../../src/app/issue_use_cases.js";
-import { composePrompt } from "../../src/app/prompt_composition.js";
-import { createProject } from "../../src/app/project_use_cases.js";
-import { setRequirements } from "../../src/app/requirements_use_cases.js";
+import { decomposeIssue } from "../../src/app/services/use_cases/decomposition_use_cases.js";
+import { createIssue, getIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { composePrompt } from "../../src/app/services/use_cases/prompt_composition.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
+import { setRequirements } from "../../src/app/services/use_cases/requirements_use_cases.js";
 import { DomainError } from "../../src/domain/domain_error.js";
 
 const root = () => {
@@ -37,7 +37,7 @@ const designIssue = (dir: string): string =>
 const decompose = (dir: string, issueId: string, spec: unknown) =>
   decomposeIssue({ issueId, file: write(dir, `d-${Math.random()}.json`, spec), actor: "pi" }, dir);
 
-test("decompõe Planning em filhas Design com linhagem parent/child recíproca e Feature resolvida", () => {
+test("decompõe Planning em filhas Design com linhagem parent/child recíproca", () => {
   const dir = root();
   const parent = planningWithRequirements(dir);
   const result = decompose(dir, parent, { children: [
@@ -48,9 +48,18 @@ test("decompõe Planning em filhas Design com linhagem parent/child recíproca e
   const child = getIssue(result.children[0], dir);
   assert.deepEqual(child.relates, [{ id: parent, kind: "parent" }]); // filha aponta o pai
   assert.equal(child.action, "Design");
-  assert.ok(child.features?.some((f) => f.includes("Login"))); // Feature resolvida pelo título
+  assert.deepEqual(child.features, [FEATURE]); // a Feature casada pelo nome no título
+  assert.match(composePrompt(child), /## Feature desta Issue Design/);
   const parentView = getIssue(parent, dir);
   assert.deepEqual(parentView.relates.map((r) => r.kind), ["child", "child"]); // recíproca no pai
+});
+
+test("decompose recusa filha Design cujo título não casa nenhuma Feature", () => {
+  const dir = root();
+  const parent = planningWithRequirements(dir);
+  assert.throws(() => decompose(dir, parent, { children: [
+    { title: "Design de Cadastro", type: "Feat", action: "Design", problem: "p" }] }),
+    (e: unknown) => e instanceof DomainError && /não casa nenhuma Feature/.test(e.message) && /Login, Logout/.test(e.message));
 });
 
 test("decompõe Design em filhas Implement carregando o Small Plan (persistido e no prompt)", () => {
@@ -88,14 +97,12 @@ test("só Planning (→Design) e Design (→Implement) decompõem", () => {
     (e: unknown) => e instanceof DomainError && /não decompõe/.test(e.message));
 });
 
-test("Planning exige Requirements; filha Design com título fora das Features é rejeitada", () => {
+test("Planning exige Requirements; filha de Planning exige action=Design", () => {
   const dir = root();
-  const semPrd = createIssue({ title: "p", project: "app", type: "Feat", action: "Planning", problem: "p", actor: "human" }, dir);
-  assert.throws(() => decompose(dir, semPrd.id, { children: [{ title: "Design Login", type: "Feat", action: "Design", problem: "p" }] }),
+  const semRequisitos = createIssue({ title: "p", project: "app", type: "Feat", action: "Planning", problem: "p", actor: "human" }, dir);
+  assert.throws(() => decompose(dir, semRequisitos.id, { children: [{ title: "Design Login", type: "Feat", action: "Design", problem: "p", features: ["Login"] }] }),
     (e: unknown) => e instanceof DomainError && /exige Requirements/.test(e.message));
   const parent = planningWithRequirements(dir);
-  assert.throws(() => decompose(dir, parent, { children: [{ title: "Design Cadastro", type: "Feat", action: "Design", problem: "p" }] }),
-    (e: unknown) => e instanceof DomainError && /não casa nenhuma Feature/.test(e.message));
   assert.throws(() => decompose(dir, parent, { children: [{ title: "Design Login", type: "Feat", action: "Implement", problem: "p" }] }),
     (e: unknown) => e instanceof DomainError && /deve ter action=Design/.test(e.message));
 });

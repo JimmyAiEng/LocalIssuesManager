@@ -76,7 +76,11 @@ O `--repo` aponta o repositório git (base das worktrees); o `--check` é o scri
 | **next** | Claimar a próxima Issue | `--agent` + (`--project` \| `--id`) | `--prompt` |
 | **comment** | Adicionar comentário | `--id` + (`--human` \| `--agent`) | `--comment` `--attach` |
 | **tag** | Tags | `--id` + (`--human` \| `--agent`) | `--complexity` `--human-need` `--risk` |
-| **relate** | Relacionar Issues (linhagem) | `--id` `--relates` | — |
+| **relate** | Relacionar Issues (linhagem) | `--id` `--relates` | `--kind` (`parent` \| `child` \| `see-also`) |
+| **decompose** | Fan-out: criar as filhas | `--id` `--into` + (`--human` \| `--agent`) | — |
+| **requirements set** | Features Gherkin (Planning) | `--id` `--file` | — |
+| **plan set** | Plano de implementação (Design) | `--id` `--file` | — |
+| **design changed** | Decisão de arquitetura (Design) | `--issue` `--value` | — |
 | **status** | Concluir pela IA (com gate) | `--id` `--agent` `--status` `--comment` | `--reason` |
 | **decide** | Decisão humana (AWAITING) | `--id` `--status` `--comment` `--human` | `--reason` |
 | **reset** | Liberar claim (CLAIMED→OPEN) | `--id` `--comment` `--human` | — |
@@ -114,10 +118,13 @@ A IA só conclui (`AWAITING`/`CLOSED`) se a entrega da action existir:
 
 | Action | Gate |
 |--------|------|
-| `Planning` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features |
-| `Design` | `design.md` + ≥1 diagrama PlantUML válido (`issues design doc/add`) |
-| `Implement` | Worktree criada (`issues worktree add`) + `--check` do projeto passando na worktree |
-| `QA` / `Deploy` | Sem validação automatizada por enquanto (evidência na thread) |
+| `Planning` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features + **uma filha `Design` por Feature** (`issues decompose`), com o nome da Feature no título da filha |
+| `Design` | Decisão de arquitetura (`issues design changed`) + plano válido (`issues plan set`) + **≥1 filha `Implement`** (`issues decompose`). Com `architecture_changed=true`: também `design.md` + os 4 níveis em PlantUML válido, e só fecha por decisão humana |
+| `Implement` | Worktree criada (`issues worktree add`) + checks do projeto passando na worktree (+ ordem TDD, se `--test-paths`) |
+| `QA` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
+| `Deploy` | Só `AWAITING`: link http(s) do PR + resultado da análise na thread; fecha via `decide` humano |
+
+Abandono (`--reason obsoleto`, `duplicado` ou `errado`) **pula o gate** da action: a Issue abandonada não tem entrega a cobrar.
 
 Falhas de gate saem com exit 1 e mensagem orientando o que fazer; erros de Design saem como JSON `{"errors":[…]}`.
 A **evidência** (comentário de conclusão) é sempre obrigatória para a IA: relatório curto do que foi feito, passos e decisões.
@@ -153,7 +160,7 @@ issues init --dogfood                          # só no pack source
 humano: project create --name app --repo …        → projeto registrado
 humano: create --action Planning (--human)        → Issue OPEN
 IA:     next --prompt --agent <ia> --project app  → claima e executa a action
-IA:     cria novas Issues relacionadas (Design, Implement, …) conforme explora
+IA:     decompose --into <arquivo.json>           → cria as Issues filhas da próxima action
 IA:     status CLOSED --comment "<evidência>"     → AFK fecha direto (gate da action roda)
 IA:     status AWAITING --comment "<evidência>"   → HITL/risco ALTO/complexidade ALTA
 humano: decide OPEN|CLOSED na web
@@ -163,7 +170,8 @@ Atalhos:
 
 - Claim preso → `reset --human` (só `CLAIMED`)
 - Retrabalho → `decide OPEN` ou nova Issue relacionada
-- Issue grande (limite de 300 palavras estourando) → feche e decomponha em Issues menores relacionadas
+- Issue grande (limite de 300 palavras estourando) → crie Issues menores relacionadas e abandone a original (`--reason obsoleto`)
+- Issue criada errada pela IA → `status --reason errado` (abandono: pula o gate); linhagem esquecida → `relate --kind parent` (só entre Issues não-CLOSED)
 
 ---
 

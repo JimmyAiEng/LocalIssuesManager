@@ -4,195 +4,344 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
-  claimIssue, createIssue, decideIssue, getIssue, listIssues, nextIssue, resetClaim, setArtifact, statusIssue, updateTags,
+  claimIssue, createIssue, decideIssue, getIssue, listIssues, nextIssue, relateIssues, resetClaim,
+  setArtifact, statusIssue, updateTags,
 } from "../../src/app/issue_use_cases.js";
-import { claimTicket, createTicket, decideTicket, getTicket, listTickets, statusTicket } from "../../src/app/ticket_use_cases.js";
+import { type CommandRunner, createProject, dockerArgv, listProjects, runProjectChecks } from "../../src/app/project_use_cases.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
-// Issue classificada por padrão: o guard de addTicket exige risk+complexity para derivar a autonomia.
-// Feat·BAIXO·BAIXA → só Planning deriva HITL; Implement (o ticketBody abaixo) deriva AFK.
-const body = { project: "app", type: "Feat" as const, problem: "p", actor: "human" as const,
-  complexity: "BAIXA", risk: "BAIXO" };
-const ticketBody = { type: "Implement", objective: "o", task: "t", acceptance_criteria: "c" };
-const root = () => mkdtempSync(join(tmpdir(), "issues-test-"));
+// QA não tem gate de conclusão: os testes genéricos de fluxo usam essa action.
+const body = { project: "app", type: "Feat" as const, action: "QA", problem: "p", actor: "human" as const };
+const longText = Array(301).fill("x").join(" ");
 
-const addTicket = (dir: string, issueId: string, actor = "pi") =>
-  createTicket({ ...ticketBody, issueId, actor }, dir).tickets.at(-1)!.id;
-
-const closeConfirmation = async (dir: string, issueId: string, actor = "pi") => {
-  const conf = getIssue(issueId, dir).tickets.find((t) => t.type === "Confirmation")!;
-  claimTicket({ issueId, ticketId: conf.id, actor }, dir);
-  await statusTicket({ issueId, ticketId: conf.id, actor,
-    status: "CLOSED", comment: "verificado", closed_reason: "concluido" }, dir);
+const root = () => {
+  const dir = mkdtempSync(join(tmpdir(), "issues-test-"));
+  createProject({ name: "app", repo: dir }, dir);
+  return dir;
 };
 
-test("next prioriza Ticket de Issue ON-GOING antes de abrir nova Issue", () => {
-  const dir = root();
-  const first = createIssue({ ...body, title: "first", now: new Date("2026-01-01") }, dir);
-  createIssue({ ...body, title: "second", now: new Date("2026-01-02") }, dir);
-  const claimedIssue = nextIssue({ agent: "pi", project: "app" }, dir);
-  assert.equal(claimedIssue?.issue.id, first.id);
-  assert.equal(claimedIssue?.ticket, null);
-  const ticketId = addTicket(dir, first.id);
-  const claimedTicket = nextIssue({ agent: "pi", project: "app" }, dir);
-  assert.equal(claimedTicket?.issue.id, first.id);
-  assert.equal(claimedTicket?.ticket?.id, ticketId);
-  assert.equal(claimedTicket?.ticket?.status, "CLAIMED");
+test("createIssue exige projeto registrado, com orientação de como criar", () => {
+  const dir = mkdtempSync(join(tmpdir(), "issues-test-"));
+  assert.throws(() => createIssue({ ...body, title: "x" }, dir),
+    /Projeto não registrado: app.*issues project create/);
 });
 
-test("next cai para a Issue OPEN mais antiga quando não há Ticket pendente", () => {
+test("project create valida repo existente e list devolve os registrados", () => {
+  const dir = root();
+  assert.throws(() => createProject({ name: "ghost", repo: join(dir, "nope") }, dir), /Repositório não encontrado/);
+  assert.throws(() => createProject({ name: " ", repo: dir }, dir), /name is required/);
+  createProject({ name: "other", repo: dir, check: "true" }, dir);
+  const projects = listProjects(dir).map((project) => project.name).sort();
+  assert.deepEqual(projects, ["app", "other"]);
+  assert.equal(listProjects(dir).find((project) => project.name === "other")?.check, "true");
+});
+
+test("project create persiste container (imagem Docker) só quando informado", () => {
+  const dir = root();
+  createProject({ name: "docked", repo: dir, container: "node:20", check: "true" }, dir);
+  assert.equal(listProjects(dir).find((p) => p.name === "docked")?.container, "node:20");
+  assert.equal(listProjects(dir).find((p) => p.name === "app")?.container, undefined);
+});
+
+// Runner falso: registra as invocações e devolve o resultado programado, sem tocar em Docker real.
+function fakeRunner(result: Partial<ReturnType<CommandRunner>>): { run: CommandRunner; calls: { file: string; args: string[]; shell: boolean }[] } {
+  const calls: { file: string; args: string[]; shell: boolean }[] = [];
+  const run: CommandRunner = (file, args, opts) => {
+    calls.push({ file, args, shell: opts.shell });
+    return { status: 0, stdout: "", stderr: "", ...result };
+  };
+  return { run, calls };
+}
+
+test("dockerArgv monta docker run --rm montando a worktree em /work", () => {
+  assert.deepEqual(dockerArgv("node:20", "/wt", "npm test"),
+    ["run", "--rm", "-v", "/wt:/work", "-w", "/work", "node:20", "sh", "-c", "npm test"]);
+});
+
+test("runProjectChecks com container executa cada check via docker run e passa quando status 0", () => {
+  const { run, calls } = fakeRunner({ status: 0 });
+  const failure = runProjectChecks({ name: "d", repo: "/r", container: "node:20", check: "npm test" }, "/wt", run);
+  assert.equal(failure, null);
+  assert.equal(calls[0].file, "docker");
+  assert.equal(calls[0].shell, false);
+  assert.deepEqual(calls[0].args, dockerArgv("node:20", "/wt", "npm test"));
+});
+
+test("runProjectChecks com container: check reprovado no container é CheckFailure normal", () => {
+  const { run } = fakeRunner({ status: 1, stdout: "boom" });
+  const failure = runProjectChecks({ name: "d", repo: "/r", container: "node:20", check: "npm test" }, "/wt", run);
+  assert.equal(failure?.step, "check");
+  assert.match(failure?.output ?? "", /boom/);
+});
+
+test("runProjectChecks sem container roda no host via shell (comportamento legado)", () => {
+  const { run, calls } = fakeRunner({ status: 0 });
+  runProjectChecks({ name: "d", repo: "/r", check: "npm test" }, "/wt", run);
+  assert.equal(calls[0].file, "npm test");
+  assert.equal(calls[0].shell, true);
+});
+
+test("runProjectChecks com container: Docker ausente (spawn error) é erro explícito, não fallback", () => {
+  const { run } = fakeRunner({ status: null, error: new Error("spawn docker ENOENT") });
+  assert.throws(() => runProjectChecks({ name: "d", repo: "/r", container: "node:20", check: "true" }, "/wt", run),
+    /Docker indispon[ií]vel.*n[aã]o h[aá] fallback/);
+});
+
+test("runProjectChecks com container: saída 125 (docker/daemon) é erro explícito, não CheckFailure", () => {
+  const { run } = fakeRunner({ status: 125, stderr: "Cannot connect to the Docker daemon" });
+  assert.throws(() => runProjectChecks({ name: "d", repo: "/r", container: "node:20", check: "true" }, "/wt", run),
+    /Docker indispon[ií]vel/);
+});
+
+test("next reivindica a Issue OPEN mais antiga do projeto (FIFO)", () => {
   const dir = root();
   const older = createIssue({ ...body, title: "older", now: new Date("2026-01-01") }, dir);
   const newer = createIssue({ ...body, title: "newer", now: new Date("2026-01-02") }, dir);
-  assert.equal(nextIssue({ agent: "pi", project: "app" }, dir)?.issue.id, older.id);
-  assert.equal(nextIssue({ agent: "pi", project: "app" }, dir)?.issue.id, newer.id);
-  assert.equal(nextIssue({ agent: "pi", project: "missing" }, dir), null);
+  const claimed = nextIssue({ agent: "pi", project: "app" }, dir);
+  assert.equal(claimed?.id, older.id);
+  assert.equal(claimed?.status, "CLAIMED");
+  assert.equal(nextIssue({ agent: "pi", project: "app" }, dir)?.id, newer.id);
+  assert.equal(nextIssue({ agent: "pi", project: "app" }, dir), null);
 });
 
-test("next --id reivindica o Ticket pronto de uma Issue ON-GOING específica", () => {
+test("next --id reivindica a Issue específica; inexistente lança NotFound", () => {
   const dir = root();
-  createIssue({ ...body, title: "older", now: new Date("2026-01-01") }, dir); // FIFO pegaria esta
+  createIssue({ ...body, title: "older", now: new Date("2026-01-01") }, dir);
   const target = createIssue({ ...body, title: "target", now: new Date("2026-01-02") }, dir);
-  claimIssue({ id: target.id }, dir); // OPEN -> CLAIMED para poder criar Ticket
-  const ticketId = addTicket(dir, target.id); // CLAIMED -> ON-GOING
   const claimed = nextIssue({ agent: "pi", id: target.id }, dir);
-  assert.equal(claimed?.issue.id, target.id);
-  assert.equal(claimed?.ticket?.id, ticketId);
-  assert.equal(claimed?.ticket?.status, "CLAIMED");
-});
-
-test("next --id reivindica uma Issue OPEN para decomposição (ticket null)", () => {
-  const dir = root();
-  const issue = createIssue({ ...body, title: "decompose" }, dir);
-  const claimed = nextIssue({ agent: "pi", id: issue.id }, dir);
-  assert.equal(claimed?.issue.id, issue.id);
-  assert.equal(claimed?.issue.status, "CLAIMED");
-  assert.equal(claimed?.ticket, null);
-});
-
-test("next --id com id inexistente lança NotFound", () => {
-  const dir = root();
+  assert.equal(claimed?.id, target.id);
+  assert.equal(claimed?.status, "CLAIMED");
   assert.throws(() => nextIssue({ agent: "pi", id: "nope" }, dir), /Issue not found: nope/);
+  assert.throws(() => nextIssue({ agent: "pi" }, dir), /project is required/);
 });
 
-test("next --id sem trabalho reivindicável lança DomainError", () => {
+test("ciclo AFK: IA reivindica, entrega evidência e fecha direto", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "blocked" }, dir);
-  claimIssue({ id: issue.id }, dir); // CLAIMED, ainda sem Ticket pronto e não OPEN
-  assert.throws(() => nextIssue({ agent: "pi", id: issue.id }, dir), /não tem trabalho reivindicável/);
-});
-
-test("next sem --id mantém FIFO pela Issue mais antiga", () => {
-  const dir = root();
-  const older = createIssue({ ...body, title: "older", now: new Date("2026-01-01") }, dir);
-  createIssue({ ...body, title: "newer", now: new Date("2026-01-02") }, dir);
-  assert.equal(nextIssue({ agent: "pi", project: "app" }, dir)?.issue.id, older.id);
-});
-
-test("ciclo completo Issue+Ticket até CLOSED via decisão humana", async () => {
-  const dir = root();
-  const issue = createIssue({ ...body, title: "life" }, dir);
+  const issue = createIssue({ ...body, title: "afk", artifact: "# qa ok" }, dir); // body é QA: satisfaz o gate
   nextIssue({ agent: "pi", project: "app" }, dir);
-  const ticketId = addTicket(dir, issue.id);
+  await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito: passos e decisões", closed_reason: "concluido" }, dir);
+  assert.equal(getIssue(issue.id, dir).status, "CLOSED");
+});
+
+test("ciclo HITL: IA envia para AWAITING e o humano decide", async () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "hitl", human_need: "HITL", artifact: "# qa ok" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
-  await statusTicket({ issueId: issue.id, ticketId, actor: "pi",
-    status: "CLOSED", comment: "feito", closed_reason: "concluido", last: true }, dir);
-  await closeConfirmation(dir, issue.id); // avança a Issue para AWAITING
+  await assert.rejects(
+    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
+    /decisão humana/,
+  );
+  await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "evidência: relatório" }, dir);
+  assert.equal(getIssue(issue.id, dir).status, "AWAITING");
   decideIssue({ id: issue.id, human: true, status: "CLOSED", comment: "ok", closed_reason: "concluido" }, dir);
-  const full = getIssue(issue.id, dir);
-  assert.equal(full.status, "CLOSED");
-  assert.equal(full.tickets[0].status, "CLOSED");
+  assert.equal(getIssue(issue.id, dir).status, "CLOSED");
 });
 
-test("status AWAITING pela IA é rejeitado (avanço é automático ao fechar o Confirmation)", () => {
+test("gate Planning: sem requirements a IA não conclui a Issue", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "gate" }, dir);
+  const issue = createIssue({ ...body, title: "plan", action: "Planning" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
-  addTicket(dir, issue.id);
-  assert.throws(
-    () => statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "x" }, dir),
-    /IA status supports CLOSED with reason/,
+  await assert.rejects(
+    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
+    /sem requisitos.*issues requirements set/,
   );
-  assert.equal(getIssue(issue.id, dir).status, "ON-GOING");
+  assert.equal(getIssue(issue.id, dir).status, "CLAIMED"); // nada foi aplicado
 });
 
-test("CreateTicket recusa o tipo Confirmation (gerado pelo sistema)", () => {
+test("gate Implement: sem worktree a IA não conclui a Issue", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "guard" }, dir);
+  const issue = createIssue({ ...body, title: "impl", action: "Implement" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
-  assert.throws(
-    () => createTicket({ ...ticketBody, type: "Confirmation", issueId: issue.id, actor: "pi" }, dir),
-    /Confirmation Tickets são gerados pelo sistema/,
+  await assert.rejects(
+    statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "pronto" }, dir),
+    /exige worktree.*issues worktree add/,
   );
 });
 
-test("ClaimTicket humano, decisão humana e get/list de Tickets", async () => {
+test("gate Implement: check do projeto roda na worktree e bloqueia quando falha", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "tickets" }, dir);
-  nextIssue({ agent: "pi", project: "app" }, dir);
-  const ticketId = addTicket(dir, issue.id);
-  claimTicket({ issueId: issue.id, ticketId, actor: "human" }, dir);
-  await statusTicket({ issueId: issue.id, ticketId, actor: "human",
-    status: "AWAITING", comment: "revisar" }, dir);
-  const reopened = decideTicket({ issueId: issue.id, ticketId, human: true,
-    status: "OPEN", comment: "corrigir" }, dir);
-  assert.equal(reopened.tickets[0].status, "OPEN");
-  assert.equal(reopened.tickets[0].owner, null);
-  const fetched = getTicket({ issueId: issue.id, ticketId }, dir);
-  assert.equal(fetched.id, ticketId);
-  const listed = listTickets({ issueId: issue.id, type: "Implement", status: "OPEN" }, dir);
-  assert.equal(listed.length, 1);
-  assert.equal(listTickets({ issueId: issue.id, status: "CLOSED" }, dir).length, 0);
-});
-
-test("CreateTicket humano propaga actor, artifacts, references e now", () => {
-  const dir = root();
-  const issue = createIssue({ ...body, title: "props" }, dir);
-  nextIssue({ agent: "pi", project: "app" }, dir);
-  const created = createTicket({ ...ticketBody, issueId: issue.id,
-    actor: "human", artifacts: "src/x.ts", references: "T-1", now: new Date("2026-05-05") }, dir);
-  const ticket = created.tickets.at(-1)!;
-  assert.equal(ticket.thread[0].actor, "human");
-  assert.equal(ticket.artifacts, "src/x.ts");
-  assert.equal(ticket.references, "T-1");
-  assert.equal(ticket.created_at, "2026-05-05T00:00:00.000Z");
-});
-
-test("Ticket decide exige --human e get de Ticket inexistente falha", () => {
-  const dir = root();
-  const issue = createIssue({ ...body, title: "auth" }, dir);
-  nextIssue({ agent: "pi", project: "app" }, dir);
-  const ticketId = addTicket(dir, issue.id);
-  assert.throws(
-    () => decideTicket({ issueId: issue.id, ticketId, human: false, status: "OPEN", comment: "x" }, dir),
-    /Decide requires --human/,
+  createProject({ name: "checked", repo: dir, check: "exit 1" }, dir);
+  const issue = createIssue({ ...body, project: "checked", title: "check", action: "Implement" }, dir);
+  nextIssue({ agent: "pi", project: "checked" }, dir);
+  const queue = new Queue(dir);
+  const withWorktree = queue.loadRequired(issue.id);
+  withWorktree.setWorktree({ path: dir, branch: "issue/x" });
+  queue.save(withWorktree);
+  await assert.rejects(
+    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
+    /Check do projeto falhou \(exit 1\)/,
   );
-  assert.throws(
-    () => getTicket({ issueId: issue.id, ticketId: "nope" }, dir),
-    /Ticket not found: nope/,
+  createProject({ name: "checked", repo: dir, check: "echo ok" }, dir); // upsert: check passa a valer
+  await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir);
+  assert.equal(getIssue(issue.id, dir).status, "CLOSED");
+});
+
+test("gate Implement: checks nomeados param na primeira falha e a mensagem nomeia a etapa (unit)", async () => {
+  const dir = root();
+  // lint passa, unit falha: o gate para em unit, nomeia a etapa e mostra o output dela.
+  createProject({ name: "named", repo: dir,
+    checks: { lint: "echo lint-ok", unit: "echo unit-boom; exit 1", fitness: "exit 1" } }, dir);
+  const issue = createIssue({ ...body, project: "named", title: "impl", action: "Implement" }, dir);
+  nextIssue({ agent: "pi", project: "named" }, dir);
+  const queue = new Queue(dir);
+  const withWorktree = queue.loadRequired(issue.id);
+  withWorktree.setWorktree({ path: dir, branch: "issue/x" });
+  queue.save(withWorktree);
+  await assert.rejects(
+    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
+    (error: Error) => /Check "unit" falhou/.test(error.message) && /unit-boom/.test(error.message),
   );
 });
 
-test("decideIssue rejeita status diferente de OPEN/CLOSED", () => {
+test("gate Implement: falha de mutation orienta reforçar os testes, não o código", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "gate2" }, dir);
-  nextIssue({ agent: "pi", project: "app" }, dir);
-  addTicket(dir, issue.id);
-  assert.throws(
-    () => decideIssue({ id: issue.id, human: true, status: "AWAITING", comment: "x" }, dir),
-    /Invalid decision/,
+  createProject({ name: "mut", repo: dir, checks: { unit: "true", mutation: "echo sobreviveu; exit 1" } }, dir);
+  const issue = createIssue({ ...body, project: "mut", title: "impl", action: "Implement" }, dir);
+  nextIssue({ agent: "pi", project: "mut" }, dir);
+  const queue = new Queue(dir);
+  const withWorktree = queue.loadRequired(issue.id);
+  withWorktree.setWorktree({ path: dir, branch: "issue/x" });
+  queue.save(withWorktree);
+  await assert.rejects(
+    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
+    (error: Error) => /Check "mutation" falhou/.test(error.message) && /Test Coding/.test(error.message) && /testes/.test(error.message),
   );
 });
 
-test("decideTicket rejeita status diferente de OPEN/CLOSED", () => {
+test("gate QA: sem o artefato de validação a IA não conclui a Issue", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "tgate" }, dir);
+  const issue = createIssue({ ...body, title: "qa", action: "QA" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
-  const ticketId = addTicket(dir, issue.id);
-  assert.throws(
-    () => decideTicket({ issueId: issue.id, ticketId, human: true, status: "CLAIMED", comment: "x" }, dir),
-    /Invalid decision/,
+  await assert.rejects(
+    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
+    /sem o artefato de validação.*issues artifact/,
   );
+  assert.equal(getIssue(issue.id, dir).status, "CLAIMED"); // nada foi aplicado
+  setArtifact({ issueId: issue.id, content: "# QA\nrequisito × comportamento: ok" }, dir);
+  await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir);
+  assert.equal(getIssue(issue.id, dir).status, "CLOSED");
+});
+
+test("gate Deploy: nunca fecha AFK — CLOSED pela IA é barrado e orienta AWAITING", async () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "dep", action: "Deploy" }, dir);
+  nextIssue({ agent: "pi", project: "app" }, dir);
+  await assert.rejects( // mesmo com evidência de PR, o agente não fecha: só o humano decide
+    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "https://git/pr/1 SonarQube ok", closed_reason: "concluido" }, dir),
+    /não fecha por agente.*AWAITING/,
+  );
+  assert.equal(getIssue(issue.id, dir).status, "CLAIMED");
+});
+
+test("gate Deploy: AWAITING exige link http(s) de PR e análise; só o decide humano fecha", async () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "dep2", action: "Deploy" }, dir);
+  nextIssue({ agent: "pi", project: "app" }, dir);
+  await assert.rejects(
+    statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "pronto para subir" }, dir),
+    /evidência de PR.*link http.*análise/,
+  );
+  await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "PR https://git/pr/9; SonarQube sem apontamentos" }, dir);
+  assert.equal(getIssue(issue.id, dir).status, "AWAITING");
+  const decided = decideIssue({ id: issue.id, human: true, status: "CLOSED", comment: "go", closed_reason: "concluido" }, dir);
+  assert.equal(decided.status, "CLOSED");
+  assert.equal(decided.thread.at(-1)?.decided_by, "human"); // Code Review final auditado
+});
+
+test("status pela IA só aceita AWAITING ou CLOSED com reason", async () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "gate", artifact: "# qa ok" }, dir); // gate QA satisfeito
+  nextIssue({ agent: "pi", project: "app" }, dir);
+  await assert.rejects(
+    statusIssue({ id: issue.id, agent: "pi", status: "OPEN", comment: "x" }, dir),
+    /use status AWAITING.*ou CLOSED/,
+  );
+  await assert.rejects(
+    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "x" }, dir),
+    /Closed reason is required/,
+  );
+  await assert.rejects(statusIssue({ id: issue.id, human: true, agent: "pi", status: "CLOSED", comment: "x", closed_reason: "errado" }, dir),
+    /Choose --human or --agent/);
+});
+
+test("humano fecha via status CLOSED e as demais combinações são rejeitadas", async () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "hclose" }, dir);
+  await assert.rejects(
+    statusIssue({ id: issue.id, human: true, status: "AWAITING", comment: "x" }, dir),
+    /Human status supports CLOSED with reason/,
+  );
+  await statusIssue({ id: issue.id, human: true, status: "CLOSED", comment: "duplicada", closed_reason: "duplicado" }, dir);
+  assert.equal(getIssue(issue.id, dir).status, "CLOSED");
+});
+
+test("relateIssues liga Issues existentes e a view carrega os artefatos relacionados", () => {
+  const dir = root();
+  const design = createIssue({ ...body, title: "design", action: "Design", artifact: "# spec congelada" }, dir);
+  const impl = createIssue({ ...body, title: "impl", action: "Implement" }, dir);
+  assert.throws(() => relateIssues({ id: impl.id, relates: ["nope"] }, dir), /Issue not found: nope/);
+  relateIssues({ id: impl.id, relates: [design.id] }, dir);
+  const view = getIssue(impl.id, dir);
+  assert.deepEqual(view.relates, [{ id: design.id, kind: "see-also" }]); // default see-also
+  assert.equal(view.related[0].title, "design");
+  assert.equal(view.related[0].action, "Design");
+  assert.equal(view.related[0].kind, "see-also");
+  assert.equal(view.related[0].artifact, "# spec congelada");
+});
+
+test("relateIssues com kind=child grava a inversa parent na Issue alvo", () => {
+  const dir = root();
+  const design = createIssue({ ...body, title: "design", action: "Design" }, dir);
+  const impl = createIssue({ ...body, title: "impl", action: "Implement" }, dir);
+  relateIssues({ id: design.id, relates: [impl.id], kind: "child" }, dir);
+  assert.deepEqual(getIssue(design.id, dir).relates, [{ id: impl.id, kind: "child" }]);
+  assert.deepEqual(getIssue(impl.id, dir).relates, [{ id: design.id, kind: "parent" }]); // recíproca
+});
+
+test("createIssue com relates valida existência e persiste a linhagem", () => {
+  const dir = root();
+  const parent = createIssue({ ...body, title: "parent" }, dir);
+  assert.throws(() => createIssue({ ...body, title: "orphan", relates: ["ghost"] }, dir), /Issue not found: ghost/);
+  const child = createIssue({ ...body, title: "child", relates: [parent.id] }, dir);
+  assert.deepEqual(getIssue(child.id, dir).relates, [{ id: parent.id, kind: "see-also" }]);
+});
+
+test("issueView expõe a cadeia de ancestrais subindo os parent", () => {
+  const dir = root();
+  const planning = createIssue({ ...body, title: "planning", action: "Planning" }, dir);
+  const design = createIssue({ ...body, title: "design", action: "Design" }, dir);
+  const impl = createIssue({ ...body, title: "impl", action: "Implement" }, dir);
+  relateIssues({ id: planning.id, relates: [design.id], kind: "child" }, dir);
+  relateIssues({ id: design.id, relates: [impl.id], kind: "child" }, dir);
+  const ancestors = getIssue(impl.id, dir).ancestors;
+  assert.deepEqual(ancestors.map((a) => a.title), ["design", "planning"]);
+});
+
+test("view omite relacionada purgada em vez de quebrar", () => {
+  const dir = root();
+  const parent = createIssue({ ...body, title: "parent" }, dir);
+  const child = createIssue({ ...body, title: "child", relates: [parent.id] }, dir);
+  const queue = new Queue(dir);
+  const gone = queue.loadRequired(parent.id);
+  gone.closeByHuman("limpa", "obsoleto", new Date("2026-01-01"));
+  queue.save(gone);
+  queue.purgeClosed(new Date("2026-07-14"));
+  assert.deepEqual(getIssue(child.id, dir).related, []);
+});
+
+test("claimIssue humano leva OPEN a CLAIMED (teclado da web)", () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "webclaim" }, dir);
+  assert.equal(claimIssue({ id: issue.id }, dir).status, "CLAIMED");
+});
+
+test("decideIssue rejeita status inválido e exige --human", async () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "gate2", artifact: "# qa ok" }, dir);
+  nextIssue({ agent: "pi", project: "app" }, dir);
+  await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "evidência" }, dir);
+  assert.throws(() => decideIssue({ id: issue.id, human: true, status: "AWAITING", comment: "x" }, dir), /Invalid decision/);
+  assert.throws(() => decideIssue({ id: issue.id, human: false, status: "OPEN", comment: "x" }, dir), /Decide requires --human/);
 });
 
 test("reset humano limpa o claim da Issue CLAIMED", () => {
@@ -202,16 +351,13 @@ test("reset humano limpa o claim da Issue CLAIMED", () => {
   const reopened = resetClaim({ id: issue.id, human: true, comment: "liberar" }, dir);
   assert.equal(reopened.status, "OPEN");
   assert.equal(reopened.owner, null);
-  assert.throws(
-    () => resetClaim({ id: issue.id, human: false, comment: "x" }, dir),
-    /Reset requires --human/,
-  );
+  assert.throws(() => resetClaim({ id: issue.id, human: false, comment: "x" }, dir), /Reset requires --human/);
 });
 
-test("devolução para OPEN carrega imagem: reset da Issue, decide-open e reopen do Ticket", async () => {
+test("devolução para OPEN carrega imagem: reset e decide-open", async () => {
   const dir = root();
   const img = () => ({ filename: "shot.png", mediaType: "image/png", bytes: Buffer.from([137, 80, 78, 71, 3]) });
-  const issue = createIssue({ ...body, actor: "pi", title: "dev" }, dir);
+  const issue = createIssue({ ...body, actor: "pi", title: "dev", artifact: "# qa ok" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir); // -> CLAIMED
   const afterReset = resetClaim({ id: issue.id, human: true, comment: "liberar", attachments: [img()] }, dir);
   const resetEntry = afterReset.thread.at(-1)!;
@@ -219,32 +365,9 @@ test("devolução para OPEN carrega imagem: reset da Issue, decide-open e reopen
   assert.equal(resetEntry.attachments?.[0].kind, "image");
   assert.ok(new Queue(dir).findAttachment(resetEntry.attachments![0].id));
 
-  nextIssue({ agent: "pi", project: "app" }, dir); // re-claim para criar Ticket
-  const ticketId = addTicket(dir, issue.id);
-  claimTicket({ issueId: issue.id, ticketId, actor: "human" }, dir);
-  await statusTicket({ issueId: issue.id, ticketId, actor: "human", status: "AWAITING", comment: "revisar" }, dir);
-  const tDecide = decideTicket({ issueId: issue.id, ticketId, human: true, status: "OPEN", comment: "voltar", attachments: [img()] }, dir);
-  const decideEntry = tDecide.tickets.find((t) => t.id === ticketId)!.thread.at(-1)!;
-  assert.equal(decideEntry.status, "OPEN");
-  assert.equal(decideEntry.attachments?.[0].kind, "image");
-
-  claimTicket({ issueId: issue.id, ticketId, actor: "human" }, dir);
-  const tReopen = await statusTicket({ issueId: issue.id, ticketId, actor: "human", status: "OPEN", comment: "reabrir", attachments: [img()] }, dir);
-  const reopenEntry = tReopen.tickets.find((t) => t.id === ticketId)!.thread.at(-1)!;
-  assert.equal(reopenEntry.status, "OPEN");
-  assert.equal(reopenEntry.attachments?.[0].kind, "image");
-});
-
-test("decideIssue AWAITING→OPEN carrega imagem", async () => {
-  const dir = root();
-  const issue = createIssue({ ...body, title: "dec" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
-  const ticketId = addTicket(dir, issue.id);
-  nextIssue({ agent: "pi", project: "app" }, dir); // claima o Ticket
-  await statusTicket({ issueId: issue.id, ticketId, actor: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido", last: true }, dir);
-  await closeConfirmation(dir, issue.id); // Issue -> AWAITING
-  const reopened = decideIssue({ id: issue.id, human: true, status: "OPEN", comment: "voltar",
-    attachments: [{ filename: "e.png", mediaType: "image/png", bytes: Buffer.from([137, 80, 78, 71, 4]) }] }, dir);
+  await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "evidência" }, dir);
+  const reopened = decideIssue({ id: issue.id, human: true, status: "OPEN", comment: "voltar", attachments: [img()] }, dir);
   const entry = reopened.thread.at(-1)!;
   assert.equal(entry.status, "OPEN");
   assert.equal(entry.attachments?.[0].kind, "image");
@@ -260,30 +383,34 @@ test("list combina filtros por tipo", () => {
   assert.equal(filtered[0].type, "Fix");
 });
 
-test("summary do quadro traz status_changed_at, tags e resumo mínimo de Tickets", () => {
+test("summary do quadro traz action, status_changed_at, tags e relates", () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "board", complexity: "ALTA" }, dir);
-  nextIssue({ agent: "pi", project: "app" }, dir); // OPEN -> CLAIMED
-  const ticketId = addTicket(dir, issue.id); // CLAIMED -> ON-GOING
-  const [card] = listIssues({ project: "app" }, dir);
+  const parent = createIssue({ ...body, title: "parent", now: new Date("2026-01-01") }, dir);
+  const issue = createIssue({ ...body, title: "board", complexity: "ALTA", relates: [parent.id], now: new Date("2026-01-02") }, dir);
+  const card = listIssues({ project: "app", title: "board" }, dir)[0];
+  assert.equal(card.action, "QA");
   assert.equal(card.status_changed_at, getIssue(issue.id, dir).status_changed_at);
-  assert.deepEqual(card.tags, { complexity: "ALTA", risk: "BAIXO" });
-  assert.deepEqual(card.tickets, [{ id: ticketId, type: "Implement", status: "OPEN", owner: null }]);
+  assert.deepEqual(card.tags, { complexity: "ALTA" });
+  assert.deepEqual(card.relates, [parent.id]);
 });
 
-test("setArtifact grava .md da Issue e do Ticket; createIssue/createTicket com artifact idem", () => {
+test("setArtifact grava o .md da Issue; artefato na criação idem; view injeta", () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "art", artifact: "# na criação" }, dir);
   const queue = new Queue(dir);
   assert.equal(queue.readArtifact("app", issue.id), "# na criação");
   setArtifact({ issueId: issue.id, content: "# issue doc" }, dir);
   assert.equal(queue.readArtifact("app", issue.id), "# issue doc");
-  nextIssue({ agent: "pi", project: "app" }, dir);
-  const ticketId = addTicket(dir, issue.id);
-  setArtifact({ issueId: issue.id, ticketId, content: "# ticket doc" }, dir);
-  assert.equal(queue.readArtifact("app", ticketId), "# ticket doc");
-  const withArt = createTicket({ ...ticketBody, issueId: issue.id, actor: "pi", artifact: "# ticket na criação" }, dir);
-  assert.equal(queue.readArtifact("app", withArt.tickets.at(-1)!.id), "# ticket na criação");
+  assert.equal(getIssue(issue.id, dir).artifact, "# issue doc");
+  assert.equal(getIssue(createIssue({ ...body, title: "sem art" }, dir).id, dir).artifact, null);
+});
+
+test("limite de 300 palavras vale para artefato (criação e setArtifact)", () => {
+  const dir = root();
+  assert.throws(() => createIssue({ ...body, title: "big", artifact: longText }, dir), /limite 300/);
+  const issue = createIssue({ ...body, title: "ok" }, dir);
+  assert.throws(() => setArtifact({ issueId: issue.id, content: longText }, dir), /limite 300/);
+  assert.equal(getIssue(issue.id, dir).artifact, null); // nada foi gravado
 });
 
 test("createIssue com anexo: grava bytes e põe metadados na entrada 'Issue created'; valida mediaType", () => {
@@ -296,71 +423,27 @@ test("createIssue com anexo: grava bytes e põe metadados na entrada 'Issue crea
   assert.equal(first.attachments?.length, 1);
   assert.equal(first.attachments?.[0].kind, "image");
   const found = new Queue(dir).findAttachment(first.attachments![0].id);
-  assert.ok(found);
   assert.equal(found?.mediaType, "image/png");
-  // sem anexo: entrada não ganha attachments
   const plain = createIssue({ ...body, title: "sem img" }, dir);
   assert.equal(plain.thread[0].attachments, undefined);
-  // mediaType inválido é rejeitado antes de gravar
   assert.throws(() => createIssue({ ...body, title: "bad",
     attachments: [{ filename: "a.txt", mediaType: "text/plain", bytes: Buffer.from("x") }] }, dir));
 });
 
-test("createTicket com anexo: grava bytes e põe metadados na entrada 'Ticket created'", () => {
+test("setArtifact em Issue CLOSED propaga DomainError do guard", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "tk img" }, dir);
+  const issue = createIssue({ ...body, actor: "pi", title: "closed", artifact: "# qa ok" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
-  const withImg = createTicket({ ...ticketBody, issueId: issue.id, actor: "pi",
-    attachments: [{ filename: "diag.png", mediaType: "image/png", bytes: Buffer.from([137, 80, 78, 71, 1]) }] }, dir);
-  const ticket = withImg.tickets.at(-1)!;
-  assert.equal(ticket.thread[0].comment, "Ticket created");
-  assert.equal(ticket.thread[0].attachments?.[0].kind, "image");
-  assert.ok(new Queue(dir).findAttachment(ticket.thread[0].attachments![0].id));
-});
-
-test("slice C: get/next/getTicket injetam o Artefato nas views; sem artefato → null", () => {
-  const dir = root();
-  const issue = createIssue({ ...body, title: "views", artifact: "# issue art" }, dir);
-  assert.equal(getIssue(issue.id, dir).artifact, "# issue art");
-  const claimed = nextIssue({ agent: "pi", project: "app" }, dir); // Issue-só p/ decompor
-  assert.equal(claimed?.issue.artifact, "# issue art");
-  assert.equal(claimed?.ticket, null);
-  const ticketId = addTicket(dir, issue.id);
-  setArtifact({ issueId: issue.id, ticketId, content: "# ticket art" }, dir);
-  const withTicket = nextIssue({ agent: "pi", project: "app" }, dir); // Issue+Ticket
-  assert.equal(withTicket?.issue.artifact, "# issue art");
-  assert.equal(withTicket?.ticket?.artifact, "# ticket art");
-  assert.equal(withTicket?.ticket?.issue_artifact, "# issue art");
-  const got = getTicket({ issueId: issue.id, ticketId }, dir);
-  assert.equal(got.artifact, "# ticket art");
-  assert.equal(got.issue_artifact, "# issue art");
-  const view = getIssue(issue.id, dir); // web detail: cada Ticket carrega o próprio Artefato
-  assert.equal(view.tickets.find((ticket) => ticket.id === ticketId)?.artifact, "# ticket art");
-});
-
-test("slice C: views trazem artifact null quando não há Artefato .md", () => {
-  const dir = root();
-  const issue = createIssue({ ...body, title: "sem art" }, dir);
-  assert.equal(getIssue(issue.id, dir).artifact, null);
-  nextIssue({ agent: "pi", project: "app" }, dir);
-  const ticketId = addTicket(dir, issue.id);
-  const got = getTicket({ issueId: issue.id, ticketId }, dir);
-  assert.equal(got.artifact, null);
-  assert.equal(got.issue_artifact, null);
-});
-
-test("setArtifact em item CLOSED propaga DomainError do guard", () => {
-  const dir = root();
-  const issue = createIssue({ ...body, actor: "pi", title: "closed" }, dir);
-  statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "x", closed_reason: "errado" }, dir);
+  await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "x", closed_reason: "errado" }, dir);
   assert.throws(() => setArtifact({ issueId: issue.id, content: "nope" }, dir), /CLOSED aggregate is immutable/);
 });
 
-test("erros não persistem mutação parcial", () => {
+test("erros não persistem mutação parcial", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "safe" }, dir);
-  assert.throws(() => statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "x" }, dir));
-  assert.equal(getIssue(issue.id, dir).status, "OPEN");
+  const issue = createIssue({ ...body, title: "safe", action: "Planning" }, dir);
+  nextIssue({ agent: "pi", project: "app" }, dir);
+  await assert.rejects(statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "x" }, dir));
+  assert.equal(getIssue(issue.id, dir).status, "CLAIMED");
 });
 
 // updateTags é exportado: a CLI barra o actor ausente antes (--agent is required), mas o guard

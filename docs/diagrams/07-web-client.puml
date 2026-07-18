@@ -1,0 +1,37 @@
+@startuml web-client
+title WorkflowDev — Web Client (fluxo unidirecional, sem framework)
+
+skinparam componentStyle rectangle
+
+[app.js\n(bootstrap / listeners\n+ poll 10s)] as App
+[state.js\n(state central + drafts\n+ sessionStorage)] as State
+[handlers.js\n(router + eventos\n+ polling diff)] as Handlers
+[mutations.js\n(valida + POST\n+ base64 anexos)] as Mut
+[http.js\n(fetch JSON)] as Http
+[view_model.js\n(deriva: filtra/agrupa\n+ validadores)] as VM
+[view.js\n(board + new issue)] as View
+[detail_view.js\n(detalhe da Issue)] as Detail
+[markdown.js / gherkin.js] as Helpers
+
+cloud "API HTTP\n/api/issues" as API
+
+App --> Handlers : eventos delegados
+Handlers --> State : lê/atualiza
+Handlers --> Mut : ações de escrita
+Handlers --> View : render board
+Handlers --> Detail : render detalhe
+Mut --> Http : POST
+Http --> API
+View --> VM
+Detail --> VM
+Detail --> Helpers
+View --> State
+Detail --> State
+
+note bottom
+  Fluxo: DOM event -> handlers -> mutations (API)
+  -> muta state -> re-render (innerHTML completo).
+  Polling re-renderiza só quando o JSON muda
+  (preserva scroll/seleção e <details> expandidos).
+end note
+@enduml

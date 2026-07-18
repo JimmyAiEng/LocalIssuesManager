@@ -1,0 +1,32 @@
+@startuml state-machine
+title WorkflowDev — Máquina de Estados da Issue
+
+[*] --> OPEN : create(actor)
+
+OPEN --> CLAIMED : claim / next (IA pega a mais antiga)
+OPEN --> CLOSED : closeByHuman(reason)
+
+CLAIMED --> AWAITING : submit(agent, evidence)\n[requiresHuman ou entrega p/ decisão]
+CLAIMED --> CLOSED : closeByAgent(evidence, reason)\n[!requiresHuman e gate da action OK]
+CLAIMED --> OPEN : reset(comment) [humano devolve]
+CLAIMED --> CLOSED : closeByHuman(reason)
+
+AWAITING --> CLOSED : decide(CLOSED, reason) [humano aprova]
+AWAITING --> OPEN : decide(OPEN, comment) [humano devolve, limpa claim]
+
+CLOSED --> [*] : purgeClosed (retenção 7d)
+
+state CLAIMED {
+  note as N1
+    Só o owner muda o status.
+    A conclusão roda o gate da action
+    (Planning/Design/Implement/QA/Deploy).
+  end note
+}
+
+note right of CLOSED
+  CLOSED é imutável.
+  closed_reason: concluido | obsoleto
+  | duplicado | errado
+end note
+@enduml

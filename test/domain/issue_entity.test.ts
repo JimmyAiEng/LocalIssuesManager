@@ -3,63 +3,56 @@ import test from "node:test";
 import { Attachment } from "../../src/domain/attachment_entity.js";
 import { DomainError } from "../../src/domain/domain_error.js";
 import { Issue } from "../../src/domain/issue_entity.js";
-import { Ticket } from "../../src/domain/ticket_entity.js";
 
 const input = {
   title: "Implementar fila",
   project: "workflowdev",
   type: "Feat" as const,
+  action: "Implement" as const,
   problem: "Não há fila",
 };
 
-const ticketFor = (issue: Issue, actor: "human" | "pi" | "codex" = "pi") =>
-  Ticket.create({ issue_id: issue.id, objective: "o", task: "t", acceptance_criteria: "c",
-    type: "Implement", actor });
+const longText = Array.from({ length: 301 }, (_, index) => `palavra${index}`).join(" ");
 
-// Issue CLAIMED e classificada: addTicket exige risk+complexity para derivar a autonomia do Ticket.
-// Feat·BAIXO·BAIXA só força HITL em Planning; Implement (o ticketFor acima) deriva AFK.
-const claimed = (actor: "pi" | "codex" = "pi") => {
+const claimed = (agent: "pi" | "codex" = "pi") => {
   const issue = Issue.create(input, "pi");
-  issue.tag({ complexity: "BAIXA", risk: "BAIXO" }, "human");
-  issue.claim(actor);
+  issue.claim(agent);
   return issue;
 };
 
-const ongoing = (actor: "pi" | "codex" = "pi") => {
-  const issue = claimed(actor);
-  const ticket = ticketFor(issue, actor);
-  issue.addTicket(ticket);
-  return { issue, ticket };
+const awaiting = () => {
+  const issue = claimed();
+  issue.submit("pi", "evidência: feito X, decidido Y");
+  return issue;
 };
 
-const closeConfirmation = (issue: Issue, actor: "pi" | "codex" = "pi") => {
-  const conf = issue.tickets.find((candidate) => candidate.type === "Confirmation");
-  if (!conf) throw new Error("Ticket de confirmação ausente");
-  issue.claimTicket(conf.id, actor);
-  issue.transitionTicket(conf.id, actor, "CLOSED", "verificado", "concluido");
-};
-
-test("cria Issue OPEN com defaults, revisão zero e sem Tickets", () => {
-  const issue = Issue.create(input, "human", new Date("2026-01-01T00:00:00Z"));
+test("cria Issue OPEN com defaults, revisão zero e relates deduplicado", () => {
+  const issue = Issue.create({ ...input, relates: ["a", "b", "a"] }, "human", new Date("2026-01-01T00:00:00Z"));
   assert.equal(issue.status, "OPEN");
   assert.equal(issue.owner, null);
-  assert.equal(issue.human_presence, true);
-  assert.equal(issue.artifacts, "");
+  assert.equal(issue.action, "Implement");
   assert.equal(issue.acceptance_criteria, "");
-  assert.deepEqual(issue.tickets, []);
+  assert.deepEqual(issue.relates, [{ id: "a", kind: "see-also" }, { id: "b", kind: "see-also" }]);
   assert.equal(issue.revision, 0);
   assert.equal(issue.baseRevision, 0);
   assert.deepEqual(issue.phases, [{ status: "OPEN", timestamp: "2026-01-01T00:00:00.000Z" }]);
 });
 
-test("campos obrigatórios rejeitam whitespace; artefatos são opcionais", () => {
+test("campos obrigatórios rejeitam whitespace (inclusive action)", () => {
   assert.throws(
     () => Issue.create({ ...input, problem: "   " }, "pi"),
     (error: unknown) => error instanceof DomainError && error.message === "problem is required",
   );
-  const issue = Issue.create({ ...input, artifacts: "src/", acceptance_criteria: "ok" }, "pi");
-  assert.equal(issue.artifacts, "src/");
+  assert.throws(() => Issue.create({ ...input, action: "  " as never }, "pi"), /action is required/);
+  const issue = Issue.create({ ...input, acceptance_criteria: "ok" }, "pi");
   assert.equal(issue.acceptance_criteria, "ok");
+});
+
+test("problema e critérios de aceite são limitados a 300 palavras (Issue grande = decompor)", () => {
+  assert.throws(() => Issue.create({ ...input, problem: longText }, "pi"),
+    (error: unknown) => error instanceof DomainError && /301 palavras \(limite 300\)/.test(error.message)
+      && /Issues menores relacionadas/.test(error.message));
+  assert.throws(() => Issue.create({ ...input, acceptance_criteria: longText }, "pi"), /limite 300/);
 });
 
 test("claim leva OPEN a CLAIMED e incrementa a revisão", () => {
@@ -69,382 +62,239 @@ test("claim leva OPEN a CLAIMED e incrementa a revisão", () => {
   assert.equal(issue.owner, "codex");
   assert.equal(issue.revision, 1);
   assert.equal(issue.thread.length, 1);
+  assert.throws(() => issue.claim("pi"), /Expected OPEN, got CLAIMED/);
 });
 
-test("o primeiro Ticket move CLAIMED para ON-GOING sem thread de Issue", () => {
-  const issue = claimed();
-  const revision = issue.revision;
-  issue.addTicket(ticketFor(issue));
-  assert.equal(issue.status, "ON-GOING");
-  assert.equal(issue.tickets.length, 1);
-  assert.equal(issue.thread.length, 1);
-  assert.equal(issue.phases.at(-1)?.status, "ON-GOING");
-  assert.equal(issue.revision, revision + 1);
-});
-
-test("addTicket recusa fora de CLAIMED/ON-GOING e Ticket de outra Issue", () => {
-  const open = Issue.create(input, "pi");
-  assert.throws(() => open.addTicket(ticketFor(open)), /Expected CLAIMED or ON-GOING, got OPEN/);
-
-  const { issue } = ongoing();
-  const alheio = Ticket.create({ issue_id: "outra", objective: "o", task: "t",
-    acceptance_criteria: "c", type: "QA", actor: "pi" });
-  assert.throws(() => issue.addTicket(alheio), /Ticket belongs to another Issue/);
-});
-
-test("addTicket exige classificação (risk e complexity) da Issue para derivar a autonomia", () => {
-  const semTags = Issue.create(input, "pi");
-  semTags.claim("pi");
-  assert.throws(() => semTags.addTicket(ticketFor(semTags)),
-    (error: unknown) => error instanceof DomainError && /risk e complexity/.test(error.message));
-  assert.equal(semTags.tickets.length, 0); // nenhum Ticket é criado
-
-  const semRisk = Issue.create(input, "pi");
-  semRisk.claim("pi");
-  semRisk.tag({ complexity: "BAIXA" }, "human");
-  assert.throws(() => semRisk.addTicket(ticketFor(semRisk)), /risk e complexity/);
-
-  const semComplexity = Issue.create(input, "pi");
-  semComplexity.claim("pi");
-  semComplexity.tag({ risk: "BAIXO" }, "human");
-  assert.throws(() => semComplexity.addTicket(ticketFor(semComplexity)), /risk e complexity/);
-
-  // Sem human_need a criação passa: o override só existe quando vale HITL; ausência é AFK.
-  const semHumanNeed = claimed();
-  semHumanNeed.addTicket(ticketFor(semHumanNeed));
-  assert.equal(semHumanNeed.tickets.at(-1)!.tags.human_need, "AFK");
-});
-
-test("addTicket rejeitado não marca o Ticket com autonomia", () => {
-  const issue = claimed();
-  const alheio = Ticket.create({ issue_id: "outra", objective: "o", task: "t",
-    acceptance_criteria: "c", type: "QA", actor: "pi" });
-  assert.throws(() => issue.addTicket(alheio), /Ticket belongs to another Issue/);
-  assert.deepEqual(alheio.tags, {}); // a derivação só acontece depois de todas as validações
-});
-
-test("fase posterior só pode ser criada com as anteriores CLOSED (OPEN/CLAIMED/AWAITING bloqueiam)", () => {
-  const issue = claimed();
-  const phase = (type: "Planning" | "Design") => Ticket.create({ issue_id: issue.id,
-    objective: "o", task: "t", acceptance_criteria: "c", type, actor: "pi" });
-  const planning = phase("Planning");
-  issue.addTicket(planning);
-  assert.throws(() => issue.addTicket(phase("Design")), /Design bloqueado: Planning/);
-  issue.claimTicket(planning.id, "pi");
-  assert.throws(() => issue.addTicket(phase("Design")), /Design bloqueado: Planning/);
-  issue.transitionTicket(planning.id, "pi", "AWAITING", "pronto");
-  assert.throws(() => issue.addTicket(phase("Design")), /Design bloqueado: Planning/);
-  issue.decideTicket(planning.id, "CLOSED", "ok", "concluido");
-  issue.addTicket(phase("Design")); // Planning CLOSED libera; Confirmation OPEN não bloqueia
-  assert.equal(issue.tickets.filter((ticket) => ticket.type === "Design").length, 1);
-});
-
-test("Tickets seguintes mantêm ON-GOING e apenas incrementam a revisão", () => {
-  const { issue } = ongoing();
-  const revision = issue.revision;
-  issue.addTicket(ticketFor(issue));
-  assert.equal(issue.status, "ON-GOING");
-  assert.equal(issue.tickets.length, 2);
-  assert.equal(issue.phases.at(-1)?.status, "ON-GOING");
-  assert.equal(issue.revision, revision + 1);
-});
-
-test("claim/transition/decide de Ticket delegam à raiz e incrementam a revisão", () => {
-  const issue = claimed();
-  const ticket = ticketFor(issue, "codex");
-  issue.addTicket(ticket);
-  let revision = issue.revision;
-  issue.claimTicket(ticket.id, "codex");
-  assert.equal(issue.tickets[0].status, "CLAIMED");
-  assert.equal(issue.revision, ++revision);
-  issue.transitionTicket(ticket.id, "codex", "AWAITING", "pronto");
-  assert.equal(issue.tickets[0].status, "AWAITING");
-  assert.equal(issue.revision, ++revision);
-  issue.decideTicket(ticket.id, "CLOSED", "aceito", "concluido");
-  assert.equal(issue.tickets[0].status, "CLOSED");
-  assert.equal(issue.revision, ++revision);
-});
-
-test("operações de Ticket inexistente falham identificando o id", () => {
-  const { issue } = ongoing();
-  assert.throws(() => issue.claimTicket("nope", "pi"), /Ticket not found: nope/);
-  assert.throws(() => issue.transitionTicket("nope", "pi", "OPEN", "x"), /Ticket not found: nope/);
-  assert.throws(() => issue.decideTicket("nope", "OPEN", "x"), /Ticket not found: nope/);
-});
-
-test("fechar o Confirmation avança a Issue para AWAITING (destrava)", () => {
-  const { issue, ticket } = ongoing();
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
-  assert.equal(issue.status, "ON-GOING"); // Confirmation ainda OPEN
-  closeConfirmation(issue);
+test("submit exige dono e evidência e leva CLAIMED a AWAITING", () => {
+  const issue = claimed("pi");
+  assert.throws(() => issue.submit("codex", "evidência"), /Only the Owner may change status/);
+  assert.throws(() => issue.submit("pi", "   "), /comment is required/);
+  assert.throws(() => issue.submit("pi", longText), /limite 300/);
+  issue.submit("pi", "evidência: passos e decisões");
   assert.equal(issue.status, "AWAITING");
+  assert.equal(issue.thread.at(-1)?.comment, "evidência: passos e decisões");
 });
 
-test("fechar o último Ticket marcado --last injeta um Confirmation OPEN e destrava a Issue", () => {
-  const { issue, ticket } = ongoing();
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
-  const confirmation = issue.tickets.find((candidate) => candidate.type === "Confirmation");
-  assert.ok(confirmation, "Confirmation deve ser criado ao fechar o último Ticket");
-  assert.equal(confirmation?.status, "OPEN");
-  assert.equal(issue.tickets.length, 2);
+test("submit fora de CLAIMED é rejeitado", () => {
+  const open = Issue.create(input, "pi");
+  assert.throws(() => open.submit("pi", "evidência"), /Expected CLAIMED, got OPEN/);
 });
 
-test("fechar o último Ticket SEM --last não injeta Confirmation (Issue segue ON-GOING)", () => {
-  const { issue, ticket } = ongoing();
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido"); // last=false
-  assert.equal(issue.tickets.some((candidate) => candidate.type === "Confirmation"), false);
-  assert.equal(issue.tickets.length, 1);
-  assert.equal(issue.status, "ON-GOING");
+test("IA fecha Issue CLAIMED AFK com evidência e motivo", () => {
+  const issue = claimed("pi");
+  issue.closeByAgent("pi", "feito: passos e decisões", "concluido");
+  assert.equal(issue.status, "CLOSED");
+  assert.equal(issue.closed_reason, "concluido");
+  assert.throws(() => issue.claim("pi"), /Expected OPEN, got CLOSED/);
 });
 
-test("last persiste por AWAITING → decide(CLOSED) e só então injeta o Confirmation", () => {
-  const { issue, ticket } = ongoing();
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "AWAITING", "pronto", undefined, true); // marca --last cedo
-  assert.equal(issue.tickets.some((candidate) => candidate.type === "Confirmation"), false);
-  issue.decideTicket(ticket.id, "CLOSED", "aceito", "concluido"); // decide sem repassar last
-  const confirmation = issue.tickets.find((candidate) => candidate.type === "Confirmation");
-  assert.ok(confirmation, "last sticky deve sobreviver ao decide e disparar o Confirmation");
-  assert.equal(confirmation?.status, "OPEN");
+test("closeByAgent exige dono e evidência", () => {
+  const issue = claimed("pi");
+  assert.throws(() => issue.closeByAgent("codex", "x", "concluido"), /Only the Owner may change status/);
+  assert.throws(() => issue.closeByAgent("pi", "  ", "concluido"), /comment is required/);
 });
 
-test("fechar o próprio Confirmation não gera outro (quebra o loop)", () => {
-  const { issue, ticket } = ongoing();
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
-  closeConfirmation(issue);
-  assert.equal(issue.tickets.filter((candidate) => candidate.type === "Confirmation").length, 1);
-});
+test("humano fecha Issue OPEN ou CLAIMED com motivo; AWAITING só via decide", () => {
+  const open = Issue.create(input, "human");
+  open.closeByHuman("duplicada", "duplicado");
+  assert.equal(open.status, "CLOSED");
 
-test("não injeta Confirmation enquanto restam Tickets abertos (entre fases)", () => {
-  const { issue, ticket } = ongoing();
-  issue.addTicket(ticketFor(issue));
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido");
-  assert.equal(issue.tickets.some((candidate) => candidate.type === "Confirmation"), false);
-});
+  const inProgress = claimed();
+  inProgress.closeByHuman("cancelada", "obsoleto");
+  assert.equal(inProgress.status, "CLOSED");
 
-test("reset só age em CLAIMED e nunca em ON-GOING", () => {
-  const reset = Issue.create(input, "pi");
-  reset.claim("pi");
-  reset.reset("abandono");
-  assert.equal(reset.status, "OPEN");
-  assert.equal(reset.owner, null);
-  assert.equal(reset.claimed_at, null);
-  assert.equal(reset.human_presence, true);
-
-  const { issue } = ongoing();
-  assert.throws(() => issue.reset("liberar"), /Expected CLAIMED, got ON-GOING/);
+  const pending = awaiting();
+  assert.throws(() => pending.closeByHuman("x", "concluido"), /Expected OPEN or CLAIMED, got AWAITING/);
+  // Override humano: fecha sem comentário (o motivo basta) — espelha o painel web.
+  const silent = Issue.create(input, "human");
+  silent.closeByHuman("", "errado");
+  assert.equal(silent.status, "CLOSED");
 });
 
 test("decisão humana fecha a Issue AWAITING com motivo", () => {
-  const { issue, ticket } = ongoing();
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
-  closeConfirmation(issue); // avança a Issue para AWAITING
+  const issue = awaiting();
   issue.decide("CLOSED", "aceito", "concluido");
   assert.equal(issue.status, "CLOSED");
   assert.equal(issue.closed_reason, "concluido");
-  assert.equal(issue.human_presence, true);
 });
 
-test("IA fecha OPEN apenas sem presença humana; CLOSED é imutável", () => {
-  const machine = Issue.create(input, "pi");
-  machine.closeByAgent("pi", "criada errada", "errado");
-  assert.equal(machine.status, "CLOSED");
-  assert.throws(() => machine.claim("pi"));
+test("decisão humana registra decided_by para auditar o Code Review final", () => {
+  const closing = awaiting();
+  closing.decide("CLOSED", "aprovado", "concluido");
+  assert.equal(closing.thread.at(-1)?.decided_by, "human");
+  const reopening = awaiting();
+  reopening.decide("OPEN", "refazer");
+  assert.equal(reopening.thread.at(-1)?.decided_by, "human");
+  // submit/close pelo agente não carimba decided_by (não é decisão humana).
+  assert.equal(awaiting().thread.at(-1)?.decided_by, undefined);
+});
 
-  const human = Issue.create(input, "human");
-  assert.throws(() => human.closeByAgent("pi", "cancelar", "errado"), /Human presence prevents IA closure/);
-  human.closeByHuman("", "errado");
-  assert.equal(human.status, "CLOSED");
-  assert.equal(human.closed_reason, "errado");
+test("decisão humana devolve para OPEN limpando o claim; regras de decisão valem", () => {
+  const issue = awaiting();
+  assert.throws(() => issue.decide("OPEN", "   "), /comment is required/);
+  assert.throws(() => issue.decide("CLOSED", "x"), /Closed reason is required/);
+  assert.throws(() => issue.decide("OPEN", "volta", "concluido"), /OPEN cannot have a closed reason/);
+  issue.decide("OPEN", "refazer com testes");
+  assert.equal(issue.status, "OPEN");
+  assert.equal(issue.owner, null);
+  assert.equal(issue.claimed_at, null);
+});
+
+test("decide fora de AWAITING é rejeitado", () => {
+  assert.throws(() => claimed().decide("CLOSED", "x", "concluido"), /Expected AWAITING, got CLAIMED/);
+});
+
+test("reset só age em CLAIMED", () => {
+  const issue = claimed();
+  issue.reset("abandono");
+  assert.equal(issue.status, "OPEN");
+  assert.equal(issue.owner, null);
+  assert.equal(issue.claimed_at, null);
+  assert.throws(() => issue.reset("de novo"), /Expected CLAIMED, got OPEN/);
 });
 
 test("comment anexa entrada à thread sem mudar status nem exigir dono", () => {
-  const { issue } = ongoing();
+  const issue = claimed();
   const attachment = Attachment.create({ filename: "prova.png", mediaType: "image/png", size: 10 }).toJSON();
   const revision = issue.revision;
   issue.comment("codex", "vejam a evidência", [attachment], new Date("2026-05-01T00:00:00Z"));
-  assert.equal(issue.status, "ON-GOING");
+  assert.equal(issue.status, "CLAIMED");
   assert.equal(issue.revision, revision + 1);
-  const entry = issue.thread.at(-1)!;
-  assert.deepEqual(entry, { actor: "codex", timestamp: "2026-05-01T00:00:00.000Z",
-    comment: "vejam a evidência", status: "ON-GOING", closed_reason: null, attachments: [attachment] });
+  assert.deepEqual(issue.thread.at(-1), { actor: "codex", timestamp: "2026-05-01T00:00:00.000Z",
+    comment: "vejam a evidência", status: "CLAIMED", closed_reason: null, attachments: [attachment] });
 });
 
-test("comment aceita só anexo sem texto, mas exige comentário ou anexo", () => {
-  const { issue } = ongoing();
+test("comment aceita só anexo, exige conteúdo e respeita o limite de palavras", () => {
+  const issue = claimed();
   const attachment = Attachment.create({ filename: "v.mp4", mediaType: "video/mp4", size: 10 }).toJSON();
   issue.comment("pi", "", [attachment]);
   assert.equal(issue.thread.at(-1)?.attachments?.length, 1);
   assert.throws(() => issue.comment("pi", "   ", []), /comment or attachment is required/);
+  assert.throws(() => issue.comment("pi", longText, []), /limite 300/);
+});
+
+test("role especializado é gravado na thread de comment/submit/closeByAgent e é opcional", () => {
+  const issue = claimed();
+  issue.comment("codex", "revisão", [], new Date("2026-05-01T00:00:00Z"), "quality-review");
+  assert.equal(issue.thread.at(-1)?.role, "quality-review");
+  issue.comment("codex", "sem papel"); // retrocompatível: thread sem role continua válida
+  assert.equal("role" in issue.thread.at(-1)!, false);
+  issue.submit("pi", "evidência", new Date(), [], "architect");
+  assert.equal(issue.thread.at(-1)?.role, "architect");
+  const afk = claimed();
+  afk.closeByAgent("pi", "feito", "concluido", new Date(), [], "coding");
+  assert.equal(afk.thread.at(-1)?.role, "coding");
 });
 
 test("comment é bloqueado quando a Issue está CLOSED (imutável)", () => {
-  const issue = Issue.create(input, "pi");
-  issue.closeByAgent("pi", "errada", "errado");
+  const issue = Issue.create(input, "human");
+  issue.closeByHuman("errada", "errado");
   assert.throws(() => issue.comment("pi", "tarde demais"), /CLOSED aggregate is immutable/);
 });
 
-test("commentTicket delega ao Ticket e incrementa a revisão da Issue", () => {
-  const { issue, ticket } = ongoing();
+test("relate adiciona relações novas com kind, ignora o próprio id e deduplica por id", () => {
+  const issue = claimed();
   const revision = issue.revision;
-  issue.commentTicket(ticket.id, "pi", "nota no ticket");
-  assert.equal(issue.tickets[0].thread.at(-1)?.comment, "nota no ticket");
+  issue.relate([{ id: "a", kind: "child" }, { id: "a", kind: "parent" }, { id: issue.id, kind: "child" }, { id: "b", kind: "see-also" }]);
+  assert.deepEqual(issue.relates, [{ id: "a", kind: "child" }, { id: "b", kind: "see-also" }]);
   assert.equal(issue.revision, revision + 1);
-  assert.throws(() => issue.commentTicket("nope", "pi", "x"), /Ticket not found: nope/);
+  issue.relate([{ id: "b", kind: "parent" }, { id: "c", kind: "parent" }]); // "b" já ligado: kind não muda
+  assert.deepEqual(issue.relates, [{ id: "a", kind: "child" }, { id: "b", kind: "see-also" }, { id: "c", kind: "parent" }]);
 });
 
-// A tag da Issue alimenta requiredHumanNeed: rebaixá-la é o agente afrouxando a própria supervisão.
-// Escalar é sempre livre (pedir mais humano nunca é ataque); rebaixar é prerrogativa humana.
+test("relate sem novidade ou em CLOSED é rejeitado", () => {
+  const issue = claimed();
+  issue.relate([{ id: "a", kind: "see-also" }]);
+  assert.throws(() => issue.relate([{ id: "a", kind: "see-also" }, { id: issue.id, kind: "child" }]), /Nenhuma relação nova/);
+  assert.throws(() => issue.relate([]), /Nenhuma relação nova/);
+  const closed = Issue.create(input, "human");
+  closed.closeByHuman("errada", "errado");
+  assert.throws(() => closed.relate([{ id: "a", kind: "see-also" }]), /CLOSED aggregate is immutable/);
+});
+
+test("fromJSON lê relates antigos (string[]) como see-also", () => {
+  const issue = Issue.create({ ...input, relates: ["x"] }, "human");
+  const legacy = Issue.fromJSON({ ...issue.toJSON(), relates: ["x", "y"] as never });
+  assert.deepEqual(legacy.relates, [{ id: "x", kind: "see-also" }, { id: "y", kind: "see-also" }]);
+});
+
+// A tag da Issue alimenta requiresHuman: rebaixá-la é o agente afrouxando a própria supervisão.
 test("tag da Issue por IA: escalar é aceito nos 3 eixos", () => {
   const issue = Issue.create(input, "pi");
   issue.tag({ risk: "BAIXO", complexity: "BAIXA", human_need: "AFK" }, "human");
-  issue.tag({ risk: "MEDIO" }, "pi"); // BAIXO → MEDIO
-  issue.tag({ risk: "ALTO" }, "pi"); // MEDIO → ALTO
-  issue.tag({ complexity: "MEDIA" }, "pi"); // BAIXA → MEDIA
-  issue.tag({ complexity: "ALTA" }, "pi"); // MEDIA → ALTA
+  issue.tag({ risk: "MEDIO" }, "pi");
+  issue.tag({ risk: "ALTO" }, "pi");
+  issue.tag({ complexity: "MEDIA" }, "pi");
+  issue.tag({ complexity: "ALTA" }, "pi");
   issue.tag({ human_need: "HITL" }, "pi"); // AFK → HITL: MAIS supervisão, apesar do índice menor em TAG_VALUES
   assert.deepEqual(issue.tags, { risk: "ALTO", complexity: "ALTA", human_need: "HITL" });
 });
 
-test("tag da Issue por IA: manter o mesmo valor é no-op aceito, e tag ausente não compara", () => {
-  const issue = Issue.create(input, "pi");
-  issue.tag({ risk: "MEDIO", complexity: "MEDIA", human_need: "AFK" }, "pi"); // Issue sem tags: nada a rebaixar
-  issue.tag({ risk: "MEDIO", complexity: "MEDIA", human_need: "AFK" }, "pi"); // no-op
-  assert.deepEqual(issue.tags, { risk: "MEDIO", complexity: "MEDIA", human_need: "AFK" });
-});
-
-test("tag da Issue por IA: rebaixar é DomainError nos 3 eixos", () => {
+test("tag da Issue por IA: rebaixar é DomainError nos 3 eixos e o update é atômico", () => {
   const issue = Issue.create(input, "pi");
   issue.tag({ risk: "ALTO", complexity: "ALTA", human_need: "HITL" }, "human");
   assert.throws(() => issue.tag({ risk: "MEDIO" }, "pi"), (error: unknown) =>
     error instanceof DomainError && /rebaixar risk \(ALTO → MEDIO\)/.test(error.message));
-  assert.throws(() => issue.tag({ risk: "BAIXO" }, "pi"), /rebaixar risk/);
-  assert.throws(() => issue.tag({ complexity: "MEDIA" }, "pi"), /rebaixar complexity/);
   assert.throws(() => issue.tag({ complexity: "BAIXA" }, "pi"), /rebaixar complexity/);
   // A armadilha: human_need é ["HITL","AFK"] em TAG_VALUES — índice CRESCENTE = MENOS supervisão.
-  // Comparar índice ingenuamente deixaria HITL → AFK passar, que é exatamente a fuga da coleira.
-  assert.throws(() => issue.tag({ human_need: "AFK" }, "pi"), (error: unknown) =>
-    error instanceof DomainError && /rebaixar human_need \(HITL → AFK\)/.test(error.message));
+  assert.throws(() => issue.tag({ human_need: "AFK" }, "pi"), /rebaixar human_need \(HITL → AFK\)/);
+  assert.throws(() => issue.tag({ complexity: "BAIXA", risk: "BAIXO" }, "pi"), /rebaixar/);
   assert.deepEqual(issue.tags, { risk: "ALTO", complexity: "ALTA", human_need: "HITL" }); // nada mutou
 });
 
-test("tag da Issue por IA: rebaixamento é rejeitado mesmo escondido atrás de uma escalada no mesmo update", () => {
+test("tag da Issue por humano rebaixa; IA mantém valor como no-op; ausente não compara", () => {
   const issue = Issue.create(input, "pi");
-  issue.tag({ risk: "ALTO", complexity: "BAIXA" }, "human");
-  assert.throws(() => issue.tag({ complexity: "ALTA", risk: "BAIXO" }, "pi"), /rebaixar risk/);
-  assert.deepEqual(issue.tags, { risk: "ALTO", complexity: "BAIXA" }); // update é atômico: nem a escalada passou
-});
-
-test("tag da Issue por humano: rebaixar é aceito nos 3 eixos", () => {
-  const issue = Issue.create(input, "pi");
+  issue.tag({ risk: "MEDIO", human_need: "AFK" }, "pi"); // sem tags anteriores: nada a rebaixar
+  issue.tag({ risk: "MEDIO", human_need: "AFK" }, "pi"); // no-op
   issue.tag({ risk: "ALTO", complexity: "ALTA", human_need: "HITL" }, "human");
   issue.tag({ risk: "BAIXO", complexity: "BAIXA", human_need: "AFK" }, "human");
   assert.deepEqual(issue.tags, { risk: "BAIXO", complexity: "BAIXA", human_need: "AFK" });
 });
 
-test("tag valida categoria/valor, mescla e incrementa a revisão", () => {
+test("tag valida categoria/valor, mescla, incrementa a revisão e guarda CLOSED", () => {
   const issue = Issue.create(input, "pi");
   issue.tag({ complexity: "ALTA" }, "human");
   issue.tag({ human_need: "AFK", risk: "BAIXO" }, "human");
   assert.deepEqual(issue.tags, { complexity: "ALTA", human_need: "AFK", risk: "BAIXO" });
   assert.equal(issue.revision, 2);
-  assert.throws(() => issue.tag({ risk: "GIGANTE" }, "human"), (error: unknown) => error instanceof DomainError && error.message === "Invalid risk: GIGANTE");
+  assert.throws(() => issue.tag({ risk: "GIGANTE" }, "human"), (error: unknown) =>
+    error instanceof DomainError && error.message === "Invalid risk: GIGANTE");
   assert.throws(() => issue.tag({}, "human"), /At least one tag is required/);
-});
-
-test("tag da Issue recomputa a autonomia dos Tickets não-CLOSED", () => {
-  const { issue, ticket } = ongoing(); // Implement numa Issue Feat·BAIXO·BAIXA → AFK
-  assert.equal(ticket.tags.human_need, "AFK");
-  issue.tag({ risk: "ALTO", complexity: "ALTA" }, "human"); // combo tóxico: Implement passa a exigir supervisão
-  assert.equal(ticket.tags.human_need, "HITL"); // a autonomia derivada nunca fica stale
-  issue.tag({ risk: "BAIXO" }, "human"); // e volta (rebaixar é prerrogativa humana), porque a regra é derivada e não acumulada
-  assert.equal(ticket.tags.human_need, "AFK");
-});
-
-test("tag da Issue não altera Ticket CLOSED e o retag segue aceito", () => {
-  const { issue, ticket } = ongoing();
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "feito", "concluido");
-  assert.equal(ticket.tags.human_need, "AFK");
-  issue.tag({ risk: "ALTO", complexity: "ALTA" }, "human"); // aceito: informação nova não esbarra em Ticket antigo
-  assert.equal(ticket.tags.human_need, "AFK"); // CLOSED é imutável: registra a decisão da época
-  assert.deepEqual(issue.tags, { complexity: "ALTA", risk: "ALTO" });
-});
-
-test("tagTicket delega ao Ticket mas rejeita human_need (derivado, não settável)", () => {
-  const { issue, ticket } = ongoing();
-  const revision = issue.revision;
-  issue.tagTicket(ticket.id, { complexity: "MEDIA" });
-  assert.deepEqual(issue.tickets[0].tags, { human_need: "AFK", complexity: "MEDIA" });
-  assert.equal(issue.revision, revision + 1);
-
-  assert.throws(() => issue.tagTicket(ticket.id, { human_need: "HITL" }),
-    (error: unknown) => error instanceof DomainError && /derivado/.test(error.message));
-  assert.equal(ticket.tags.human_need, "AFK"); // inalterada
-  assert.equal(issue.revision, revision + 1); // e sem bump
-
-  const closed = Issue.create(input, "pi");
-  closed.closeByAgent("pi", "errada", "errado");
+  const closed = Issue.create(input, "human");
+  closed.closeByHuman("errada", "errado");
   assert.throws(() => closed.tag({ risk: "ALTO" }, "human"), /CLOSED aggregate is immutable/);
 });
 
-test("artifactOwnerId retorna a Issue sem ticketId e o Ticket com ticketId válido", () => {
-  const { issue, ticket } = ongoing();
-  assert.equal(issue.artifactOwnerId(), issue.id);
-  assert.equal(issue.artifactOwnerId(ticket.id), ticket.id);
-  assert.throws(() => issue.artifactOwnerId("nope"), /Ticket not found: nope/);
+test("worktree: set/clear com guarda CLOSED apenas no set", () => {
+  const issue = claimed();
+  issue.setWorktree({ path: "/tmp/wt", branch: "issue/abc" });
+  assert.deepEqual(issue.worktree, { path: "/tmp/wt", branch: "issue/abc" });
+  issue.clearWorktree();
+  assert.equal(issue.worktree, null);
+  const closed = Issue.create(input, "human");
+  closed.closeByHuman("errada", "errado");
+  assert.throws(() => closed.setWorktree({ path: "/x", branch: "b" }), /CLOSED aggregate is immutable/);
+  closed.clearWorktree(); // limpeza pós-CLOSED é permitida
 });
 
-test("artifactOwnerId guarda CLOSED-imutável na Issue e no Ticket", () => {
-  const closedIssue = Issue.create(input, "pi");
-  closedIssue.closeByAgent("pi", "errada", "errado");
-  assert.throws(() => closedIssue.artifactOwnerId(), /CLOSED aggregate is immutable/);
-
-  const { issue, ticket } = ongoing();
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "AWAITING", "pronto");
-  issue.decideTicket(ticket.id, "CLOSED", "aceito", "concluido");
-  assert.equal(issue.tickets[0].status, "CLOSED");
-  assert.throws(() => issue.artifactOwnerId(ticket.id), /CLOSED aggregate is immutable/);
-  assert.equal(issue.artifactOwnerId(), issue.id); // Issue segue mutável
+test("decide e submit registram anexos na thread", () => {
+  const attachment = Attachment.create({ filename: "prova.png", mediaType: "image/png", size: 5 }).toJSON();
+  const issue = claimed();
+  issue.submit("pi", "evidência", new Date(), [attachment]);
+  assert.equal(issue.thread.at(-1)?.attachments?.length, 1);
+  issue.decide("OPEN", "refazer", undefined, new Date(), [attachment]);
+  assert.equal(issue.thread.at(-1)?.attachments?.length, 1);
 });
 
-test("tag com Tickets existentes recomputa cada um e incrementa a revisão uma única vez", () => {
-  const { issue } = ongoing(); // 1 Ticket Implement, Issue Feat·BAIXO·BAIXA
-  const revision = issue.revision;
-  issue.tag({ complexity: "ALTA" }, "human"); // complexity ALTA não força Implement (só Planning/Design)
-  assert.deepEqual(issue.tags, { complexity: "ALTA", risk: "BAIXO" });
-  assert.equal(issue.tickets[0].tags.human_need, "AFK");
-  assert.equal(issue.revision, revision + 1);
-});
-
-test("Issue legada sem classificação ainda destrava: o Confirmation deriva AFK e a IA fecha", () => {
-  // Persistida antes do guard: tem Ticket e nenhuma tag. O Confirmation não passa por addTicket
-  // de propósito, e a regra é total (tag ausente não dispara gatilho) — ninguém fica preso.
-  const { issue, ticket } = ongoing();
-  const legacy = Issue.fromJSON({ ...issue.toJSON(), tags: {} });
-  const legacyTicket = legacy.ticket(ticket.id);
-  legacy.claimTicket(legacyTicket.id, "pi");
-  legacy.transitionTicket(legacyTicket.id, "pi", "CLOSED", "feito", "concluido", true);
-  const confirmation = legacy.tickets.at(-1)!;
-  assert.equal(confirmation.type, "Confirmation");
-  assert.equal(confirmation.tags.human_need, "AFK");
-  legacy.claimTicket(confirmation.id, "pi");
-  legacy.transitionTicket(confirmation.id, "pi", "CLOSED", "verificado", "concluido");
-  assert.equal(legacy.status, "AWAITING");
-});
-
-test("fromJSON hidrata Tickets como entidades e toJSON os serializa", () => {
-  const { issue } = ongoing();
-  const clone = Issue.fromJSON(issue.toJSON());
-  assert.ok(clone.tickets[0] instanceof Ticket);
+test("fromJSON hidrata defaults ausentes e toJSON não vaza baseRevision", () => {
+  const issue = claimed();
+  const data = issue.toJSON();
+  assert.equal("baseRevision" in data, false);
+  const legacy = Issue.fromJSON({ ...data, relates: undefined as never, tags: undefined as never, worktree: undefined as never });
+  assert.deepEqual(legacy.relates, []);
+  assert.deepEqual(legacy.tags, {});
+  assert.equal(legacy.worktree, null);
+  const clone = Issue.fromJSON(data);
   assert.equal(clone.baseRevision, issue.revision);
-  assert.equal("baseRevision" in issue.toJSON(), false);
-  assert.deepEqual(clone.toJSON(), issue.toJSON());
+  assert.deepEqual(clone.toJSON(), data);
 });

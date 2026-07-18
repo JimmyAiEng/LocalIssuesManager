@@ -5,7 +5,7 @@ import test from "node:test";
 import ts from "typescript";
 import { Issue } from "../../src/domain/issue_entity.js";
 import { Queue } from "../../src/domain/queue_repository.js";
-import { CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, TICKET_TYPES } from "../../src/domain/value_objects.js";
+import { ACTION_TYPES, CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES } from "../../src/domain/value_objects.js";
 import * as clientVm from "../../src/web/client/view_model.js";
 
 function files(directory: string): string[] {
@@ -17,11 +17,11 @@ function files(directory: string): string[] {
 
 test("módulos expõem somente a API pública definida (FF-06)", () => {
   assert.deepEqual(publicMethods(Issue.prototype), [
-    "addTicket", "artifactOwnerId", "claim", "claimTicket", "clearWorktree", "closeByAgent", "closeByHuman",
-    "comment", "commentTicket", "decide", "decideTicket", "dependenciesMet", "phaseBlocker", "readyTickets", "reset", "setWorktree", "tag", "tagTicket", "ticket", "toJSON", "transitionTicket",
+    "claim", "clearWorktree", "closeByAgent", "closeByHuman", "comment", "decide", "relate",
+    "reset", "setArchitectureChanged", "setWorktree", "submit", "tag", "toJSON",
   ]);
   assert.deepEqual(publicMethods(Queue.prototype), [
-    "findAttachment", "list", "listDesign", "load", "loadRequired", "oldestOpen", "oldestOpenTicket", "purgeClosed", "readArtifact", "readDesign", "readRequirements", "save", "writeArtifact", "writeAttachment", "writeDesign", "writeRequirements",
+    "findAttachment", "list", "listDesign", "listProjects", "load", "loadRequired", "oldestOpen", "purgeClosed", "readArtifact", "readDesign", "readPrd", "readProject", "readRequirements", "save", "writeArtifact", "writeAttachment", "writeDesign", "writePrd", "writeProject", "writeRequirements",
   ]);
 });
 
@@ -29,11 +29,11 @@ function publicMethods(prototype: object): string[] {
   return Object.getOwnPropertyNames(prototype).filter((name) => name !== "constructor").sort();
 }
 
-test("enums do client não divergem do domínio (Confirmation é interno ao sistema)", () => {
+test("enums do client não divergem do domínio", () => {
   assert.deepEqual(clientVm.ISSUE_STATUSES, [...ISSUE_STATUSES]);
   assert.deepEqual(clientVm.ISSUE_TYPES, [...ISSUE_TYPES]);
   assert.deepEqual(clientVm.CLOSED_REASONS, [...CLOSED_REASONS]);
-  assert.deepEqual(clientVm.TICKET_TYPES, TICKET_TYPES.filter((type) => type !== "Confirmation"));
+  assert.deepEqual(clientVm.ACTION_TYPES, [...ACTION_TYPES]);
 });
 
 test("respeita limites de arquivos e dependências", () => {
@@ -58,7 +58,7 @@ function assertLineLimit(file: string, content: string): void {
 function inspectFile(file: string): void {
   const content = readFileSync(file, "utf8");
   assertLineLimit(file, content);
-  if (file === "src/cli.ts") assert.doesNotMatch(content, /from ["']\.\/domain\//);
+  if (/^src\/cli[\w]*\.ts$/.test(file)) assert.doesNotMatch(content, /from ["']\.\/domain\//);
   if (file.includes("src/domain/") && !file.endsWith("queue_repository.ts")) {
     assert.doesNotMatch(content, /from ["'].*(?:app|cli)/);
   }

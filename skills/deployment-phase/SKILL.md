@@ -1,38 +1,35 @@
 ---
 name: deployment-phase
 description: >-
-  Fase Deploy do workflow: preparar PR/entrega e pedir o gate G4 (go/no-go).
-  Use quando o Ticket claimado tem type=Deploy.
+  Action Deploy do workflow: preparar PR/entrega e pedir o go/no-go humano.
+  Use quando a Issue reivindicada tem action=Deploy.
 ---
 
 # deployment-phase (camada 1)
 
-Acionada quando o Ticket claimado tem **type=`Deploy`**.
+Acionada quando a Issue reivindicada tem **action=`Deploy`**.
 
 ## Objetivo
 
 Preparar PR / entrega / handoff operacional.
 No diagrama: **Merge & Pull Request** → análise estática → **PR Analysis** → Code Review humano.
-Gate **G4**: go / no-go de merge.
 
 ## Validações da fase
 
 - Prepare o PR com o conjunto integrado; **não** faça o merge.
 - Se o repositório tiver análise estática de PR (ex.: SonarQube), aguarde/colete o resultado.
-- **PR Analysis**: analise o diff do PR e os apontamentos da análise estática; trate ou registre cada um antes de pedir G4.
+- **PR Analysis**: analise o diff do PR e os apontamentos da análise estática; trate ou registre cada um antes de pedir o go/no-go.
 
 ## Heurísticas
 
-- Fluxo feliz: após G3 aprovado (Ticket `Deploy` já criado pelo gate).
-- Retrabalho de produto → Tickets Implement, não esta fase.
-- **Não faça merge**: prepare PR/nota e peça G4 via `AWAITING`.
+- Retrabalho de produto → nova Issue `Implement` relacionada, não esta action.
+- **Não faça merge**: prepare PR/nota e peça o go/no-go via `AWAITING`.
 - **Como** entregar (PR, deploy, checklist) é decisão do agente.
-
-## Saídas
-
-PR e/ou nota de entrega; pedido explícito de G4 no comentário.
 
 ## Encerramento
 
-Mova o **Ticket** para `AWAITING` com `--last` (Deploy é a fase final; a flag é sticky e dispara o Confirmation quando o Ticket for fechado):
-`issues ticket status --issue <id> --id <tid> --agent <ia> --status AWAITING --comment "…" --last`.
+Deploy **nunca fecha AFK**: o go/no-go do deploy é decisão humana.
+O agente só entrega para `AWAITING` — pedir `CLOSED` numa Issue Deploy é barrado com erro orientando usar `AWAITING`.
+O gate exige evidência estruturada na thread: um **link http(s) do PR** e o **resultado da análise** (SonarQube/PR Analysis), no comentário do `AWAITING` ou em `issues comment` anterior.
+`issues status --id <id> --agent <ia> --status AWAITING --comment "<link PR http(s) + resultado da análise>"`.
+Só o `decide` humano fecha a Issue depois — e o Code Review final fica auditado (`decided_by`).

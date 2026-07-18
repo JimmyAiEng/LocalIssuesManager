@@ -1,22 +1,31 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type AttachmentData, extForMediaType, type MediaType, mediaTypeForExt } from "./attachment_entity.js";
+import { ArtifactStore } from "./artifact_store.js";
+import type { AttachmentData, MediaType } from "./attachment_entity.js";
 import { ConflictError, NotFoundError } from "./domain_error.js";
 import { Issue, type IssueData } from "./issue_entity.js";
 import { defaultRoot } from "./root.js";
-import type { TicketData } from "./ticket_entity.js";
 import type { IssueStatus, IssueType } from "./value_objects.js";
 
 export type ListFilter = { status?: IssueStatus; project?: string; title?: string; type?: IssueType };
-export type TicketTarget = { issue: Issue; ticket: TicketData };
+// Checks nomeados do pipeline de Implement, rodados nesta ordem (lint→unit→fitness→e2e→mutation):
+// nomear a etapa permite ao gate rotear a falha (mutation = teste fraco; demais = código).
+export type ProjectChecks = { lint?: string; unit?: string; fitness?: string; e2e?: string; mutation?: string };
+// Projeto registrado: aponta o repositório git (worktrees) e a validação que uma Issue Implement
+// precisa passar. `checks` nomeados quando configurados; `check` (comando único) é o fallback legado.
+// `container` = imagem Docker com o toolchain; quando definido, cada check roda isolado nela.
+// `testPaths` = globs que definem os arquivos de teste; quando presente, o gate de Implement
+// exige a ordem TDD (commit só-de-testes antes do primeiro commit de produção). Opt-in.
+export type ProjectConfig = { name: string; repo: string; container?: string; check?: string; checks?: ProjectChecks; testPaths?: string[] };
 const FOLDERS: Record<IssueStatus, string> = {
-  OPEN: "open", CLAIMED: "claimed", "ON-GOING": "ongoing", AWAITING: "awaiting", CLOSED: "closed",
+  OPEN: "open", CLAIMED: "claimed", AWAITING: "awaiting", CLOSED: "closed",
 };
 
 export class Queue {
   readonly #root: string;
+  readonly artifacts: ArtifactStore;
 
-  constructor(root = defaultRoot()) { this.#root = root; }
+  constructor(root = defaultRoot()) { this.#root = root; this.artifacts = new ArtifactStore(root); }
 
   save(issue: Issue): void {
     this.#ensureProject(issue.project);
@@ -34,10 +43,7 @@ export class Queue {
       for (const file of this.#files(project, "CLOSED")) {
         const issue = this.#read(file);
         if (Date.parse(issue.status_changed_at) <= cutoff) {
-          this.#purgeAttachments(issue);
-          this.#purgeArtifacts(issue);
-          this.#purgeDesign(issue);
-          rmSync(this.#requirementsPath(issue.project, issue.id), { force: true });
+          this.#purge(issue);
           rmSync(file, { force: true }); // corrida entre closes concorrentes: ignora arquivo já removido
           purged.push(issue.id);
         }
@@ -46,86 +52,62 @@ export class Queue {
     return purged;
   }
 
-  #purgeAttachments(issue: Issue): void {
-    const threads = [issue.thread, ...issue.tickets.map((ticket) => ticket.thread)];
-    for (const thread of threads) {
-      for (const entry of thread) {
-        for (const attachment of entry.attachments ?? []) {
-          rmSync(this.#attachmentPath(issue.project, attachment), { force: true });
-        }
-      }
+  #purge(issue: Issue): void {
+    for (const entry of issue.thread) for (const attachment of entry.attachments ?? []) {
+      this.artifacts.purgeMedia(issue.project, attachment.id, attachment.mediaType);
     }
+    this.artifacts.purgeIssue(issue.project, issue.id);
   }
 
-  // Artefatos .md são flat (fora das pastas de status, como attachments): keyed pelo id do dono.
-  #purgeArtifacts(issue: Issue): void {
-    for (const ownerId of [issue.id, ...issue.tickets.map((ticket) => ticket.id)]) {
-      rmSync(this.#artifactPath(issue.project, ownerId), { force: true });
-    }
+  // Registro de projetos: project.json na pasta do projeto, criado por `issues project create`.
+  writeProject(config: ProjectConfig): void {
+    const directory = join(this.#root, "projects", projectSegment(config.name));
+    for (const folder of Object.values(FOLDERS)) mkdirSync(join(directory, folder), { recursive: true });
+    writeFileSync(join(directory, "project.json"), JSON.stringify(config, null, 2));
   }
 
-  #artifactPath(project: string, ownerId: string): string {
-    return join(this.#root, "projects", projectSegment(project), "artifacts", `${ownerId}.md`);
+  readProject(name: string): ProjectConfig | null {
+    const path = join(this.#root, "projects", projectSegment(name), "project.json");
+    return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as ProjectConfig : null;
   }
 
-  writeArtifact(project: string, ownerId: string, content: string): void {
-    const directory = join(this.#root, "projects", projectSegment(project), "artifacts");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, `${ownerId}.md`), content, "utf8");
+  listProjects(): ProjectConfig[] {
+    return this.#projects()
+      .map((segment) => join(this.#root, "projects", segment, "project.json"))
+      .filter((path) => existsSync(path))
+      .map((path) => JSON.parse(readFileSync(path, "utf8")) as ProjectConfig);
   }
 
-  readArtifact(project: string, ownerId: string): string | null {
-    const path = this.#artifactPath(project, ownerId);
-    return existsSync(path) ? readFileSync(path, "utf8") : null;
+  // Compatibility façade: novos callers usam `queue.artifacts`; estes aliases preservam API local.
+  writeArtifact(project: string, issueId: string, content: string): void {
+    this.artifacts.writeText(project, { issueId, type: "doc" }, content);
   }
-
-  // Design: pacote por Ticket type=Design em design/<ticketId>/<name> (design.md e <kind>.puml).
-  #designDir(project: string, ticketId: string): string {
-    return join(this.#root, "projects", projectSegment(project), "design", ticketId);
+  readArtifact(project: string, issueId: string): string | null {
+    return this.artifacts.readText(project, { issueId, type: "doc" });
   }
-
-  #purgeDesign(issue: Issue): void {
-    for (const ticket of issue.tickets) {
-      rmSync(this.#designDir(issue.project, ticket.id), { recursive: true, force: true });
-    }
+  writeDesign(project: string, issueId: string, name: string, content: string): void {
+    this.artifacts.writeText(project, { issueId, type: name === "plan.json" ? "plan" : "design", name }, content);
   }
-
-  writeDesign(project: string, ticketId: string, name: string, content: string): void {
-    const directory = this.#designDir(project, ticketId);
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, name), content, "utf8");
+  readDesign(project: string, issueId: string, name: string): string | null {
+    return this.artifacts.readText(project, { issueId, type: name === "plan.json" ? "plan" : "design", name });
   }
-
-  readDesign(project: string, ticketId: string, name: string): string | null {
-    const path = join(this.#designDir(project, ticketId), name);
-    return existsSync(path) ? readFileSync(path, "utf8") : null;
-  }
-
-  listDesign(project: string, ticketId: string): string[] {
-    const directory = this.#designDir(project, ticketId);
-    return existsSync(directory) ? readdirSync(directory) : [];
-  }
-
-  // Requirements: JSON Gherkin da Issue, flat em requirements/<issueId>.json (keyed pela Issue).
-  #requirementsPath(project: string, issueId: string): string {
-    return join(this.#root, "projects", projectSegment(project), "requirements", `${issueId}.json`);
-  }
-
+  listDesign(project: string, issueId: string): string[] { return this.artifacts.list(project, issueId, "design"); }
   writeRequirements(project: string, issueId: string, content: string): void {
-    const directory = join(this.#root, "projects", projectSegment(project), "requirements");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, `${issueId}.json`), content, "utf8");
+    this.artifacts.writeText(project, { issueId, type: "requirements" }, content);
   }
-
   readRequirements(project: string, issueId: string): string | null {
-    const path = this.#requirementsPath(project, issueId);
-    return existsSync(path) ? readFileSync(path, "utf8") : null;
+    return this.artifacts.readText(project, { issueId, type: "requirements" });
   }
-
-  #attachmentPath(project: string, attachment: AttachmentData): string {
-    return join(this.#root, "projects", projectSegment(project), "attachments",
-      `${attachment.id}.${extForMediaType(attachment.mediaType)}`);
+  writePrd(project: string, issueId: string, content: string): void {
+    this.artifacts.writeText(project, { issueId, type: "prd" }, content);
   }
+  readPrd(project: string, issueId: string): string | null {
+    return this.artifacts.readText(project, { issueId, type: "prd" });
+  }
+  writeAttachment(project: string, attachment: AttachmentData, bytes: Buffer): void {
+    this.artifacts.writeMedia(project, attachment, bytes);
+  }
+  findAttachment(id: string): { path: string; mediaType: MediaType } | null { return this.artifacts.findMedia(id); }
 
   load(id: string): Issue | null {
     const file = this.#findPath(id);
@@ -149,30 +131,6 @@ export class Queue {
     const issues = this.list({ status: "OPEN", project });
     issues.sort((a, b) => a.status_changed_at.localeCompare(b.status_changed_at) || a.id.localeCompare(b.id));
     return issues[0] ?? null;
-  }
-
-  oldestOpenTicket(project?: string): TicketTarget | null {
-    const targets = this.list({ status: "ON-GOING", project }).flatMap((issue) =>
-      issue.readyTickets().map((ticket) => ({ issue, ticket: ticket.toJSON() })));
-    targets.sort((a, b) => a.ticket.created_at.localeCompare(b.ticket.created_at) || a.ticket.id.localeCompare(b.ticket.id));
-    return targets[0] ?? null;
-  }
-
-  writeAttachment(project: string, attachment: AttachmentData, bytes: Buffer): void {
-    const directory = join(this.#root, "projects", projectSegment(project), "attachments");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, `${attachment.id}.${extForMediaType(attachment.mediaType)}`), bytes);
-  }
-
-  findAttachment(id: string): { path: string; mediaType: MediaType } | null {
-    for (const project of this.#projects()) {
-      const directory = join(this.#root, "projects", project, "attachments");
-      if (!existsSync(directory)) continue;
-      const file = readdirSync(directory).find((name) => name.startsWith(`${id}.`));
-      const mediaType = file && mediaTypeForExt(file.slice(file.lastIndexOf(".") + 1));
-      if (file && mediaType) return { path: join(directory, file), mediaType };
-    }
-    return null;
   }
 
   #guard(previous: string, issue: Issue): void {

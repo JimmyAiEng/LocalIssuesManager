@@ -2,101 +2,124 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Attachment } from "../../src/domain/attachment_entity.js";
 import { Issue } from "../../src/domain/issue_entity.js";
-import { Ticket } from "../../src/domain/ticket_entity.js";
-import { TICKET_TYPES, type IssueType, type TicketType } from "../../src/domain/value_objects.js";
+import { ACTION_TYPES, type ActionType, type IssueType } from "../../src/domain/value_objects.js";
+import type { IssueView, RelatedView } from "../../src/app/issue_use_cases.js";
 import { composePrompt } from "../../src/app/prompt_composition.js";
 
-function makeIssue(type: IssueType = "Feat"): Issue {
-  return Issue.create({ title: "T", project: "demo", type,
+function makeView(action: ActionType = "Implement", extra: Partial<IssueView> = {}, type: IssueType = "Feat"): IssueView {
+  const issue = Issue.create({ title: "T", project: "demo", type, action,
     problem: "problema X", acceptance_criteria: "criterio Y" }, "claude-code");
+  return { ...issue.toJSON(), artifact: null, related: [], ancestors: [], ...extra };
 }
 
-function makeTicket(type: TicketType = "Implement", extra: Partial<{ references: string; artifacts: string }> = {}): Ticket {
-  return Ticket.create({ issue_id: "iid", type, actor: "claude-code",
-    objective: "obj Z", task: "tarefa W", acceptance_criteria: "crit T", ...extra });
-}
-
-test("com ticket: cabeçalho aponta o tipo e as seções vêm na ordem correta", () => {
-  const text = composePrompt(makeIssue(), makeTicket());
-  assert.match(text, /Ticket `Implement`/);
-  const positions = ["sdlc-workflow", "## Issue", "## Ticket", "issues next --prompt"]
+test("cabeçalho aponta a action e as seções vêm na ordem correta", () => {
+  const text = composePrompt(makeView());
+  assert.match(text, /Issue com action `Implement`/);
+  const positions = ["sdlc-workflow", "## Issue", "issues next --prompt"]
     .map((header) => text.indexOf(header));
   assert.ok(positions.every((pos) => pos >= 0), "todas as seções presentes");
   assert.deepEqual(positions, [...positions].sort((a, b) => a - b), "seções em ordem crescente");
 });
 
-test("sem ticket: cabeçalho de decomposição e sem seção Ticket", () => {
-  const text = composePrompt(makeIssue());
-  assert.match(text, /Issue sem Tickets/);
-  assert.match(text, /sdlc-workflow/);
-  assert.match(text, /## Issue/);
-  assert.doesNotMatch(text, /## Ticket/);
-});
-
-test("ticket null é tratado como ausente", () => {
-  const issue = makeIssue(); // a mesma Issue nos dois lados: ids diferentes tornariam a igualdade impossível
-  assert.equal(composePrompt(issue, null), composePrompt(issue));
-});
-
 test("prompt é mínimo: sem catálogo de comandos nem instruções de fase (ficam nas skills)", () => {
-  const text = composePrompt(makeIssue(), makeTicket());
+  const text = composePrompt(makeView());
   assert.doesNotMatch(text, /## Comandos/);
   assert.doesNotMatch(text, /## SDLC/);
-  assert.doesNotMatch(text, /## Tipo d/);
   assert.match(text, /issues next --prompt/); // único comando: o loop
 });
 
+test("cada ActionType aparece no cabeçalho e na seção Issue", () => {
+  for (const action of ACTION_TYPES) {
+    const text = composePrompt(makeView(action));
+    assert.match(text, new RegExp(`action \`${action}\``), `ActionType ${action}`);
+    assert.ok(text.includes(`- Action: ${action}`), `ActionType ${action} na seção`);
+  }
+});
+
+test("infos da Issue presentes, incluindo id para os comandos", () => {
+  const view = makeView();
+  const text = composePrompt(view);
+  for (const fragment of [`- Id: ${view.id}`, "- Problema: problema X",
+    "- Critérios de aceitação: criterio Y", "- Tipo: Feat", "- Status: OPEN", "- Tags: —"]) {
+    assert.ok(text.includes(fragment), fragment);
+  }
+});
+
+test("artefato da Issue e worktree aparecem quando existem; ausentes, nada", () => {
+  const bare = composePrompt(makeView());
+  assert.doesNotMatch(bare, /## Artefato/);
+  assert.doesNotMatch(bare, /- Worktree:/);
+  const full = composePrompt(makeView("Implement", { artifact: "# contexto explorado",
+    worktree: { path: "/tmp/wt", branch: "issue/ab" } }));
+  assert.match(full, /## Artefato da Issue\n# contexto explorado/);
+  assert.match(full, /- Worktree: \/tmp\/wt \(branch issue\/ab\)/);
+});
+
+test("linhagem: artefatos das relacionadas viajam no prompt; sem artefato, marcado", () => {
+  const related: RelatedView[] = [
+    { id: "d1", title: "Design da fila", status: "CLOSED", action: "Design", artifact: "# spec congelada", kind: "parent" },
+    { id: "p1", title: "Planejamento", status: "CLOSED", action: "Planning", artifact: null, kind: "see-also" },
+  ];
+  const text = composePrompt(makeView("Implement", { related }));
+  assert.match(text, /## Issues relacionadas/);
+  assert.match(text, /### Design da fila \(Design, CLOSED, id d1\)\n# spec congelada/);
+  assert.match(text, /### Planejamento \(Planning, CLOSED, id p1\)\n\(sem artefato\)/);
+  assert.doesNotMatch(composePrompt(makeView()), /## Issues relacionadas/);
+});
+
+test("Issue Implement filha recebe o plano do Design pai no prompt", () => {
+  const related: RelatedView[] = [
+    { id: "d1", title: "Design", status: "CLOSED", action: "Design", artifact: "# spec", kind: "parent",
+      plan: { objetivo: "extrair parser", passos: ["criar arquivo", "ligar gate"],
+        arquivos: ["src/x.ts"], criterio_pronto: "npm test verde" } },
+  ];
+  const text = composePrompt(makeView("Implement", { related }));
+  assert.match(text, /#### Plano de implementação/);
+  assert.match(text, /- Objetivo: extrair parser/);
+  assert.match(text, / {2}1\. criar arquivo\n {2}2\. ligar gate/);
+  assert.match(text, /- Arquivos afetados:\n {2}- src\/x\.ts/);
+  assert.match(text, /- Critério de pronto: npm test verde/);
+  assert.doesNotMatch(composePrompt(makeView("Implement", { related: [
+    { id: "d1", title: "Design", status: "CLOSED", action: "Design", artifact: "# spec", kind: "parent" }] })),
+    /Plano de implementação/);
+});
+
+test("Issue Design filha recebe só as Features do seu cluster no prompt (não o PRD inteiro)", () => {
+  const cluster = ["Feature: Login\n  Scenario: ok", "Feature: Logout\n  Scenario: ok"];
+  const text = composePrompt(makeView("Design", { cluster }));
+  assert.match(text, /## Cluster \(Features desta Issue Design\)/);
+  assert.match(text, /Feature: Login[\s\S]*Feature: Logout/);
+  assert.doesNotMatch(composePrompt(makeView("Design")), /## Cluster/);
+});
+
+test("a cadeia de ancestrais aparece no prompt, do mais próximo ao mais distante", () => {
+  const ancestors: RelatedView[] = [
+    { id: "d1", title: "Design da fila", status: "CLOSED", action: "Design", artifact: null, kind: "parent" },
+    { id: "p1", title: "Planejamento", status: "CLOSED", action: "Planning", artifact: null, kind: "parent" },
+  ];
+  const text = composePrompt(makeView("Implement", { ancestors }));
+  assert.match(text, /## Linhagem \(ancestrais\)/);
+  assert.match(text, /Design da fila \(Design, id d1\) ← Planejamento \(Planning, id p1\)/);
+  assert.doesNotMatch(composePrompt(makeView()), /## Linhagem/);
+});
+
 test("anexos ficam localizáveis ao agente: caminho em disco + URL; sem anexo, sem linha", () => {
-  assert.doesNotMatch(composePrompt(makeIssue()), /Anexos/); // sem anexo → sem linha
+  assert.doesNotMatch(composePrompt(makeView()), /Anexos/);
   const att = Attachment.create({ filename: "erro.png", mediaType: "image/png", size: 10 });
-  const issue = Issue.create({ title: "T", project: "de mo", type: "Feat",
+  const issue = Issue.create({ title: "T", project: "de mo", type: "Feat", action: "Implement",
     problem: "p", acceptance_criteria: "c", attachments: [att.toJSON()] }, "human");
-  const ticket = Ticket.create({ issue_id: issue.id, type: "Implement", actor: "human",
-    objective: "o", task: "t", acceptance_criteria: "c", attachments: [att.toJSON()] });
-  const text = composePrompt(issue, ticket);
+  const text = composePrompt({ ...issue.toJSON(), artifact: null, related: [], ancestors: [] });
   assert.match(text, /- Anexos/);
   assert.match(text, /erro\.png/);
   assert.match(text, new RegExp(`projects/de%20mo/attachments/${att.id}\\.png`)); // projectSegment encoda espaço
   assert.match(text, new RegExp(`/api/attachments/${att.id}`));
 });
 
-test("cada TicketType aparece no cabeçalho e na seção Ticket", () => {
-  for (const type of TICKET_TYPES) {
-    const text = composePrompt(makeIssue(), makeTicket(type));
-    assert.match(text, new RegExp(`Ticket \`${type}\``), `TicketType ${type}`);
-    assert.ok(text.includes(`- Tipo: ${type}`), `TicketType ${type} na seção`);
-  }
-});
-
-test("infos de Issue e Ticket presentes, incluindo ids para os comandos", () => {
-  const issue = makeIssue();
-  const ticket = makeTicket();
-  const text = composePrompt(issue, ticket);
-  for (const fragment of [`- Id: ${issue.id}`, `- Id: ${ticket.id}`,
-    "- Problema: problema X", "- Critérios de aceitação: criterio Y",
-    "- Tipo: Feat", "- Objetivo: obj Z", "- Tarefa: tarefa W", "- Status: OPEN", "- Tags: —"]) {
-    assert.ok(text.includes(fragment), fragment);
-  }
-});
-
-test("references/artifacts omitidos quando vazios, presentes quando existem", () => {
-  const empty = composePrompt(makeIssue(), makeTicket());
-  assert.doesNotMatch(empty, /- Referências:/);
-  assert.doesNotMatch(empty, /- Artefatos:/);
-  const filled = composePrompt(makeIssue(), makeTicket("Implement", { references: "ref A", artifacts: "art B" }));
-  assert.match(filled, /- Referências: ref A/);
-  assert.match(filled, /- Artefatos: art B/);
-});
-
-test("Tags preenchidas aparecem formatadas como key=value", () => {
-  const issue = makeIssue();
+test("Tags preenchidas aparecem formatadas como key=value e determinismo vale", () => {
+  const issue = Issue.create({ title: "T", project: "demo", type: "Feat", action: "QA", problem: "p" }, "human");
   issue.tag({ complexity: "ALTA", risk: "BAIXO" }, "human");
-  const text = composePrompt(issue);
+  const view: IssueView = { ...issue.toJSON(), artifact: null, related: [], ancestors: [] };
+  const text = composePrompt(view);
   assert.match(text, /- Tags: complexity=ALTA, risk=BAIXO/);
-});
-
-test("determinismo: 2 chamadas iguais produzem saída idêntica", () => {
-  const issue = makeIssue();
-  const ticket = makeTicket();
-  assert.equal(composePrompt(issue, ticket), composePrompt(issue, ticket));
+  assert.equal(composePrompt(view), composePrompt(view));
 });

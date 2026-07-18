@@ -1,18 +1,12 @@
-export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "ON-GOING", "AWAITING", "CLOSED"];
+export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "CLOSED"];
 export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"];
-export const TICKET_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy"];
+export const ACTION_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy"];
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"];
 export const TAG_VALUES = { complexity: ["BAIXA", "MEDIA", "ALTA"], human_need: ["HITL", "AFK"], risk: ["BAIXO", "MEDIO", "ALTO"] };
-const PHASE_SHORT = { Planning: "P", Design: "D", Implement: "I", QA: "Q", Deploy: "D" };
 
-export function tagRoute(issueId, scope, ticketId) {
-  return scope === "ticket" ? `/api/issues/${issueId}/tickets/${ticketId}/tags` : `/api/issues/${issueId}/tags`;
-}
+const CREATE_FIELDS = ["title", "project", "type", "action", "problem"];
 
-const CREATE_FIELDS = ["title", "project", "type", "problem"];
-const TICKET_FIELDS = ["objective", "task", "acceptance_criteria", "type"];
-
-/** @typedef {{ id: string, title: string, project: string, type: string, status: string, created_at: string, status_changed_at?: string, phases?: { timestamp: string }[] }} IssueCard */
+/** @typedef {{ id: string, title: string, project: string, type: string, action: string, status: string, created_at: string, status_changed_at?: string, phases?: { timestamp: string }[] }} IssueCard */
 /** @typedef {{ ok: boolean, errors: Record<string, string> }} ValidationResult */
 
 /**
@@ -43,60 +37,19 @@ function compareCards(left, right) {
   return byDecision || left.created_at.localeCompare(right.created_at);
 }
 
-// Uma Issue é o "inbox" do humano quando ela mesma está AWAITING ou tem um Ticket AWAITING.
+// Uma Issue é o "inbox" do humano quando está AWAITING (evidência entregue, decisão pendente).
 export function hasPendingDecision(issue) {
-  return issue.status === "AWAITING" || (issue.tickets ?? []).some((ticket) => ticket.status === "AWAITING");
+  return issue.status === "AWAITING";
 }
 
-// Decisões pendentes (Issues AWAITING + Tickets AWAITING de Issues não-CLOSED), do mais antigo ao mais novo.
-/** @returns {{ issueId: string, issueTitle: string, project: string, kind: "issue" | "ticket", ticketType?: string, since: string }[]} */
+// Decisões pendentes (Issues AWAITING), da mais antiga à mais nova.
+/** @returns {{ issueId: string, issueTitle: string, project: string, action: string, since: string }[]} */
 export function pendingDecisions(issues) {
-  const out = [];
-  for (const issue of issues ?? []) {
-    if (issue.status === "CLOSED") continue;
-    const since = issue.status_changed_at ?? issue.created_at;
-    const base = { issueId: issue.id, issueTitle: issue.title, project: issue.project, since };
-    if (issue.status === "AWAITING") out.push({ ...base, kind: "issue" });
-    for (const ticket of issue.tickets ?? []) {
-      if (ticket.status === "AWAITING") out.push({ ...base, kind: "ticket", ticketType: ticket.type });
-    }
-  }
-  return out.sort((a, b) => String(a.since).localeCompare(String(b.since)));
-}
-
-// Fase concluída (só Tickets CLOSED), ativa (algum Ticket aberto) ou pendente (sem Ticket). Confirmation fica fora.
-export function phaseSteps(issue) {
-  const tickets = issue.tickets ?? [];
-  return TICKET_TYPES.map((type) => {
-    const ofType = tickets.filter((ticket) => ticket.type === type);
-    const state = ofType.some((ticket) => ticket.status !== "CLOSED") ? "active" : ofType.length ? "done" : "pending";
-    return { type, short: PHASE_SHORT[type], state };
-  });
-}
-
-// Próximo tipo sugerido: a fase mais antiga ainda não concluída (primeiro step não "done").
-// "" quando todas as fases já estão concluídas.
-export function suggestNextTicketType(tickets) {
-  const step = phaseSteps({ tickets }).find((candidate) => candidate.state !== "done");
-  return step ? step.type : "";
-}
-
-// Espelha Issue.phaseBlocker: Ticket não-CLOSED de uma fase anterior na ordem TICKET_TYPES.
-// Tipos fora da ordem do client (ex.: Confirmation) nunca bloqueiam.
-export function phaseBlockerOf(tickets, type) {
-  const rank = TICKET_TYPES.indexOf(type);
-  if (rank < 0) return null;
-  return (tickets ?? []).find((ticket) => {
-    const r = TICKET_TYPES.indexOf(ticket.type);
-    return ticket.status !== "CLOSED" && r >= 0 && r < rank;
-  }) ?? null;
-}
-
-// Heurística de criação de Ticket: sem Tickets + não classificada = bloqueado (qualifique antes do 1º);
-// com Tickets + não classificada = aviso não-bloqueante; caso contrário, ok.
-export function ticketCreationGate(issue) {
-  if (!isUnclassified(issue)) return "ok";
-  return (issue.tickets ?? []).length ? "warn" : "blocked";
+  return (issues ?? [])
+    .filter((issue) => issue.status === "AWAITING")
+    .map((issue) => ({ issueId: issue.id, issueTitle: issue.title, project: issue.project,
+      action: issue.action, since: issue.status_changed_at ?? issue.created_at }))
+    .sort((a, b) => String(a.since).localeCompare(String(b.since)));
 }
 
 // Divide a thread em entradas antigas (escondidas) e as `visible` mais recentes.
@@ -106,18 +59,17 @@ export function splitThread(entries, visible = 5) {
   return { older: list.slice(0, cut), recent: list.slice(cut) };
 }
 
-// Issue não-CLOSED sem complexity ou sem risk está "não classificada" — espelha o guard de
-// Issue.addTicket, que precisa das duas para derivar a autonomia do Ticket. human_need fica fora:
-// é override opcional do humano (ausente = AFK), não entrada obrigatória da heurística.
+// Issue não-CLOSED sem complexity ou sem risk está "não classificada" — a classificação
+// alimenta a autonomia (HITL/risco ALTO/complexidade ALTA exigem decisão humana).
 export function isUnclassified(issue) {
   if (issue.status === "CLOSED") return false;
   const tags = issue.tags ?? {};
   return !tags.complexity || !tags.risk;
 }
 
-// Agente possivelmente travado: Issue CLAIMED/ON-GOING sem mudança de Status há mais de 24h.
+// Agente possivelmente travado: Issue CLAIMED sem mudança de Status há mais de 24h.
 export function isStale(issue, now = new Date()) {
-  if (issue.status !== "CLAIMED" && issue.status !== "ON-GOING") return false;
+  if (issue.status !== "CLAIMED") return false;
   const changed = issue.status_changed_at ?? issue.created_at;
   return now.getTime() - new Date(changed).getTime() > 24 * 3_600_000;
 }
@@ -154,21 +106,6 @@ export function humanActions(status) {
   return [];
 }
 
-export function ticketHumanActions(ticket) {
-  if (ticket.status === "AWAITING") return ["ticket-decide-open", "ticket-decide-close"];
-  if (ticket.status === "CLAIMED" && ticket.owner === "human") return ["ticket-await", "ticket-reopen", "ticket-close"];
-  return [];
-}
-
-export function canCreateTicket(status) {
-  return status === "CLAIMED" || status === "ON-GOING";
-}
-
-// Humano assume um Ticket OPEN para depois mudar seu status (owner). Espelha `issues ticket claim --human`.
-export function canClaimTicket(ticket) {
-  return ticket.status === "OPEN";
-}
-
 /** @returns {ValidationResult} */
 export function validateCreate(values) {
   const errors = {};
@@ -176,16 +113,7 @@ export function validateCreate(values) {
     if (!String(values[field] ?? "").trim()) errors[field] = "Campo obrigatório";
   }
   if (values.type?.trim() && !ISSUE_TYPES.includes(values.type)) errors.type = "Tipo inválido";
-  return { ok: Object.keys(errors).length === 0, errors };
-}
-
-/** @returns {ValidationResult} */
-export function validateCreateTicket(values) {
-  const errors = {};
-  for (const field of TICKET_FIELDS) {
-    if (!String(values[field] ?? "").trim()) errors[field] = "Campo obrigatório";
-  }
-  if (values.type?.trim() && !TICKET_TYPES.includes(values.type)) errors.type = "Tipo inválido";
+  if (values.action?.trim() && !ACTION_TYPES.includes(values.action)) errors.action = "Action inválida";
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
@@ -200,10 +128,6 @@ export function validateReset(values) {
 export function validateDecide(values) {
   if (values.status === "OPEN") return validateCommentAndReason(values, { requireComment: true, requireReason: false });
   return validateCommentAndReason(values, { requireComment: false, requireReason: true });
-}
-
-export function validateTicketStatus(values) {
-  return validateCommentAndReason(values, { requireComment: true, requireReason: values.status === "CLOSED" });
 }
 
 export function attachmentsMarkup(attachments) {

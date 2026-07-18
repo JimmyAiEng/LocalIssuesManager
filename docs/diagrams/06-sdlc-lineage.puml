@@ -1,0 +1,52 @@
+@startuml sdlc-lineage
+title WorkflowDev — Fluxo SDLC e Linhagem entre Issues (fan-out)
+
+skinparam componentStyle rectangle
+top to bottom direction
+
+package "Planning (Issue)" {
+  [requirements Gherkin\n+ PRD (clusters)] as P
+}
+
+package "Design (1 por cluster)" {
+  [design.md + .puml\n+ plan.json] as D1
+  [design.md + .puml\n+ plan.json] as D2
+}
+
+package "Implement (N por Design)" {
+  [Small Plan\n+ worktree + TDD] as I1
+  [Small Plan\n+ worktree + TDD] as I2
+  [Small Plan\n+ worktree + TDD] as I3
+}
+
+package "QA" {
+  [valida o conjunto\nentregue] as QAc
+}
+
+package "Deploy" {
+  [PR + Code Review\n+ go/no-go humano] as DEP
+}
+
+P --> D1 : child (por cluster)
+P --> D2 : child
+D1 --> I1 : child
+D1 --> I2 : child
+D2 --> I3 : child
+I1 ..> I2 : see-also (sequencial)
+I2 ..> I3 : see-also
+I3 --> QAc
+QAc --> DEP
+
+note right of P
+  decomposeIssue faz o fan-out:
+  cria Issues filhas e grava o par
+  recíproco parent<->child (inverseKind).
+  Não há Tickets: cada fase é nova Issue.
+end note
+
+note bottom of DEP
+  Quem reivindica uma Issue enxerga
+  os artefatos das relacionadas
+  (herança de contexto no prompt).
+end note
+@enduml

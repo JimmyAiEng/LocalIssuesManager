@@ -1,6 +1,7 @@
 import {
-  CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, TAG_VALUES, attachmentsMarkup, escapeHtml, filterIssues, groupIssues,
-  hasPendingDecision, isStale, isUnclassified, options, pendingDecisions, phaseSteps, statusAge, statusAgeFrom,
+  CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, ACTION_TYPES, TAG_VALUES, attachmentsMarkup, escapeHtml,
+  filterIssues, groupIssues, hasPendingDecision, isStale, isUnclassified, options, pendingDecisions,
+  statusAge, statusAgeFrom,
 } from "./view_model.js";
 import { state } from "./state.js";
 
@@ -25,10 +26,8 @@ function boardControls(decisions) {
 
 function decisionsPanel(decisions) {
   if (!state.decisionsOpen || !decisions.length) return "";
-  const items = decisions.map((decision) => {
-    const label = decision.kind === "ticket" ? `Ticket ${escapeHtml(decision.ticketType)}` : "Issue";
-    return `<li><a href="/issues/${decision.issueId}" data-issue-id="${decision.issueId}"><span class="badge status-AWAITING">${label}</span> <strong>${escapeHtml(decision.issueTitle)}</strong> <span class="dim">${escapeHtml(decision.project)} · ${statusAgeFrom(decision.since)}</span></a></li>`;
-  }).join("");
+  const items = decisions.map((decision) =>
+    `<li><a href="/issues/${decision.issueId}" data-issue-id="${decision.issueId}"><span class="badge status-AWAITING">${escapeHtml(decision.action)}</span> <strong>${escapeHtml(decision.issueTitle)}</strong> <span class="dim">${escapeHtml(decision.project)} · ${statusAgeFrom(decision.since)}</span></a></li>`).join("");
   return `<section class="decisions-inbox" aria-label="Decisões pendentes"><h2>Decisões pendentes <small>${decisions.length}</small></h2><ul>${items}</ul></section>`;
 }
 
@@ -39,16 +38,11 @@ function column(status, issues) {
 
 function card(issue) {
   const owner = issue.owner ? `<span class="owner">${escapeHtml(issue.owner)}</span>` : "";
-  const tickets = issue.tickets?.length ? `<span class="pill-count">${issue.tickets.length} Ticket${issue.tickets.length === 1 ? "" : "s"}</span>` : "";
   const stale = isStale(issue);
   const staleAttr = stale ? ` title="Sem mudança de Status há mais de 24h — agente possivelmente travado"` : "";
   const decision = hasPendingDecision(issue) ? `<span class="card-flag">⚠ decisão</span>` : "";
-  return `<a class="card status-${issue.status}${stale ? " card--stale" : ""}" href="/issues/${issue.id}" data-issue-id="${issue.id}"${staleAttr}><strong>${escapeHtml(issue.title)}</strong><span>${escapeHtml(issue.project)} · ${escapeHtml(issue.type)}</span>${stepper(issue)}${cardTags(issue)}<span class="card-foot">${owner}${tickets}${decision}<time title="${escapeHtml(issue.status_changed_at ?? issue.created_at)}">${statusAge(issue)}</time></span></a>`;
-}
-
-function stepper(issue) {
-  const dots = phaseSteps(issue).map((step) => `<span class="step step--${step.state}" title="${escapeHtml(step.type)}">${step.short}</span>`).join("");
-  return `<span class="stepper" aria-hidden="true">${dots}</span>`;
+  const relates = issue.relates?.length ? `<span class="pill-count">${issue.relates.length} relacionada${issue.relates.length === 1 ? "" : "s"}</span>` : "";
+  return `<a class="card status-${issue.status}${stale ? " card--stale" : ""}" href="/issues/${issue.id}" data-issue-id="${issue.id}"${staleAttr}><strong>${escapeHtml(issue.title)}</strong><span>${escapeHtml(issue.project)} · ${escapeHtml(issue.type)} · ${escapeHtml(issue.action)}</span>${cardTags(issue)}<span class="card-foot">${owner}${relates}${decision}<time title="${escapeHtml(issue.status_changed_at ?? issue.created_at)}">${statusAge(issue)}</time></span></a>`;
 }
 
 function cardTags(issue) {
@@ -69,8 +63,8 @@ export function renderNewIssue() {
     ${textInput("title", "Título", draft.title)}
     ${textInput("project", "Projeto", draft.project, projects)}
     ${selectInput("type", "Tipo", ISSUE_TYPES, draft.type)}
+    ${selectInput("action", "Action (entrega esperada)", ACTION_TYPES, draft.action)}
     ${areaInput("problem", "Problema", draft.problem)}
-    ${areaInput("artifacts", "Artefatos (opcional)", draft.artifacts)}
     ${areaInput("acceptance_criteria", "Critérios de aceite (opcional)", draft.acceptance_criteria)}
     ${selectInput("complexity", `${tagLabels.complexity} (opcional)`, TAG_VALUES.complexity, draft.complexity)}
     ${selectInput("human_need", `${tagLabels.human_need} (opcional)`, TAG_VALUES.human_need, draft.human_need)}
@@ -134,25 +128,18 @@ export function tagsMarkup(tags) {
   return `<p class="tags">${chips}</p>`;
 }
 
-// Partials compartilhados entre a Issue e seus Tickets (detail_view + ticket_view).
-// A autonomia do Ticket é derivada da Issue e tagTicket rejeita o update: no escopo ticket o
-// select de human_need não é oferecido — seria um controle que o domínio recusa por definição.
-export function tagEditor(scope, tags, ticketId, status, open = false) {
+export function tagEditor(tags, status, open = false) {
   if (status === "CLOSED") return "";
-  const ticketAttr = ticketId ? ` data-ticket-id="${ticketId}"` : "";
-  const humanNeed = scope === "issue"
-    ? selectInput("human_need", tagLabels.human_need, TAG_VALUES.human_need, tags?.human_need ?? "", "Não alterar") : "";
-  return `<details class="tag-editor"${detailsAttrs(`tags:${ticketId ?? "issue"}`, open)}><summary>Classificar ${scope === "issue" ? "Issue" : "Ticket"}</summary><form class="form tag-form" data-tag-scope="${scope}"${ticketAttr}>
+  return `<details class="tag-editor"${detailsAttrs("tags:issue", open)}><summary>Classificar Issue</summary><form class="form tag-form" data-tag-scope="issue">
     ${selectInput("complexity", tagLabels.complexity, TAG_VALUES.complexity, tags?.complexity ?? "", "Não alterar")}
-    ${humanNeed}
+    ${selectInput("human_need", tagLabels.human_need, TAG_VALUES.human_need, tags?.human_need ?? "", "Não alterar")}
     ${selectInput("risk", tagLabels.risk, TAG_VALUES.risk, tags?.risk ?? "", "Não alterar")}
     <button ${state.busy ? "disabled" : ""}>Salvar classificação</button>
   </form></details>`;
 }
 
-export function commentForm(ticketId) {
-  const idAttr = ticketId ? ` data-ticket-id="${ticketId}"` : "";
-  return `<form id="comment-form" class="form"${idAttr}>${summaryError()}<label>Comentário<textarea name="comment" rows="3">${escapeHtml(state.commentDraft.comment ?? "")}</textarea></label>${attachmentField()}<div class="form-actions"><button ${state.busy ? "disabled" : ""}>Enviar comentário</button><button type="button" data-cancel-comment>Cancelar</button></div></form>`;
+export function commentForm() {
+  return `<form id="comment-form" class="form">${summaryError()}<label>Comentário<textarea name="comment" rows="3">${escapeHtml(state.commentDraft.comment ?? "")}</textarea></label>${attachmentField()}<div class="form-actions"><button ${state.busy ? "disabled" : ""}>Enviar comentário</button><button type="button" data-cancel-comment>Cancelar</button></div></form>`;
 }
 
 export function commentField() {
@@ -166,7 +153,8 @@ export function reasonField() {
 export function message(entry) {
   const kind = entry.actor === "human" ? "human" : "agent";
   const reason = entry.closed_reason ? ` · ${escapeHtml(entry.closed_reason)}` : "";
-  return `<li class="msg msg--${kind}"><div class="msg-head"><span class="msg-who">${escapeHtml(entry.actor)}</span><time>${date(entry.timestamp)}</time></div><p class="msg-status">${entry.status}${reason}</p><p class="preserve">${escapeHtml(entry.comment)}</p>${attachmentsMarkup(entry.attachments)}</li>`;
+  const role = entry.role ? `<span class="msg-role">${escapeHtml(entry.role)}</span>` : "";
+  return `<li class="msg msg--${kind}"><div class="msg-head"><span class="msg-who">${escapeHtml(entry.actor)}</span>${role}<time>${date(entry.timestamp)}</time></div><p class="msg-status">${entry.status}${reason}</p><p class="preserve">${escapeHtml(entry.comment)}</p>${attachmentsMarkup(entry.attachments)}</li>`;
 }
 
 export function date(value) { return new Date(value).toLocaleString(); }
@@ -176,6 +164,6 @@ function selectOptions(values, selected, empty) { return `<option value="">${emp
 function restoreScroll() { setTimeout(() => window.scrollTo(0, Number(sessionStorage.getItem("issues.scroll") ?? 0))); }
 
 const labels = {
-  OPEN: "Disponível na Fila", CLAIMED: "Em decomposição", "ON-GOING": "Tickets em andamento",
+  OPEN: "Disponível na Fila", CLAIMED: "Em andamento",
   AWAITING: "Requer sua Decisão", CLOSED: "Histórico encerrado",
 };

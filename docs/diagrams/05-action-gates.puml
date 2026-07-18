@@ -1,0 +1,57 @@
+@startuml action-gates
+title WorkflowDev — Conclusão por Workflow
+
+start
+:IA solicita AWAITING ou CLOSED;
+:statusIssue carrega Issue;
+:completeIssue seleciona Workflow pela Action;
+
+switch (Action)
+case (Planning)
+  :validar Requirements + PRD
+  + filha Design por cluster;
+case (Design)
+  :validar decisão arquitetural,
+  pacote UML, Plan e filha Implement;
+case (Implement)
+  :validar Worktree, ordem TDD
+  e checks do Projeto;
+case (QA)
+  :exigir Artifact doc próprio;
+case (Deploy)
+  :exigir link de PR + análise;
+endswitch
+
+if (entrega inválida?) then (sim)
+  :GateAssessment rejected;
+  :DomainError / DesignGateError;
+  stop
+endif
+
+:GatePolicy avalia tags e regras do Workflow;
+if (decisão humana obrigatória?) then (sim)
+  :GateAssessment human-required;
+  if (destino solicitado = CLOSED?) then (sim)
+    :bloquear; orientar AWAITING;
+    stop
+  else (não)
+    :Issue.submit -> AWAITING;
+  endif
+else (não)
+  :GateAssessment approved;
+  if (destino solicitado = CLOSED?) then (sim)
+    :Issue.closeByAgent -> CLOSED;
+  else (não)
+    :Issue.submit -> AWAITING;
+  endif
+endif
+
+:Queue.save;
+stop
+
+note right
+  Regras human-required:
+  HITL, risco ALTO, complexidade ALTA,
+  mudança arquitetural ou Deploy.
+end note
+@enduml

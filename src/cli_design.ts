@@ -1,5 +1,6 @@
-import { addDesignDiagram, getDesignPackage, setDesignDoc } from "./app/design_use_cases.js";
-import { DesignGateError } from "./domain/design_gate.js";
+import {
+  addDesignDiagram, DesignGateError, getDesignPackage, setArchitectureChanged, setDesignDoc,
+} from "./app/design_use_cases.js";
 
 type Flags = Record<string, string | boolean>;
 
@@ -24,11 +25,20 @@ export async function printDesignPackage(issueId: string, pretty: boolean): Prom
 }
 
 async function design(sub: string | undefined, flags: Flags): Promise<object> {
-  if (sub !== "doc" && sub !== "add") {
-    throw new Error("Usage: issues design <doc|add> --issue <issueId> --ticket <ticketId> [--kind <kind>] --file <path>");
+  if (sub === "changed") {
+    return setArchitectureChanged({ issueId: need(flags, "issue"), value: parseChanged(need(flags, "value")) });
   }
-  const base = { issueId: need(flags, "issue"), ticketId: need(flags, "ticket"), file: need(flags, "file") };
+  if (sub !== "doc" && sub !== "add") {
+    throw new Error("Usage: issues design <doc|add|changed> --issue <issueId> [--kind <kind>] [--file <path>] [--value <true|false>]");
+  }
+  const base = { issueId: need(flags, "issue"), file: need(flags, "file") };
   return sub === "doc" ? setDesignDoc(base) : addDesignDiagram({ ...base, kind: need(flags, "kind") });
+}
+
+function parseChanged(raw: string): boolean {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error("--value deve ser true ou false");
 }
 
 function parseFlags(args: string[]): Flags {

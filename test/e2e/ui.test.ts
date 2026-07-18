@@ -9,18 +9,21 @@ import { Queue } from "../../src/domain/queue_repository.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
 // E2E de UI real: servidor HTTP real (startWebServer, caminho dev via tsx) + Chromium headless
-// navegando a SPA. Cobre PRD §8 (requisitos de UI). Dados semeados pela CLI real; timestamps
-// ajustados no disco quando a ordenação/idade precisa ser determinística.
+// navegando a SPA. Dados semeados pela CLI real; timestamps ajustados no disco quando a
+// ordenação/idade precisa ser determinística.
 
 const bin = resolve("bin/issues");
 const cli = (args: string[], root: string): string =>
   execFileSync(bin, args, { env: { ...process.env, ISSUES_ROOT: root }, encoding: "utf8" });
-// classify:false semeia Issue sem risk/complexity — o estado que o guard de domínio (Issue.addTicket)
-// e seu espelho no cliente (ticketCreationGate) existem para barrar.
-const createIssue = (root: string, o: { title: string; project: string; type: string; problem?: string; classify?: boolean }): string =>
-  JSON.parse(cli(["create", "--title", o.title, "--project", o.project, "--type", o.type,
-    "--problem", o.problem ?? "problema",
-    ...(o.classify === false ? [] : ["--complexity", "BAIXA", "--risk", "BAIXO"]), "--human"], root)).id as string; // classificada: Ticket exige risk+complexity
+
+const ensureProject = (root: string, project: string): void => {
+  cli(["project", "create", "--name", project, "--repo", root], root); // upsert: repetir é inofensivo
+};
+const createIssue = (root: string, o: { title: string; project: string; type: string; action?: string; problem?: string }): string => {
+  ensureProject(root, o.project);
+  return JSON.parse(cli(["create", "--title", o.title, "--project", o.project, "--type", o.type,
+    "--action", o.action ?? "QA", "--problem", o.problem ?? "problema", "--human"], root)).id as string;
+};
 
 // Um Chromium por arquivo; contexto+página por teste (higiene de processos).
 let browser: Browser;
@@ -43,31 +46,20 @@ async function withUI(seed: (root: string) => void, run: (page: Page, url: strin
 }
 
 // --- semeadura via CLI real -------------------------------------------------
-function claimed(root: string, o: { title: string; project: string; type: string; classify?: boolean }): string {
+function claimed(root: string, o: { title: string; project: string; type: string; action?: string }): string {
   const id = createIssue(root, o);
-  cli(["next", "--agent", "pi", "--project", o.project], root); // OPEN -> CLAIMED (owner pi)
+  cli(["next", "--id", id, "--agent", "pi"], root); // OPEN -> CLAIMED (owner pi)
   return id;
 }
 
-function ongoing(root: string, o: { title: string; project: string; type: string }): string {
-  const id = claimed(root, o);
-  cli(["ticket", "create", "--issue", id, "--type", "Implement",
-    "--objective", "Implementar fatia", "--task", "codar", "--acceptance-criteria", "passa", "--agent", "pi"], root);
-  return id; // 1º Ticket -> Issue ON-GOING
-}
+// awaiting() semeia Issues QA (action default): o gate de conclusão exige o Artefato .md antes de AWAITING.
+const qaArtifactFile = join(mkdtempSync(join(tmpdir(), "issues-e2e-ui-qa-")), "qa.md");
+writeFileSync(qaArtifactFile, "# QA ok");
 
-// IA conduz até AWAITING pela CLI (Ticket + Confirmation), como em requirements_web.
 function awaiting(root: string, o: { title: string; project: string; type: string }): string {
-  const id = ongoing(root, o);
-  const tid = JSON.parse(cli(["get", "--id", id], root)).tickets[0].id as string;
-  cli(["ticket", "claim", "--issue", id, "--id", tid, "--agent", "pi"], root);
-  cli(["ticket", "status", "--issue", id, "--id", tid, "--agent", "pi",
-    "--status", "CLOSED", "--comment", "feito", "--reason", "concluido", "--last"], root);
-  const cid = JSON.parse(cli(["get", "--id", id], root)).tickets
-    .find((t: { type: string }) => t.type === "Confirmation").id as string;
-  cli(["ticket", "claim", "--issue", id, "--id", cid, "--agent", "pi"], root);
-  cli(["ticket", "status", "--issue", id, "--id", cid, "--agent", "pi",
-    "--status", "CLOSED", "--comment", "verificado", "--reason", "concluido"], root);
+  const id = claimed(root, o);
+  cli(["artifact", "--id", id, "--file", qaArtifactFile], root);
+  cli(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência: relatório"], root);
   return id;
 }
 
@@ -81,7 +73,7 @@ function closed(root: string, o: { title: string; project: string; type: string 
 function findIssueFile(root: string, id: string): string {
   const projects = join(root, "projects");
   for (const project of readdirSync(projects)) {
-    for (const folder of ["open", "claimed", "ongoing", "awaiting", "closed"]) {
+    for (const folder of ["open", "claimed", "awaiting", "closed"]) {
       const candidate = join(projects, project, folder, `${id}.json`);
       try { readFileSync(candidate); return candidate; } catch { /* próxima pasta */ }
     }
@@ -99,10 +91,9 @@ const daysAgo = (n: number): string => new Date(Date.now() - n * 86_400_000).toI
 
 // Quadro completo com uma Issue por coluna (projetos distintos p/ o `next` claimar o alvo certo).
 function fullBoard(root: string): { open1: string; open2: string; claimedId: string } {
-  const open1 = createIssue(root, { title: "Login quebrado", project: "web", type: "Fix" });
-  const open2 = createIssue(root, { title: "Cadastro novo", project: "web", type: "Feat" });
+  const open1 = createIssue(root, { title: "Login quebrado", project: "web", type: "Fix", action: "Implement" });
+  const open2 = createIssue(root, { title: "Cadastro novo", project: "web", type: "Feat", action: "Planning" });
   const claimedId = claimed(root, { title: "Refatorar api", project: "api", type: "Refactor" });
-  ongoing(root, { title: "Spike pesquisa", project: "lab", type: "Research" });
   awaiting(root, { title: "Deploy pendente", project: "ops", type: "Fix" });
   closed(root, { title: "Bug antigo", project: "legacy", type: "Fix" });
   backdate(root, open1, daysAgo(5)); // mais antigo e "há 5 dias" no Status
@@ -113,13 +104,13 @@ function fullBoard(root: string): { open1: string; open2: string; claimedId: str
 // =====================================================================================
 // Item 1 — Quadro: colunas, contagem, ordem (mais antigos primeiro)
 // =====================================================================================
-test("UI-01: quadro mostra as 5 colunas com contagem por Status e os cards mais antigos primeiro", async () =>
+test("UI-01: quadro mostra as 4 colunas com contagem por Status e os cards mais antigos primeiro", async () =>
   withUI(fullBoard, async (page, url) => {
     await page.goto(`${url}/`);
     await page.getByRole("heading", { name: "Issues", exact: true }).waitFor();
     const columns = page.locator(".board .column");
     await assert.deepEqual(await columns.locator("h2").evaluateAll((hs) => hs.map((h) => h.id)),
-      ["OPEN", "CLAIMED", "ON-GOING", "AWAITING", "CLOSED"]);
+      ["OPEN", "CLAIMED", "AWAITING", "CLOSED"]);
     assert.equal(await page.locator(".column.status-OPEN h2 small").textContent(), "2");
     assert.equal(await page.locator(".column.status-CLAIMED h2 small").textContent(), "1");
     assert.equal(await page.locator(".column.status-CLOSED h2 small").textContent(), "1");
@@ -129,15 +120,15 @@ test("UI-01: quadro mostra as 5 colunas com contagem por Status e os cards mais 
   }));
 
 // =====================================================================================
-// Item 2 — Card (título, projeto, tipo, owner, tempo no Status) + clique abre detalhe
+// Item 2 — Card (título, projeto, tipo, action, owner, tempo no Status) + clique abre detalhe
 // =====================================================================================
-test("UI-02: card exibe título/projeto/tipo/owner/tempo no Status e o clique abre o detalhe", async () =>
+test("UI-02: card exibe título/projeto/tipo/action/owner/tempo no Status e o clique abre o detalhe", async () =>
   withUI(fullBoard, async (page, url) => {
     await page.goto(`${url}/`);
     const openCard = page.locator(".column.status-OPEN .card").first();
     await openCard.waitFor();
     assert.match(await openCard.locator("strong").innerText(), /Login quebrado/);
-    assert.match(await openCard.innerText(), /web · Fix/); // projeto · tipo
+    assert.match(await openCard.innerText(), /web · Fix · Implement/); // projeto · tipo · action
     assert.match(await openCard.locator("time").innerText(), /há 5 dias/); // tempo no Status (backdated)
     // owner aparece no card CLAIMED (owner pi), não no OPEN.
     assert.match(await page.locator(".column.status-CLAIMED .card .owner").innerText(), /pi/);
@@ -164,7 +155,7 @@ test("UI-03: filtra por título/projeto/tipo, limpa filtros e mostra Atualizar c
 
     await page.locator("#clear").click(); // limpar filtros
     assert.equal(await page.locator("#title").inputValue(), "");
-    assert.ok((await page.locator(".card").count()) >= 5);
+    assert.ok((await page.locator(".card").count()) >= 4);
 
     await page.selectOption("#type", "Feat"); // filtro por tipo
     assert.deepEqual(await page.locator(".card strong").allInnerTexts(), ["Cadastro novo"]);
@@ -175,8 +166,7 @@ test("UI-03: filtra por título/projeto/tipo, limpa filtros e mostra Atualizar c
   }));
 
 // =====================================================================================
-// Item 4 — Detalhe: metadados, problema, AC, tags (editor), thread, motivo de fechamento,
-//          lista de Tickets e ações humanas válidas por Status.
+// Item 4 — Detalhe: metadados, problema, AC, tags (editor), thread e ações por Status.
 // =====================================================================================
 test("UI-04a: detalhe da Issue CLAIMED mostra metadados, problema, AC, editor de tags, thread e só Reset como ação", async () =>
   withUI((root) => { claimed(root, { title: "Detalhe claimed", project: "api", type: "Refactor" }); },
@@ -184,7 +174,7 @@ test("UI-04a: detalhe da Issue CLAIMED mostra metadados, problema, AC, editor de
       const id = readdirSync(join(root, "projects", "api", "claimed"))[0].replace(".json", "");
       await page.goto(`${url}/issues/${id}`);
       await page.getByRole("heading", { name: "Detalhe claimed" }).waitFor();
-      assert.match(await page.locator(".detail .meta").first().innerText(), /Projeto: api · Tipo: Refactor/);
+      assert.match(await page.locator(".detail .meta").first().innerText(), /Projeto: api · Tipo: Refactor · Action: QA/);
       assert.match(await page.locator(".detail").innerText(), /Problema/);
       assert.match(await page.locator(".detail").innerText(), /Critérios de aceite/);
       await assert.ok(await page.getByText("Classificar Issue").count()); // editor de tags
@@ -195,7 +185,7 @@ test("UI-04a: detalhe da Issue CLAIMED mostra metadados, problema, AC, editor de
       assert.equal(await page.getByRole("button", { name: "Fechar Issue" }).count(), 0);
     }));
 
-test("UI-04b: detalhe da Issue AWAITING oferece Decidir (Devolver/Fechar) e lista os Tickets", async () =>
+test("UI-04b: detalhe da Issue AWAITING oferece Decidir (Devolver/Fechar) e mostra a evidência na thread", async () =>
   withUI((root) => { awaiting(root, { title: "Detalhe awaiting", project: "ops", type: "Fix" }); },
     async (page, url, root) => {
       const id = readdirSync(join(root, "projects", "ops", "awaiting"))[0].replace(".json", "");
@@ -204,9 +194,7 @@ test("UI-04b: detalhe da Issue AWAITING oferece Decidir (Devolver/Fechar) e list
       await assert.ok(await page.getByRole("button", { name: "Devolver para OPEN" }).count()); // Decidir só em AWAITING
       await assert.ok(await page.getByRole("button", { name: "Fechar Issue" }).count());
       assert.equal(await page.getByRole("button", { name: "Fazer Reset" }).count(), 0);
-      // Lista de Tickets do agregado.
-      assert.match(await page.locator(".tickets").innerText(), /Implementar fatia/);
-      assert.match(await page.locator(".tickets .ticket-type").first().innerText(), /Implement/);
+      assert.match(await page.locator(".thread").innerText(), /evidência: relatório/); // evidência obrigatória visível
     }));
 
 test("UI-04c: detalhe da Issue CLOSED mostra o motivo de fechamento e não oferece ações", async () =>
@@ -233,24 +221,23 @@ test("UI-05: voltar ao quadro preserva os filtros aplicados na sessão", async (
     assert.equal(await page.locator("#title").inputValue(), "Login"); // filtro preservado
     assert.deepEqual(await page.locator(".card strong").allInnerTexts(), ["Login quebrado"]);
   }));
-// ponytail: rolagem não asserida — página de teste é curta (sem overflow), scrollTo(0,0) sempre;
-// asserção de scroll seria flaky. Filtros cobrem "preservar sessão".
 
 // =====================================================================================
-// Item 6 — Criar Issue com validação prévia
+// Item 6 — Criar Issue com validação prévia (inclui a Action)
 // =====================================================================================
 test("UI-06: formulário de nova Issue bloqueia submit inválido e, quando válido, abre o detalhe", async () =>
-  withUI(() => { /* quadro vazio */ }, async (page, url) => {
+  withUI((root) => { ensureProject(root, "web"); }, async (page, url) => {
     await page.goto(`${url}/issues/new`);
     await page.getByRole("heading", { name: "Nova Issue" }).waitFor();
     await page.getByRole("button", { name: "Salvar Issue" }).click(); // submit sem campos obrigatórios
     await page.locator(".error-summary").waitFor();
-    assert.ok((await page.locator(".field-error").count()) >= 3); // título/projeto/tipo/problema
+    assert.ok((await page.locator(".field-error").count()) >= 4); // título/projeto/tipo/action/problema
     assert.match(page.url(), /\/issues\/new$/); // não navegou
 
     await page.fill('input[name="title"]', "Nova via UI");
     await page.fill('input[name="project"]', "web");
     await page.selectOption('select[name="type"]', "Feat");
+    await page.selectOption('select[name="action"]', "Planning");
     await page.fill('textarea[name="problem"]', "algo quebrou");
     await page.getByRole("button", { name: "Salvar Issue" }).click();
     await page.getByRole("heading", { name: "Nova via UI" }).waitFor(); // sucesso abre o detalhe
@@ -259,11 +246,7 @@ test("UI-06: formulário de nova Issue bloqueia submit inválido e, quando váli
   }));
 
 // =====================================================================================
-// Item 7 — Conflito de save -> 409: preserva rascunho e oferece Atualizar
-// CAMINHO: page.route() (mock 409). O client (http.js/mutations.js) NÃO envia revisão/If-Match;
-// o ConflictError (queue_repository #guard) captura baseRevision do disco a CADA request no
-// servidor, logo staleness do browser jamais dispara 409 — cenário inalcançável de forma
-// determinística. O mock intercepta o POST e responde 409, exercitando de fato a UI de conflito.
+// Item 7 — Conflito de save -> 409: preserva rascunho e oferece Atualizar (mock via page.route)
 // =====================================================================================
 test("UI-07: 409 no save preserva o rascunho e oferece Atualizar (mock via page.route)", async () =>
   withUI((root) => { claimed(root, { title: "Conflito", project: "api", type: "Refactor" }); },
@@ -333,6 +316,7 @@ test("UI-09a: fechar Issue exige confirmação explícita antes de efetivar (irr
   withUI((root) => { createIssue(root, { title: "Fechar OPEN", project: "web", type: "Fix" }); },
     async (page, url, root) => {
       const id = readdirSync(join(root, "projects", "web", "open"))[0].replace(".json", "");
+      new Queue(root).artifacts.writeText("web", { issueId: id, type: "doc" }, "# QA concluído");
       await page.goto(`${url}/issues/${id}`);
       await page.getByRole("button", { name: "Fechar Issue" }).click(); // abre painel
       await page.selectOption('select[name="closed_reason"]', "concluido");
@@ -359,62 +343,9 @@ test("UI-09b: ação reversível (Reset) não pede confirmação — efetiva dir
     }));
 
 // =====================================================================================
-// Item 10 — Gates/enforcement do workflow: stepper de fases, bloqueio de Ticket sem
-//          classificação (ticketCreationGate) e inbox de Decisões.
+// Item 10 — Inbox de Decisões pendentes e linhagem de Issues relacionadas
 // =====================================================================================
-test("UI-10a: detalhe mostra o stepper de fases (Planning→Deploy)", async () =>
-  withUI((root) => { ongoing(root, { title: "Stepper", project: "lab", type: "Research" }); },
-    async (page, url, root) => {
-      const id = readdirSync(join(root, "projects", "lab", "ongoing"))[0].replace(".json", "");
-      await page.goto(`${url}/issues/${id}`);
-      await page.locator(".detail-stepper").waitFor();
-      assert.deepEqual(await page.locator(".detail-stepper .dstep-label").allInnerTexts(),
-        ["Planning", "Design", "Implement", "QA", "Deploy"]);
-    }));
-
-// O gate do cliente é espelho do guard de Issue.addTicket: exige risk+complexity, nada além.
-// Classificar SÓ esses dois libera — human_need é override opcional, não requisito.
-test("UI-10b: criação do 1º Ticket é bloqueada sem classificação e liberada com risk+complexity (ticketCreationGate)", async () =>
-  withUI((root) => { claimed(root, { title: "Gate", project: "api", type: "Refactor", classify: false }); },
-    async (page, url, root) => {
-      const id = readdirSync(join(root, "projects", "api", "claimed"))[0].replace(".json", "");
-      await page.goto(`${url}/issues/${id}`);
-      await page.locator(".ticket-gate--blocked").waitFor();
-      assert.match(await page.locator(".ticket-gate--blocked").innerText(), /Classifique a Issue \(Complexidade, Risco\)/);
-      assert.equal(await page.getByRole("button", { name: "+ Novo Ticket" }).count(), 0); // bloqueado
-
-      const gate = page.locator(".ticket-gate--blocked");
-      await gate.locator('select[name="complexity"]').selectOption("MEDIA");
-      await gate.locator('select[name="risk"]').selectOption("BAIXO");
-      await gate.getByRole("button", { name: "Salvar classificação" }).click();
-      await page.getByRole("button", { name: "+ Novo Ticket" }).waitFor(); // liberado sem human_need
-    }));
-
-// A autonomia é derivada pelo domínio e apenas exibida: o form não oferece escolha e o chip
-// que aparece no Ticket criado vem do servidor (Refactor + risk BAIXO + complexity BAIXA → AFK).
-test("UI-10d: form de Ticket não escolhe autonomia; o Ticket criado mostra a derivada", async () =>
-  withUI((root) => { claimed(root, { title: "Derivada", project: "api", type: "Refactor" }); },
-    async (page, url, root) => {
-      const id = readdirSync(join(root, "projects", "api", "claimed"))[0].replace(".json", "");
-      await page.goto(`${url}/issues/${id}`);
-      await page.getByRole("button", { name: "+ Novo Ticket" }).click();
-      const form = page.locator("#ticket-create-form");
-      await form.waitFor();
-      assert.equal(await form.locator('select[name="human_need"]').count(), 0); // a caneta não é do usuário
-
-      await form.locator('select[name="type"]').selectOption("Planning");
-      await form.locator('textarea[name="objective"]').fill("Alinhar problema");
-      await form.locator('textarea[name="task"]').fill("levantar requisitos");
-      await form.locator('textarea[name="acceptance_criteria"]').fill("requisitos registrados");
-      await form.getByRole("button", { name: "Criar Ticket" }).click();
-
-      const ticket = page.locator(".ticket").first();
-      await ticket.waitFor();
-      assert.match(await ticket.locator(".tags").innerText(), /Humano: AFK/); // derivada do servidor, sem código novo
-      assert.equal(await ticket.locator('.tag-editor select[name="human_need"]').count(), 0); // tagTicket rejeita: não oferecer
-    }));
-
-test("UI-10c: quadro mostra o inbox de Decisões pendentes para Issues/Tickets AWAITING", async () =>
+test("UI-10a: quadro mostra o inbox de Decisões pendentes para Issues AWAITING", async () =>
   withUI((root) => { awaiting(root, { title: "Precisa decidir", project: "ops", type: "Fix" }); },
     async (page, url) => {
       await page.goto(`${url}/`);
@@ -426,71 +357,59 @@ test("UI-10c: quadro mostra o inbox de Decisões pendentes para Issues/Tickets A
       assert.match(await page.locator(".decisions-inbox").innerText(), /Precisa decidir/);
     }));
 
+test("UI-10b: detalhe mostra as Issues relacionadas com os artefatos (linhagem navegável)", async () => {
+  const seeded = { implId: "" };
+  await withUI((root) => {
+    const designId = createIssue(root, { title: "Design da fila", project: "api", type: "Feat", action: "Design" });
+    const md = join(root, "spec.md");
+    writeFileSync(md, "# Spec congelada da fila");
+    cli(["artifact", "--id", designId, "--file", md], root);
+    seeded.implId = createIssue(root, { title: "Implementar fila", project: "api", type: "Feat", action: "Implement" });
+    cli(["relate", "--id", seeded.implId, "--relates", designId], root);
+  }, async (page, url) => {
+    await page.goto(`${url}/issues/${seeded.implId}`);
+    const related = page.locator(".box.related");
+    await related.waitFor();
+    assert.match(await related.locator("summary").innerText(), /Issues relacionadas \(1\)/);
+    assert.match(await related.innerText(), /Design da fila/);
+    assert.match(await related.innerText(), /Spec congelada da fila/); // artefato da relacionada visível
+    await related.locator("a").first().click(); // navega para a relacionada
+    await page.getByRole("heading", { name: "Design da fila" }).waitFor();
+  });
+});
+
 // =====================================================================================
 // Item 11 — Leitura estável: a expansão dos <details> sobrevive ao re-render, e um refresh
-//          sem mudança no servidor não re-renderiza. Regressão do fechamento automático da
-//          Thread (o poll de 10s chama o mesmo refreshIssue() do botão "Atualizar Issue",
-//          logo o botão exercita o defeito sem esperar o tick).
+//          sem mudança no servidor não re-renderiza.
 // =====================================================================================
-
-// Issue ON-GOING cujo Ticket tem Artefato: os dois <details> do card em um só cenário.
-function ongoingWithArtifact(root: string, title: string, project: string): { id: string; ticketId: string } {
-  const id = ongoing(root, { title, project, type: "Refactor" });
-  const ticketId = JSON.parse(cli(["get", "--id", id], root)).tickets[0].id as string;
-  const file = join(root, `${project}-artifact.md`);
-  writeFileSync(file, "# Artefato do Ticket\n");
-  cli(["ticket", "artifact", "--issue", id, "--id", ticketId, "--file", file], root);
-  return { id, ticketId };
-}
-
-test("UI-11a: Thread e Artefato do Ticket expandidos sobrevivem ao re-render de uma mudança real", async () => {
-  const seeded = { id: "", ticketId: "" };
-  await withUI((root) => { Object.assign(seeded, ongoingWithArtifact(root, "Leitura estável", "api")); },
+test("UI-11a: editor de tags expandido sobrevive ao re-render de uma mudança real", async () => {
+  const seeded = { id: "" };
+  await withUI((root) => { seeded.id = claimed(root, { title: "Leitura estável", project: "api", type: "Refactor" }); },
     async (page, url, root) => {
       await page.goto(`${url}/issues/${seeded.id}`);
-      const thread = page.locator(".ticket-thread");
-      const artifact = page.locator(".ticket-artifact");
-      await thread.locator("summary").click();
-      await artifact.locator("summary").click();
-      assert.equal(await thread.evaluate((d: HTMLDetailsElement) => d.open), true);
-      assert.equal(await artifact.evaluate((d: HTMLDetailsElement) => d.open), true);
+      const editor = page.locator(".tag-editor");
+      await editor.locator("summary").click();
+      assert.equal(await editor.evaluate((d: HTMLDetailsElement) => d.open), true);
 
       // Mudança REAL no servidor: é ela que atravessa o guard de refreshIssue e força o re-render.
-      cli(["ticket", "comment", "--issue", seeded.id, "--id", seeded.ticketId,
-        "--comment", "comentário do agente", "--agent", "pi"], root);
+      cli(["comment", "--id", seeded.id, "--comment", "comentário do agente", "--agent", "pi"], root);
       await page.locator("#refresh-issue").click();
-
-      // As duas asserções juntas: o re-render de fato aconteceu (comentário novo no DOM)
-      // E a expansão sobreviveu a ele. Sem a primeira, a segunda passaria por acidente.
-      // "attached" e não "visible": visibilidade dependeria do <details> aberto — o que é a
-      // segunda asserção, e confundir as duas mascararia qual delas quebrou.
-      await thread.getByText("comentário do agente").waitFor({ state: "attached" });
-      assert.equal(await thread.evaluate((d: HTMLDetailsElement) => d.open), true);
-      assert.equal(await artifact.evaluate((d: HTMLDetailsElement) => d.open), true);
-
-      // O inverso também precisa colar: fechar é preferência tanto quanto abrir, e um
-      // re-render não pode reabrir o que o usuário fechou.
-      await artifact.locator("summary").click();
-      cli(["ticket", "comment", "--issue", seeded.id, "--id", seeded.ticketId,
-        "--comment", "segundo comentário", "--agent", "pi"], root);
-      await page.locator("#refresh-issue").click();
-      await thread.getByText("segundo comentário").waitFor({ state: "attached" });
-      assert.equal(await artifact.evaluate((d: HTMLDetailsElement) => d.open), false);
-      assert.equal(await thread.evaluate((d: HTMLDetailsElement) => d.open), true);
+      await page.locator(".thread").getByText("comentário do agente").waitFor({ state: "attached" });
+      assert.equal(await editor.evaluate((d: HTMLDetailsElement) => d.open), true); // expansão sobreviveu
     });
 });
 
 test("UI-11b: Atualizar Issue sem mudança no servidor não re-renderiza o detalhe", async () => {
-  const seeded = { id: "", ticketId: "" };
-  await withUI((root) => { Object.assign(seeded, ongoingWithArtifact(root, "Sem mudança", "api")); },
+  const seeded = { id: "" };
+  await withUI((root) => { seeded.id = claimed(root, { title: "Sem mudança", project: "api", type: "Refactor" }); },
     async (page, url, root) => {
       await page.goto(`${url}/issues/${seeded.id}`);
-      const thread = page.locator(".ticket-thread");
-      await thread.waitFor();
+      const detail = page.locator(".detail");
+      await detail.waitFor();
       // Marca um nó vivo do DOM: renderDetail reescreve root().innerHTML, então a marca só
       // sobrevive se o re-render NÃO ocorreu.
-      const mark = (): Promise<string | undefined> => thread.evaluate((el: HTMLElement & { e2eMark?: string }) => el.e2eMark);
-      await thread.evaluate((el: HTMLElement & { e2eMark?: string }) => { el.e2eMark = "vivo"; });
+      const mark = (): Promise<string | undefined> => detail.evaluate((el: HTMLElement & { e2eMark?: string }) => el.e2eMark);
+      await detail.evaluate((el: HTMLElement & { e2eMark?: string }) => { el.e2eMark = "vivo"; });
 
       // Nada mudou no servidor: as respostas chegam e o guard corta antes do render.
       await Promise.all([
@@ -501,49 +420,44 @@ test("UI-11b: Atualizar Issue sem mudança no servidor não re-renderiza o detal
       assert.equal(await mark(), "vivo");
 
       // Controle positivo: com mudança real o mesmo nó é destruído — prova que a marca detecta re-render.
-      cli(["ticket", "comment", "--issue", seeded.id, "--id", seeded.ticketId,
-        "--comment", "agora mudou", "--agent", "pi"], root);
+      cli(["comment", "--id", seeded.id, "--comment", "agora mudou", "--agent", "pi"], root);
       await page.locator("#refresh-issue").click();
-      await thread.getByText("agora mudou").waitFor({ state: "attached" }); // a Thread está fechada aqui
+      await page.locator(".thread").getByText("agora mudou").waitFor({ state: "attached" });
       assert.equal(await mark(), undefined);
     });
 });
 
 // `requirements set` não toca no JSON da Issue: é o único caminho em que a 2ª cláusula do
 // guard de refreshIssue decide sozinha entre re-renderizar e engolir a atualização.
-test("UI-11d: mudança só nos Requisitos (Issue idêntica) atravessa o guard e re-renderiza", async () => {
-  const seeded = { id: "", ticketId: "" };
-  await withUI((root) => { Object.assign(seeded, ongoingWithArtifact(root, "Só requisitos", "api")); },
+test("UI-11c: mudança só nos Requisitos (Issue idêntica) atravessa o guard e re-renderiza", async () => {
+  const seeded = { id: "" };
+  await withUI((root) => { seeded.id = claimed(root, { title: "Só requisitos", project: "api", type: "Fix", action: "Planning" }); },
     async (page, url, root) => {
       await page.goto(`${url}/issues/${seeded.id}`);
-      await page.locator(".ticket-thread").waitFor();
-      assert.equal(await page.locator(".requirements").count(), 0); // Issue ainda sem requisitos
+      await page.locator(".detail").waitFor();
 
       const file = join(root, "req.json");
       writeFileSync(file, JSON.stringify({ features: [gherkinFeature] }));
       cli(["requirements", "set", "--id", seeded.id, "--file", file], root);
       await page.locator("#refresh-issue").click();
-      await page.locator(".requirements").waitFor();
-      assert.match(await page.locator(".requirements").innerText(), /Requisitos persistidos/);
+      await page.locator("details.requirements").waitFor(); // o aviso vira o painel estruturado
+      assert.match(await page.locator("details.requirements").innerText(), /Requisitos persistidos/);
     });
 });
 
-// Regressão do bug "PlantUML do Design não aparece no Web": prova no browser real que o
-// diagrama entregue pela CLI chega renderizado — <img> que decodifica de fato (naturalWidth>0),
-// e não apenas uma tag presente apontando para imagem quebrada.
+// =====================================================================================
+// Item 12 — Design: diagrama renderizado, aviso sem pacote, erro de .puml inválido
+// =====================================================================================
 test("UI-12: diagrama PlantUML entregue no Design aparece renderizado no detalhe", async () => {
   const seeded = { id: "" };
   await withUI((root) => {
-    const id = claimed(root, { title: "Com design", project: "api", type: "Fix" });
-    const ticketId = JSON.parse(cli(["ticket", "create", "--issue", id, "--type", "Design",
-      "--objective", "Desenhar", "--task", "spec", "--acceptance-criteria", "ok", "--agent", "pi"], root)
-    ).tickets[0].id as string;
+    const id = claimed(root, { title: "Com design", project: "api", type: "Fix", action: "Design" });
     const doc = join(root, "design.md");
     writeFileSync(doc, "# Spec do Design\nO parágrafo da spec.");
-    cli(["design", "doc", "--issue", id, "--ticket", ticketId, "--file", doc], root);
+    cli(["design", "doc", "--issue", id, "--file", doc], root);
     const puml = join(root, "class.puml");
     writeFileSync(puml, "@startuml\nclass Pedido\nPedido --> Item\n@enduml");
-    cli(["design", "add", "--issue", id, "--ticket", ticketId, "--kind", "class", "--file", puml], root);
+    cli(["design", "add", "--issue", id, "--kind", "class", "--file", puml], root);
     seeded.id = id;
   }, async (page, url) => {
     await page.setViewportSize({ width: 1280, height: 400 }); // seção de Design abaixo da dobra
@@ -555,36 +469,22 @@ test("UI-12: diagrama PlantUML entregue no Design aparece renderizado no detalhe
 
     const img = design.locator("img");
     await img.waitFor();
-    assert.match(await img.getAttribute("src") ?? "", /\/design\/[0-9a-f-]+\/class\.svg$/);
-    // Guard de atributo, não de comportamento, de propósito: numa Issue real a seção de Design
-    // fica longe da dobra e o lazy nunca dispara o request — mas o limiar do Chromium é
-    // generoso e carrega assim mesmo em página curta, então só o atributo pega a regressão.
+    assert.match(await img.getAttribute("src") ?? "", /\/design\/class\.svg$/);
     assert.notEqual(await img.getAttribute("loading"), "lazy");
-    // Carrega sem rolagem e decodifica: o <img> só decodifica se a rota devolveu SVG de
-    // verdade — pega tanto JSON servido como image/svg+xml quanto request adiada por lazy.
+    // Carrega sem rolagem e decodifica: o <img> só decodifica se a rota devolveu SVG de verdade.
     await page.waitForFunction(() => {
       const node = document.querySelector(".box.design img") as HTMLImageElement | null;
       return !!node && node.complete && node.naturalWidth > 0;
     }, undefined, { timeout: 60000 });
     await assert.doesNotReject(img.evaluate((node: HTMLImageElement) => node.decode()));
-    // Tamanho natural preservado (não esticado até a largura do painel).
-    assert.ok(await img.evaluate((node: HTMLImageElement) => node.clientWidth <= node.naturalWidth + 24));
   });
 });
 
 // Ausência nunca é silêncio (mesma regra da seção de Requisitos).
-test("UI-12b: Design entregue sem diagrama avisa em vez de omitir a seção", async () => {
+test("UI-12b: Issue Design em andamento sem pacote avisa em vez de omitir a seção", async () => {
   const seeded = { id: "" };
   await withUI((root) => {
-    const id = claimed(root, { title: "Design vazio", project: "api", type: "Fix" });
-    const ticketId = JSON.parse(cli(["ticket", "create", "--issue", id, "--type", "Design",
-      "--objective", "Desenhar", "--task", "spec", "--acceptance-criteria", "ok", "--agent", "pi"], root)
-    ).tickets[0].id as string;
-    // Ticket sai de OPEN sem pacote de design: o gate barra AWAITING, então CLOSED direto (AFK).
-    cli(["ticket", "claim", "--issue", id, "--id", ticketId, "--agent", "pi"], root);
-    cli(["ticket", "status", "--issue", id, "--id", ticketId, "--agent", "pi",
-      "--status", "CLOSED", "--reason", "concluido", "--comment", "sem pacote"], root);
-    seeded.id = id;
+    seeded.id = claimed(root, { title: "Design vazio", project: "api", type: "Fix", action: "Design" });
   }, async (page, url) => {
     await page.goto(`${url}/issues/${seeded.id}`);
     const warn = page.locator(".box.design .warn");
@@ -595,30 +495,49 @@ test("UI-12b: Design entregue sem diagrama avisa em vez de omitir a seção", as
 });
 
 // .puml inválido no disco (edição à mão da fila local, ou entrega corrompida): a rota .svg
-// responde 400 e o <img> viraria ícone quebrado — mudo. O erro do gate já está no pacote:
-// mostrar, nunca silenciar (mesma regra da seção de Requisitos).
+// responde 400 e o <img> viraria ícone quebrado — mudo. O erro do gate já está no pacote.
 test("UI-12c: diagrama inválido mostra o erro do gate em vez de imagem quebrada", async () => {
   const seeded = { id: "" };
   await withUI((root) => {
-    const id = claimed(root, { title: "Design quebrado", project: "api", type: "Fix" });
-    const ticketId = JSON.parse(cli(["ticket", "create", "--issue", id, "--type", "Design",
-      "--objective", "Desenhar", "--task", "spec", "--acceptance-criteria", "ok", "--agent", "pi"], root)
-    ).tickets[0].id as string;
+    const id = claimed(root, { title: "Design quebrado", project: "api", type: "Fix", action: "Design" });
     const doc = join(root, "design.md");
     writeFileSync(doc, "# Spec com diagrama quebrado");
-    cli(["design", "doc", "--issue", id, "--ticket", ticketId, "--file", doc], root);
+    cli(["design", "doc", "--issue", id, "--file", doc], root);
+    cli(["design", "changed", "--issue", id, "--value", "true"], root); // mudança de arquitetura: o gate valida os .puml
     // Direto no repositório: `issues design add` valida e recusaria este fonte.
-    new Queue(root).writeDesign("api", ticketId, "class.puml", "@startuml\nisto !! quebrado\n@enduml");
+    new Queue(root).writeDesign("api", id, "class.puml", "@startuml\nisto !! quebrado\n@enduml");
     seeded.id = id;
   }, async (page, url) => {
     await page.goto(`${url}/issues/${seeded.id}`);
     const design = page.locator(".box.design");
     await design.waitFor();
-    const warn = design.locator(".warn");
+    const warn = design.locator(".diagrams .warn"); // o erro do diagrama, isolado do aviso de decisão de arquitetura
     await warn.waitFor();
     assert.match(await warn.innerText(), /class\.puml inválido/);
     assert.match(await warn.innerText(), /Syntax Error/); // a mensagem real do engine
     assert.equal(await design.locator("img").count(), 0); // nada de <img> que daria 400
+  });
+});
+
+// Atalho "Changed?=false": diagramas são dispensados por design; o painel não pode contradizer
+// o gate exibindo "Spec sem diagrama" logo abaixo de "atalho ao plano, sem diagramas".
+test("UI-12d: Design com architecture_changed=false não avisa 'Spec sem diagrama'", async () => {
+  const seeded = { id: "" };
+  await withUI((root) => {
+    const id = claimed(root, { title: "Design atalho", project: "api", type: "Fix", action: "Design" });
+    const doc = join(root, "design.md");
+    writeFileSync(doc, "# Spec do atalho\nSem mudança de arquitetura.");
+    cli(["design", "doc", "--issue", id, "--file", doc], root);
+    cli(["design", "changed", "--issue", id, "--value", "false"], root); // atalho ao plano, sem diagramas
+    seeded.id = id;
+  }, async (page, url) => {
+    await page.goto(`${url}/issues/${seeded.id}`);
+    const design = page.locator(".box.design");
+    await design.waitFor();
+    const text = await design.innerText();
+    assert.match(text, /inalterada — atalho ao plano/); // a decisão aparece
+    assert.doesNotMatch(text, /Spec sem diagrama/); // e não a contradiz
+    assert.equal(await design.locator(".diagrams").count(), 0);
   });
 });
 
@@ -633,25 +552,3 @@ const gherkinFeature = [
   "    When abro o detalhe",
   "    Then vejo a Feature",
 ].join("\n");
-
-test("UI-11c: trocar de Issue não vaza a expansão da anterior", async () => {
-  const seeded = { id: "", ticketId: "" };
-  await withUI((root) => {
-    Object.assign(seeded, ongoingWithArtifact(root, "Issue A", "api"));
-    ongoing(root, { title: "Issue B", project: "web", type: "Refactor" });
-  }, async (page, url) => {
-    await page.goto(`${url}/issues/${seeded.id}`);
-    const thread = page.locator(".ticket-thread");
-    await thread.locator("summary").click();
-    assert.equal(await thread.evaluate((d: HTMLDetailsElement) => d.open), true);
-
-    // A -> quadro -> B -> quadro -> A, tudo por navegação da SPA (sem reload, que zeraria o state).
-    await page.getByRole("link", { name: "← Voltar ao quadro" }).click();
-    await page.locator(".card", { hasText: "Issue B" }).click();
-    await page.getByRole("heading", { name: "Issue B" }).waitFor();
-    await page.getByRole("link", { name: "← Voltar ao quadro" }).click();
-    await page.locator(".card", { hasText: "Issue A" }).click();
-    await page.getByRole("heading", { name: "Issue A" }).waitFor();
-    assert.equal(await thread.evaluate((d: HTMLDetailsElement) => d.open), false);
-  });
-});

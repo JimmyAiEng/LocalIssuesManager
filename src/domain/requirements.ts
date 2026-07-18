@@ -1,4 +1,7 @@
 import { DomainError } from "./domain_error.js";
+import { assertBrief } from "./value_objects.js";
+
+const MAX_FEATURES = 5;
 
 // Artefato de requisitos: JSON com uma ou mais Features em Gherkin (pt-BR).
 // Validado por código (sintaxe/estrutura), sem I/O — regra pura do domínio.
@@ -13,6 +16,19 @@ const isStep = (line: string): boolean =>
 // Valida o artefato bruto (parse de JSON já feito) e devolve-o normalizado.
 // Lança DomainError com mensagem clara (apontando a Feature) em qualquer violação.
 export function validateGherkinRequirements(raw: unknown): Requirements {
+  const features = featureList(raw);
+  features.forEach((feature, index) => {
+    if (typeof feature !== "string") {
+      throw new DomainError(`Feature ${index + 1}: deve ser texto Gherkin (string)`);
+    }
+    assertBrief(feature, `Feature ${index + 1}`);
+    validateFeature(feature, index);
+  });
+  return { features: features as string[] };
+}
+
+// Estrutura e cardinalidade: 1 a 5 Features — escopo grande denuncia Issue grande.
+function featureList(raw: unknown): unknown[] {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new DomainError("Requirements deve ser um objeto JSON com o campo 'features'");
   }
@@ -23,13 +39,19 @@ export function validateGherkinRequirements(raw: unknown): Requirements {
   if (features.length === 0) {
     throw new DomainError("Requirements deve conter ao menos uma Feature");
   }
-  features.forEach((feature, index) => {
-    if (typeof feature !== "string") {
-      throw new DomainError(`Feature ${index + 1}: deve ser texto Gherkin (string)`);
-    }
-    validateFeature(feature, index);
+  if (features.length > MAX_FEATURES) {
+    throw new DomainError(`Requirements com ${features.length} Features (limite ${MAX_FEATURES}): escopo grande indica Issue grande demais — feche esta Issue e crie Issues menores relacionadas (--relates)`);
+  }
+  return features;
+}
+
+// Nome de cada Feature (o texto após "Feature:" no cabeçalho) — chave usada pelos clusters do PRD
+// para referenciar Features. Assume requirements já validados (o cabeçalho sempre existe).
+export function featureNames(requirements: Requirements): string[] {
+  return requirements.features.map((text) => {
+    const header = text.split("\n").map((line) => line.trim()).find((line) => line.startsWith("Feature:"));
+    return header ? header.replace(/^Feature:\s*/, "").trim() : "";
   });
-  return { features: features as string[] };
 }
 
 // Conveniência para a camada app: parseia o texto JSON (só JSON é aceito) e valida.

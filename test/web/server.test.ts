@@ -25,7 +25,7 @@ test("servidor web entrega o shell em loopback e suporta rota de client", async 
 test("startWebServer purga CLOSED expirado no arranque (cobre deployments só-web)", async () => {
   const r = mkdtempSync(join(tmpdir(), "issues-web-"));
   const queue = new Queue(r);
-  const stale = Issue.create({ title: "t", project: "demo", type: "Feat", problem: "p" }, "human");
+  const stale = Issue.create({ title: "t", project: "demo", type: "Feat", action: "QA", problem: "p" }, "human");
   stale.closeByHuman("done", "concluido", new Date("2020-01-01"));
   queue.save(stale);
   const web = await startWebServer(0, r);

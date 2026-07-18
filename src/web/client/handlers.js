@@ -1,10 +1,10 @@
-import { clearActionState, emptyCommentDraft, emptyDraft, emptyFilters, emptyTicketDraft, saveFilters, state } from "./state.js";
+import { clearActionState, emptyCommentDraft, emptyDraft, emptyFilters, saveFilters, state } from "./state.js";
 import { api } from "./http.js";
 import { renderBoard, renderError, renderLoading, renderNewIssue, root } from "./view.js";
 import { renderDetail } from "./detail_view.js";
 import {
-  claimIssue, claimTicket, fetchDesign, fetchRequirements, performClose, readForm, refreshIssue,
-  submitAction, submitComment, submitCreate, submitCreateTicket, submitTags, submitTicketAction,
+  claimIssue, fetchDesign, fetchRequirements, performClose, readForm, refreshIssue,
+  submitAction, submitComment, submitCreate, submitTags,
 } from "./mutations.js";
 
 export async function refresh() {
@@ -27,7 +27,6 @@ async function loadDetail(id) {
   if (state.issue?.id !== id) {
     clearActionState();
     state.draft = emptyDraft();
-    state.ticketDraft = emptyTicketDraft();
     state.threadExpanded = false;
     state.expanded.clear(); // as chaves são da Issue anterior
   }
@@ -46,41 +45,30 @@ export function handleClick(event) {
   if (!target) return;
   if (target.id === "refresh") return refresh();
   if (target.id === "refresh-issue") return refreshIssue();
-  if (target.id === "toggle-ticket-form") { state.showTicketForm = !state.showTicketForm; state.errors = {}; return renderDetail(); }
   if (target.id === "clear") { state.filters = emptyFilters(); saveFilters(); return renderBoard(); }
   if (target.id === "toggle-decisions") { state.decisionsOpen = !state.decisionsOpen; return renderBoard(); }
   if (target.dataset.openPanel) {
     state.panel = target.dataset.openPanel;
-    state.ticketPanel = null;
     state.confirmClose = false;
     state.errors = {};
     state.draft = { ...state.draft, comment: "", closed_reason: "" };
     return renderDetail();
   }
-  if (target.dataset.openTicketPanel) {
-    state.ticketPanel = { ticketId: target.dataset.ticketId, action: target.dataset.openTicketPanel };
-    state.panel = null;
-    state.errors = {};
-    state.draft = { ...state.draft, comment: "", closed_reason: "" };
-    return renderDetail();
-  }
   if (target.dataset.copyId) {
-    navigator.clipboard?.writeText(target.dataset.copyId);
-    target.textContent = "ID copiado";
+    const copy = navigator.clipboard?.writeText(target.dataset.copyId);
+    if (copy) copy.then(() => { target.textContent = "ID copiado"; }, () => { target.textContent = "Falha ao copiar"; });
+    else target.textContent = "Falha ao copiar";
     return;
   }
   if (target.dataset.expandThread) { state.threadExpanded = true; return renderDetail(); }
   if (target.dataset.confirmClose) return performClose();
   if (target.dataset.cancelClose) { state.confirmClose = false; return renderDetail(); }
   if (target.id === "claim-issue") return claimIssue();
-  if (target.dataset.claimTicket) return claimTicket(target.dataset.claimTicket);
   // Atributos data-* sem valor viram "" (falsy) — presença via `in`, nunca truthiness.
   if ("cancelPanel" in target.dataset) { state.panel = null; state.confirmClose = false; state.errors = {}; return renderDetail(); }
-  if ("cancelTicketPanel" in target.dataset) { state.ticketPanel = null; state.errors = {}; return renderDetail(); }
   if (target.dataset.openComment) {
-    state.commentPanel = { scope: target.dataset.openComment, ticketId: target.dataset.ticketId };
+    state.commentPanel = { scope: "issue" };
     state.panel = null;
-    state.ticketPanel = null;
     state.errors = {};
     state.commentDraft = emptyCommentDraft();
     return renderDetail();
@@ -112,12 +100,8 @@ export function handleInput(event) {
   }
   if (!event.target.name || event.target.type === "file") return;
   const form = event.target.closest("form");
-  const target = form?.id === "ticket-create-form" ? state.ticketDraft
-    : form?.id === "comment-form" ? state.commentDraft
-      : state.draft;
+  const target = form?.id === "comment-form" ? state.commentDraft : state.draft;
   target[event.target.name] = event.target.value;
-  // Trocar o tipo re-renderiza o form para atualizar o aviso de bloqueio de fase.
-  if (form?.id === "ticket-create-form" && event.target.name === "type") renderDetail();
 }
 
 export async function handleSubmit(event) {
@@ -125,11 +109,9 @@ export async function handleSubmit(event) {
   const form = event.target;
   if (form.id === "comment-form") return submitComment(form);
   if (form.dataset.tagScope) return submitTags(form);
-  readForm(form, form.id === "ticket-create-form" ? state.ticketDraft : state.draft);
+  readForm(form, state.draft);
   if (form.id === "create-form") return submitCreate(form);
   if (form.id === "action-form") return submitAction(form);
-  if (form.id === "ticket-create-form") return submitCreateTicket(form);
-  if (form.id === "ticket-action-form") return submitTicketAction(form);
 }
 
 function navigate(event, path) {

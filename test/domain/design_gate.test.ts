@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DESIGN_KINDS,
+  type DesignDiagram,
   DesignGateError,
-  evaluateGate,
+  evaluateDesignGate,
   kindAccepts,
   parseDesignKind,
   plantumlError,
   requireNonEmptyDoc,
 } from "../../src/domain/design_gate.js";
+
+const valid = (kind: DesignDiagram["kind"]): DesignDiagram => ({ kind, path: `${kind}.puml`, check: { valid: true } });
 
 test("parseDesignKind aceita os 6 kinds e rejeita desconhecidos com invalid_kind", () => {
   for (const kind of DESIGN_KINDS) assert.equal(parseDesignKind(kind), kind);
@@ -61,29 +64,40 @@ test("plantumlError propaga line e message do engine", () => {
   assert.equal("line" in bare, false);
 });
 
-test("evaluateGate acumula todas as falhas da entrega", () => {
-  const errors = evaluateGate(null, []);
-  assert.deepEqual(
-    errors.map((error) => error.code),
-    ["missing_design_md", "missing_diagram"],
-  );
-  const invalid = evaluateGate("doc", [
-    { path: "class.puml", check: { valid: true, diagramType: "ClassDiagram" } },
-    { path: "state.puml", check: { valid: false, errorLineNumber: 3, errorMessage: "boom" } },
+test("evaluateDesignGate: decisão de arquitetura ausente exige a escolha explícita", () => {
+  for (const changed of [null, undefined] as const) {
+    const errors = evaluateDesignGate(changed, "# Design", [valid("class")]);
+    assert.deepEqual(errors.map((error) => error.code), ["decision_required"]);
+  }
+});
+
+test("evaluateDesignGate: sem mudança de arquitetura dispensa diagramas (só o plano, cobrado à parte)", () => {
+  assert.deepEqual(evaluateDesignGate(false, null, []), []);
+});
+
+test("evaluateDesignGate com mudança exige os 4 níveis e lista os faltantes", () => {
+  const errors = evaluateDesignGate(true, "# Design", [valid("class"), valid("package")]);
+  const missing = errors.find((error) => error.code === "missing_level");
+  assert.ok(missing);
+  assert.match(missing.message, /High Level/);
+  assert.match(missing.message, /Interface\/DataModel/);
+  assert.doesNotMatch(missing.message, /Package/); // package coberto
+  assert.doesNotMatch(missing.message, /(?<![-/])Class/); // class coberto
+});
+
+test("evaluateDesignGate com mudança: doc ausente, .puml inválido e nível não contam para cobertura", () => {
+  const errors = evaluateDesignGate(true, "  \n ", [
+    { kind: "class", path: "class.puml", check: { valid: false, errorLineNumber: 3, errorMessage: "boom" } },
+    valid("package"), valid("deployment"), valid("state"),
   ]);
-  assert.deepEqual(invalid, [{ code: "plantuml_invalid", path: "state.puml", message: "boom", line: 3 }]);
+  const codes = errors.map((error) => error.code);
+  assert.deepEqual(codes, ["missing_design_md", "plantuml_invalid", "missing_level"]); // class inválido → nível Class descoberto
+  assert.match(errors[2].message, /Class/);
 });
 
-test("evaluateGate trata design.md só de whitespace como ausente", () => {
-  const errors = evaluateGate("  \n ", [{ path: "class.puml", check: { valid: true } }]);
-  assert.deepEqual(
-    errors.map((error) => error.code),
-    ["missing_design_md"],
-  );
-});
-
-test("evaluateGate devolve vazio para pacote completo (pronto para AWAITING)", () => {
-  assert.deepEqual(evaluateGate("# Design", [{ path: "class.puml", check: { valid: true } }]), []);
+test("evaluateDesignGate com mudança devolve vazio quando os 4 níveis têm PlantUML válido", () => {
+  const complete = [valid("deployment"), valid("package"), valid("class"), valid("state")]; // high_level, package, class, interface/data
+  assert.deepEqual(evaluateDesignGate(true, "# Design", complete), []);
 });
 
 test("DesignGateError compõe a mensagem a partir dos codes", () => {

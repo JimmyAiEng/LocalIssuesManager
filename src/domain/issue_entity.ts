@@ -1,52 +1,56 @@
 import { randomUUID } from "node:crypto";
 import type { AttachmentData } from "./attachment_entity.js";
 import { DomainError } from "./domain_error.js";
-import { requiredHumanNeed, Ticket, type CreateTicket, type TicketData } from "./ticket_entity.js";
-import { applyTags, assertDecision, assertNoDowngrade, required, threadEntry, TICKET_TYPES, type Actor, type AgentId, type ClosedReason, type Decision, type IssueStatus, type IssueType, type Tags, type TagUpdates, type TicketStatus, type TicketType, type Thread, type Worktree } from "./value_objects.js";
+import { applyTags, assertBrief, assertDecision, assertNoDowngrade, normalizeRelations, required, threadEntry, type ActionType, type Actor, type AgentId, type ClosedReason, type Decision, type IssueStatus, type IssueType, type Relation, type Role, type Tags, type TagUpdates, type Thread, type Worktree } from "./value_objects.js";
 
 export type Phase = { status: IssueStatus; timestamp: string };
 export type CreateIssue = {
-  title: string; project: string; type: IssueType; problem: string;
-  artifacts?: string; acceptance_criteria?: string; attachments?: AttachmentData[];
+  title: string; project: string; type: IssueType; action: ActionType; problem: string;
+  acceptance_criteria?: string; relates?: string[]; attachments?: AttachmentData[];
 };
 export type IssueData = {
-  id: string; title: string; project: string; type: IssueType; problem: string;
-  artifacts: string; acceptance_criteria: string; status: IssueStatus; owner: Actor | null;
+  id: string; title: string; project: string; type: IssueType; action: ActionType;
+  problem: string; acceptance_criteria: string; status: IssueStatus; owner: Actor | null;
   closed_reason: ClosedReason | null; claimed_at: string | null; created_at: string;
-  status_changed_at: string; human_presence: boolean; thread: Thread[]; phases: Phase[];
-  tickets: TicketData[]; revision: number; tags: Tags; worktree: Worktree | null;
+  status_changed_at: string; thread: Thread[]; phases: Phase[]; relates: Relation[];
+  revision: number; tags: Tags; worktree: Worktree | null; architecture_changed: boolean | null;
 };
 
+// Uma Issue é a unidade de trabalho: type diz o problema (Fix/Feat/Research/Refactor) e
+// action diz a entrega esperada (Planning/Design/Implement/QA/Deploy). Não há Tickets:
+// trabalho maior vira novas Issues relacionadas (relates), formando a linhagem.
 export class Issue implements IssueData {
-  id!: string; title!: string; project!: string; type!: IssueType;
-  problem!: string; artifacts!: string; acceptance_criteria!: string;
-  status!: IssueStatus; owner!: Actor | null; closed_reason!: ClosedReason | null;
-  claimed_at!: string | null; created_at!: string; status_changed_at!: string;
-  human_presence!: boolean; thread!: Thread[]; phases!: Phase[];
-  tickets!: Ticket[]; revision!: number; tags!: Tags; worktree!: Worktree | null; baseRevision!: number;
+  id!: string; title!: string; project!: string; type!: IssueType; action!: ActionType;
+  problem!: string; acceptance_criteria!: string; status!: IssueStatus; owner!: Actor | null;
+  closed_reason!: ClosedReason | null; claimed_at!: string | null; created_at!: string;
+  status_changed_at!: string; thread!: Thread[]; phases!: Phase[]; relates!: Relation[];
+  revision!: number; tags!: Tags; worktree!: Worktree | null; architecture_changed!: boolean | null; baseRevision!: number;
 
   private constructor(data: IssueData) {
     Object.assign(this, data);
-    this.tickets = data.tickets.map((ticket) => Ticket.fromJSON(ticket));
     this.tags = data.tags ?? {};
-    this.worktree = data.worktree ?? null; // ausente em Issues antigas
+    this.relates = normalizeRelations(data.relates); // JSON antigo (string[]) carrega como see-also
+    this.worktree = data.worktree ?? null;
+    this.architecture_changed = data.architecture_changed ?? null; // null = decisão de arquitetura ainda não tomada
     this.baseRevision = data.revision;
   }
 
   static create(input: CreateIssue, actor: Actor, now = new Date()): Issue {
-    for (const key of ["title", "project", "type", "problem"] as const) required(input[key], key);
+    for (const key of ["title", "project", "type", "action", "problem"] as const) required(input[key], key);
+    assertBrief(input.problem, "problem");
+    if (input.acceptance_criteria) assertBrief(input.acceptance_criteria, "acceptance_criteria");
     const timestamp = now.toISOString();
     return new Issue(Issue.#initialData(input, actor, timestamp));
   }
 
   static #initialData(input: CreateIssue, actor: Actor, timestamp: string): IssueData {
-    const { attachments, ...fields } = input;
+    const { attachments, relates, ...fields } = input;
     const base = threadEntry(actor, timestamp, "Issue created", "OPEN", null);
     const entry = attachments?.length ? { ...base, attachments } : base;
-    return { ...fields, artifacts: input.artifacts ?? "", acceptance_criteria: input.acceptance_criteria ?? "",
+    return { ...fields, acceptance_criteria: input.acceptance_criteria ?? "",
       id: randomUUID(), status: "OPEN", owner: null, closed_reason: null, claimed_at: null,
-      created_at: timestamp, status_changed_at: timestamp, human_presence: actor === "human",
-      thread: [entry], phases: [{ status: "OPEN", timestamp }], tickets: [], revision: 0, tags: {}, worktree: null };
+      created_at: timestamp, status_changed_at: timestamp, thread: [entry],
+      phases: [{ status: "OPEN", timestamp }], relates: normalizeRelations(relates), revision: 0, tags: {}, worktree: null, architecture_changed: null };
   }
 
   static fromJSON(data: IssueData): Issue {
@@ -56,72 +60,81 @@ export class Issue implements IssueData {
   claim(actor: Actor, now = new Date()): void {
     this.#expect("OPEN");
     this.owner = actor;
-    if (actor === "human") this.human_presence = true;
     this.claimed_at = now.toISOString();
     this.#changeStatus("CLAIMED", now);
   }
 
-  addTicket(ticket: Ticket, now = new Date()): void {
-    if (this.status !== "CLAIMED" && this.status !== "ON-GOING") {
-      throw new DomainError(`Expected CLAIMED or ON-GOING, got ${this.status}`);
-    }
-    if (ticket.issue_id !== this.id) throw new DomainError("Ticket belongs to another Issue");
-    // A heurística de autonomia precisa de entrada: sem classificação não há como derivar supervisão.
-    if (!this.tags.risk || !this.tags.complexity) throw new DomainError("Issue sem classificação: risk e complexity são obrigatórios para criar Ticket");
-    const blocker = this.phaseBlocker(ticket.type);
-    if (blocker) throw new DomainError(`Ticket de ${ticket.type} bloqueado: ${blocker.type} da fase anterior não está CLOSED`);
-    for (const depId of ticket.depends_on) {
-      if (!this.tickets.some((candidate) => candidate.id === depId)) {
-        throw new DomainError(`Dependency not found: ${depId}`);
-      }
-    }
-    this.#deriveAutonomy(ticket); // só após todas as validações: addTicket rejeitado não marca o Ticket
-    this.tickets.push(ticket);
-    if (this.status === "CLAIMED") this.#changeStatus("ON-GOING", now);
-    else this.#bumpRevision();
-  }
-
-  claimTicket(ticketId: string, actor: Actor, now = new Date()): void {
-    this.ticket(ticketId).claim(actor, now);
-    this.#bumpRevision();
-  }
-
-  comment(actor: Actor, comment: string, attachments: AttachmentData[] = [], now = new Date()): void {
+  comment(actor: Actor, comment: string, attachments: AttachmentData[] = [], now = new Date(), role?: Role): void {
     if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
     if (!comment.trim() && attachments.length === 0) throw new DomainError("comment or attachment is required");
+    assertBrief(comment, "comment");
     const entry = threadEntry(actor, now.toISOString(), comment, this.status, null);
-    this.thread.push({ ...entry, attachments });
+    this.thread.push({ ...entry, attachments, ...(role ? { role } : {}) });
     this.#bumpRevision();
   }
 
-  commentTicket(ticketId: string, actor: Actor, comment: string, attachments: AttachmentData[] = [], now = new Date()): void {
-    this.ticket(ticketId).comment(actor, comment, attachments, now);
-    this.#bumpRevision();
-  }
-
-  // Retag nunca é rejeitado por causa de autonomia: informação nova sobre a Issue não deve esbarrar
-  // num Ticket antigo. A autonomia derivada é recomputada para não ficar stale em relação às tags.
-  // A tag da Issue é a entrada da autonomia derivada (requiredHumanNeed lê issue.tags): rebaixá-la
-  // é o agente recuperando a caneta sobre a própria supervisão pela porta dos fundos. Por isso a
-  // mutação tem dono: IA só escala, humano faz nos dois sentidos.
+  // A tag da Issue governa a autonomia (requiresHuman): rebaixá-la é o agente recuperando a
+  // caneta sobre a própria supervisão. Por isso a mutação tem dono: IA só escala, humano
+  // faz nos dois sentidos.
   tag(updates: TagUpdates, actor: Actor): void {
     if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
     const next = applyTags(this.tags, updates); // valida enums antes de julgar severidade
     if (actor !== "human") assertNoDowngrade(this.tags, next);
-    this.tags = next; // ordem load-bearing: #deriveAutonomy lê this.tags
-    for (const ticket of this.tickets) {
-      if (ticket.status !== "CLOSED") this.#deriveAutonomy(ticket); // CLOSED é imutável: registra a decisão da época
-    }
+    this.tags = next;
     this.#bumpRevision();
   }
 
-  // A autonomia do Ticket é derivada da Issue, nunca declarada: o agregado raiz é a única fonte
-  // autoritativa das tags, e é ele quem estampa. Serve addTicket, tag (recompute) e #confirmWhenDone.
-  #deriveAutonomy(ticket: Ticket): void {
-    ticket.tag({ human_need: requiredHumanNeed(this, ticket.type) });
+  // Liga esta Issue a outras (linhagem direcionada): quem reivindica uma Issue enxerga os
+  // artefatos das relacionadas. A existência dos ids e o par recíproco (parent↔child na Issue
+  // alvo) são responsabilidade da camada de aplicação. Um id já ligado não muda de kind.
+  relate(relations: Relation[]): void {
+    if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
+    const existing = new Set(this.relates.map((r) => r.id));
+    const additions = normalizeRelations(relations).filter((r) => r.id !== this.id && !existing.has(r.id));
+    if (!additions.length) throw new DomainError("Nenhuma relação nova: informe ids de outras Issues");
+    this.relates.push(...additions);
+    this.#bumpRevision();
   }
 
-  // Registra a worktree git da Issue; todos os Tickets resolvem para ela lendo issue.worktree.
+  // Entrega para decisão humana com a evidência obrigatória: relatório curto do que foi
+  // feito, passos e decisões tomadas.
+  submit(agent: AgentId, evidence: string, now = new Date(), attachments: AttachmentData[] = [], role?: Role): void {
+    this.#expectOwner(agent);
+    required(evidence, "comment");
+    this.#transition("AWAITING", agent, evidence, null, now, attachments, undefined, role);
+  }
+
+  closeByAgent(agent: AgentId, evidence: string, reason: ClosedReason, now = new Date(), attachments: AttachmentData[] = [], role?: Role): void {
+    this.#expectOwner(agent);
+    required(evidence, "comment");
+    this.#transition("CLOSED", agent, evidence, reason, now, attachments, undefined, role);
+  }
+
+  // Override humano: fecha sem gate e sem evidência obrigatória (o motivo basta).
+  closeByHuman(comment: string, reason: ClosedReason, now = new Date(), attachments: AttachmentData[] = []): void {
+    if (this.status !== "OPEN" && this.status !== "CLAIMED") {
+      throw new DomainError(`Expected OPEN or CLAIMED, got ${this.status}`);
+    }
+    this.#transition("CLOSED", "human", comment, reason, now, attachments);
+  }
+
+  // Decisão humana da Issue AWAITING: registra decided_by="human" na entrada para auditar
+  // quem aprovou/reprovou (o Code Review final do fluxo Deploy passa por aqui).
+  decide(status: Decision, comment: string, reason?: ClosedReason, now = new Date(), attachments: AttachmentData[] = []): void {
+    this.#expect("AWAITING");
+    assertDecision(status, comment, reason);
+    if (status === "OPEN") this.#clearClaim();
+    this.#transition(status, "human", comment, reason ?? null, now, attachments, "human");
+  }
+
+  reset(comment: string, now = new Date(), attachments: AttachmentData[] = []): void {
+    this.#expect("CLAIMED");
+    required(comment, "comment");
+    this.#clearClaim();
+    this.#transition("OPEN", "human", comment, null, now, attachments);
+  }
+
+  // Registra a worktree git da Issue (obrigatória para concluir uma Issue Implement).
   setWorktree(worktree: Worktree): void {
     if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
     this.worktree = worktree;
@@ -134,119 +147,23 @@ export class Issue implements IssueData {
     this.#bumpRevision();
   }
 
-  tagTicket(ticketId: string, updates: TagUpdates): void {
-    if (updates.human_need) throw new DomainError("human_need do Ticket é derivado da Issue (type × risk × complexity), não pode ser marcado");
-    this.ticket(ticketId).tag(updates);
+  // Decisão de arquitetura da Issue Design: se a arquitetura muda, o gate exige os 4 níveis
+  // de diagramas e aceite humano; se não, dispensa diagramas (atalho ao plano). O guard de
+  // action=Design fica na camada de aplicação (como setWorktree/setPlan).
+  setArchitectureChanged(value: boolean): void {
+    if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
+    this.architecture_changed = value;
     this.#bumpRevision();
-  }
-
-  transitionTicket(ticketId: string, actor: Actor, status: TicketStatus, comment: string, reason?: ClosedReason, last = false, now = new Date(), attachments: AttachmentData[] = []): void {
-    const ticket = this.ticket(ticketId);
-    ticket.changeStatus(actor, status, comment, reason, last, now, attachments);
-    this.#bumpRevision();
-    this.#confirmWhenDone(ticket, actor, now);
-  }
-
-  decideTicket(ticketId: string, status: "OPEN" | "CLOSED", comment: string, reason?: ClosedReason, last = false, now = new Date(), attachments: AttachmentData[] = []): void {
-    const ticket = this.ticket(ticketId);
-    ticket.decide(status, comment, reason, last, now, attachments);
-    this.#bumpRevision();
-    this.#confirmWhenDone(ticket, "human", now);
-  }
-
-  reset(comment: string, now = new Date(), attachments: AttachmentData[] = []): void {
-    this.#expect("CLAIMED");
-    required(comment, "comment");
-    this.#clearClaim();
-    this.human_presence = true;
-    this.#transition("OPEN", "human", comment, null, now, attachments);
-  }
-
-  decide(status: Decision, comment: string, reason?: ClosedReason, now = new Date(), attachments: AttachmentData[] = []): void {
-    this.#expect("AWAITING");
-    assertDecision(status, comment, reason);
-    if (status === "OPEN") this.#clearClaim();
-    this.human_presence = true;
-    this.#transition(status, "human", comment, reason ?? null, now, attachments);
-  }
-
-  closeByAgent(agent: AgentId, comment: string, reason: ClosedReason, now = new Date()): void {
-    this.#expect("OPEN");
-    if (this.human_presence) throw new DomainError("Human presence prevents IA closure");
-    this.#transition("CLOSED", agent, comment, reason, now);
-  }
-
-  closeByHuman(comment: string, reason: ClosedReason, now = new Date()): void {
-    this.#expect("OPEN");
-    this.human_presence = true;
-    this.#transition("CLOSED", "human", comment, reason, now);
-  }
-
-  // Ordem das fases = ordem de TICKET_TYPES (Planning → … → Deploy → Confirmation).
-  // Um Ticket só pode ser criado ou entregue pela fila quando todos os de fases
-  // anteriores estão CLOSED; Confirmation é a última fase e nunca bloqueia ninguém.
-  phaseBlocker(type: TicketType): Ticket | null {
-    const rank = TICKET_TYPES.indexOf(type);
-    return this.tickets.find((ticket) => ticket.status !== "CLOSED" && TICKET_TYPES.indexOf(ticket.type) < rank) ?? null;
-  }
-
-  // Tickets OPEN prontos para a fila: dependências satisfeitas e fase anterior concluída, ordenados FIFO.
-  readyTickets(): Ticket[] {
-    return this.tickets
-      .filter((ticket) => ticket.status === "OPEN" && this.dependenciesMet(ticket.id) && !this.phaseBlocker(ticket.type))
-      .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
-  }
-
-  dependenciesMet(ticketId: string): boolean {
-    return this.ticket(ticketId).depends_on.every((depId) => {
-      const dep = this.tickets.find((candidate) => candidate.id === depId);
-      return dep != null && (dep.status === "AWAITING" || dep.status === "CLOSED");
-    });
-  }
-
-  // Storage key do Artefato .md: o próprio Ticket (se ticketId) ou a Issue. Guarda CLOSED-imutável
-  // nas duas dimensões; não muta nem faz bump de revisão (o setArtifact não persiste o JSON).
-  artifactOwnerId(ticketId?: string): string {
-    const target = ticketId ? this.ticket(ticketId) : this;
-    if (target.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
-    return ticketId ?? this.id;
-  }
-
-  ticket(ticketId: string): Ticket {
-    const ticket = this.tickets.find((candidate) => candidate.id === ticketId);
-    if (!ticket) throw new DomainError(`Ticket not found: ${ticketId}`);
-    return ticket;
-  }
-
-  // Destrava a Issue: ao fechar o último Ticket, injeta um Ticket de confirmação
-  // OPEN para a fila (next) reabordar a Issue. Ao fechar o próprio Confirmation
-  // (por IA ou humano), avança a Issue para AWAITING — quebra o loop e destrava.
-  #confirmWhenDone(closed: Ticket, actor: Actor, now: Date): void {
-    if (this.status !== "ON-GOING" || closed.status !== "CLOSED") return;
-    if (!this.tickets.every((ticket) => ticket.status === "CLOSED")) return; // ainda há trabalho aberto
-    if (closed.type === "Confirmation") {
-      this.#transition("AWAITING", actor, "Confirmação concluída", null, now);
-      return;
-    }
-    if (!closed.last) return; // só a fase final (marcada --last) dispara o Confirmation
-    // Não passa por addTicket de propósito: Issue legada não classificada precisa conseguir destravar
-    // (a função de autonomia é total e deriva AFK). A tag é derivada, não copiada da Issue.
-    const confirmation = Ticket.create(Issue.#confirmationTicket(this.id, actor), now);
-    this.#deriveAutonomy(confirmation);
-    this.tickets.push(confirmation); // mesma operação do close: sem #bumpRevision extra
-  }
-
-  static #confirmationTicket(issueId: string, actor: Actor): CreateTicket {
-    return { issue_id: issueId, type: "Confirmation", actor,
-      objective: "Confirmar se a Issue foi resolvida",
-      task: "Verifique se o problema da Issue foi resolvido pelos Tickets concluídos. Se sim, mova a Issue para AWAITING; se não, crie os Tickets necessários para concluir o trabalho.",
-      acceptance_criteria: "Issue movida para AWAITING com o resumo da verificação, ou novos Tickets cobrindo o trabalho restante." };
   }
 
   #transition(status: IssueStatus, actor: Actor, comment: string, reason: ClosedReason | null, now: Date,
-    attachments: AttachmentData[] = []): void {
-    const base = threadEntry(actor, now.toISOString(), comment, status, reason);
-    this.thread.push(attachments.length ? { ...base, attachments } : base);
+    attachments: AttachmentData[] = [], decidedBy?: Actor, role?: Role): void {
+    assertBrief(comment, "comment");
+    let entry: Thread = threadEntry(actor, now.toISOString(), comment, status, reason);
+    if (decidedBy) entry = { ...entry, decided_by: decidedBy };
+    if (attachments.length) entry = { ...entry, attachments };
+    if (role) entry = { ...entry, role };
+    this.thread.push(entry);
     this.closed_reason = reason;
     this.#changeStatus(status, now);
   }
@@ -272,8 +189,13 @@ export class Issue implements IssueData {
     if (this.status !== status) throw new DomainError(`Expected ${status}, got ${this.status}`);
   }
 
+  #expectOwner(agent: AgentId): void {
+    this.#expect("CLAIMED");
+    if (this.owner !== agent) throw new DomainError("Only the Owner may change status");
+  }
+
   toJSON(): IssueData {
-    const { baseRevision, tickets, ...rest } = this;
-    return structuredClone({ ...rest, tickets: tickets.map((ticket) => ticket.toJSON()) });
+    const { baseRevision, ...rest } = this;
+    return structuredClone({ ...rest });
   }
 }

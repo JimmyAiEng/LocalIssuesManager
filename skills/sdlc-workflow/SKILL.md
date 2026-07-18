@@ -1,98 +1,97 @@
 ---
 name: sdlc-workflow
 description: >-
-  SDLC de desenvolvimento com issues-local: modelo Issue+Ticket, estágios,
-  gates humanos, paralelismo e progressive disclosure das skills de fase.
-  Use ao reivindicar ou trabalhar qualquer unidade devolvida por `issues next`.
+  SDLC de desenvolvimento com issues-local: modelo Issue-only (type + action),
+  autonomia AFK/HITL, gates por action, evidência obrigatória e linhagem entre
+  Issues. Use ao reivindicar ou trabalhar qualquer Issue devolvida por `issues next`.
 ---
 
 # sdlc-workflow (camada 0)
 
-**Não** executa nenhuma fase — só orienta o processo e roteia a skill de fase.
+**Não** executa nenhuma fase — só orienta o processo e roteia a skill da action.
 Válido em **qualquer projeto** que use este pack + o CLI `issues` do issues-local.
 
-## Modelo: Issue agregado + Tickets
+## Modelo: só Issues
 
-- **Issue** é um **agregado tipado** (`Fix` · `Feat` · `Research` · `Refactor`): nasce de uma ideia/problema e é resolvida por um ou mais **Tickets**.
-- **Ticket** é uma **fatia tipada** da solução (`Planning` · `Design` · `Implement` · `QA` · `Deploy` · `Confirmation`); o **tipo do Ticket** carrega a fase SDLC e roteia a skill.
-- Uma Issue `CLAIMED` deve ser **decomposta** em Tickets; ao criar o **1º** Ticket ela vai a `ON-GOING`.
-- A Issue só avança `ON-GOING → AWAITING` quando **todos** os seus Tickets estão `CLOSED`.
-- **Destrava automática:** ao fechar o **último** Ticket de uma Issue `ON-GOING`, o sistema injeta um Ticket `Confirmation` `OPEN` para alguém confirmar a resolução ou criar os Tickets que faltam.
-- Fila `next`: prioriza o Ticket `OPEN` mais antigo (FIFO) de Issues `ON-GOING`; se não houver, reivindica a Issue `OPEN` mais antiga para decompor.
+Não existem Tickets.
+Uma **Issue** é a unidade de trabalho de uma sessão: pequena, com uma entrega única.
+
+- **type** diz o problema: `Fix` · `Feat` · `Research` · `Refactor`.
+- **action** diz a entrega esperada: `Planning` · `Design` · `Implement` · `QA` · `Deploy`.
+- Status: `OPEN → CLAIMED → (AWAITING →) CLOSED`.
+- Trabalho maior vira **novas Issues relacionadas** (`--relates`), nunca uma Issue gorda.
+- Não há validação de sequência entre actions: você pode criar uma Issue `Implement` sem `Design` anterior — use o bom senso do fluxo (`docs/AIDevelopmentWorkfow.drawio`).
+
+## Linhagem (relates)
+
+Issues podem se relacionar (`issues relate` ou `--relates` no create).
+Quem reivindica uma Issue recebe no prompt os **artefatos das relacionadas** — é assim que o design congelado chega à sessão de implementação.
+Ao decompor trabalho, crie as novas Issues já relacionadas à origem.
 
 ## O loop do agente
 
-A cada rodada, rode `issues next --prompt --project <p> --agent <ia>` para reivindicar a próxima unidade.
-Execute **só** a fase da unidade reivindicada, encerre o Ticket e repita.
-Nem toda Issue precisa de todas as fases; fases podem ter Tickets em paralelo ou em sequência.
+A cada rodada, rode `issues next --prompt --project <p> --agent <ia>` para reivindicar a próxima Issue.
+Execute **só** a action da Issue reivindicada, conclua com evidência e repita.
 
-## Caminho feliz (diagrama)
+## Roteamento por action
 
-```text
-Qualificação ─► Planning ──G1──► Design ──G2──► Implement* ─► QA (Quality Review) ──G3──► Deploy (PR) ──G4──► Confirmation ─► fim
-```
-
-`*` Implement = uma ou mais **Units of Work** independentes (paralelo ok), cada uma um Ticket.
-
-| Estágio (diagrama) | Tipo do Ticket | Skill |
+| action | Skill | Entrega obrigatória (gate de conclusão) |
 |---|---|---|
-| Issue Qualification and Ticket Generation | Issue sem Ticket | `issue-qualification` |
-| Planner Agent (Problem Alignment, requisitos + AC) | `Planning` | `planning-phase` |
-| Design Agent (Design Alignment, spec, Design Validation) | `Design` | `design-phase` |
-| Unit of Work (Test Coding → Coding → checks → review) | `Implement` | `implement-phase` |
-| Quality Review (conjunto entregue) | `QA` | `qa-phase` |
-| Merge & PR → análise estática → PR Analysis | `Deploy` | `deployment-phase` |
-| Confirmação da resolução (gerado pelo sistema) | `Confirmation` | `confirmation-phase` |
+| `Planning` | `planning-phase` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features **+** Full PRD válido (`issues prd set`) com clusters **+** **uma filha `Design` por cluster** (`issues decompose`): sem a decomposição completa, o gate aponta o cluster descoberto e não fecha |
+| `Design` | `design-phase` | Decisão de arquitetura (`issues design changed --value true\|false`) + plano válido (`issues plan set`) **+** **≥1 filha `Implement`** (`issues decompose`, uma por Small Plan). Se `true`: `design.md` + os 4 níveis (High Level, Package, Class, Interface/DataModel) em PlantUML válido e **nunca fecha AFK** (só `AWAITING`, aceite humano). Se `false`: dispensa diagramas e revisão humana |
+| `Implement` | `implement-phase` | Worktree usada + check do projeto passando (roda sozinho no fechamento). Com `--test-paths` configurado, exige também a ordem TDD no histórico da worktree: um commit só-de-testes antes do primeiro commit de produção (cita o commit infrator) |
+| `QA` | `qa-phase` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
+| `Deploy` | `deployment-phase` | Nunca fecha AFK: só `AWAITING` com link http(s) de PR + resultado da análise na thread; fecha só via `decide` humano |
 
-As **validações** de cada estágio (gates de artefato, pipeline de checks, critérios) estão descritas na skill da própria fase — não aqui.
+## Qualificação (no claim)
 
-## Gates humanos
+Se a Issue reivindicada não tem `complexity` e `risk`, classifique antes de trabalhar: `issues tag --id <id> --complexity … --risk … --agent <ia>`.
+A IA só **escala** tags; rebaixar supervisão é prerrogativa humana.
+Se a Issue for grande demais para uma sessão, **feche-a** (reason `obsoleto`) e crie Issues menores relacionadas.
 
-| Gate | Após | Efeito |
-|---|---|---|
-| G1 | Planning | Confirma requisitos/intenção; fecha Planning → abre Design |
-| Direção | Exploração de desenho (se houve) | Humano escolhe a opção antes da spec |
-| G2 | Design | Confirma a spec; fecha Design → abre Implement |
-| Fatia | cada Implement | Aceita a fatia ou pede continuação |
-| G3 | QA | Aprova → Deploy; reprova → novos Tickets Implement |
-| G4 | Deploy | Go/no-go do merge (Code Review humano do PR) |
+## Autonomia e conclusão
 
-Gates são decisões humanas: **pare e peça**, não avance sozinho.
-Encerre cada fase movendo o Ticket para `AWAITING` (use `--last` no último; a flag é sticky e dispara o `Confirmation` quando o Ticket fechar).
-Em Issue `AFK` a IA pode fechar (`CLOSED`) direto; em `HITL` o Ticket vai a `AWAITING` e o humano decide.
-Retrabalho: `decide OPEN` ou fecha e cria Ticket/Issue nova; não há reopen de `CLOSED`.
+- **AFK (padrão)**: a IA fecha direto — `issues status --id <id> --agent <ia> --status CLOSED --comment "<evidência>" --reason concluido`.
+- **HITL**, `risk=ALTO` ou `complexity=ALTA`: a IA **não fecha**; envia para decisão humana — `issues status … --status AWAITING --comment "<evidência>"` — e o humano decide no painel web.
+- A **evidência é obrigatória**: um relatório curto do que foi feito, os passos e as decisões tomadas.
+- O gate da action roda nas duas saídas (AWAITING e CLOSED); sem a entrega, o comando falha explicando o que falta.
 
-## Progressive disclosure (obrigatório)
+## Limite de tamanho (300 palavras)
 
-1. Você está na camada 0 (este arquivo) — carregue-o em todo claim.
-2. `next` devolveu **Issue sem Ticket** → leia `issue-qualification`.
-3. `next` devolveu **Ticket** → leia a skill da linha correspondente ao tipo na tabela acima.
-4. A skill de fase diz o que a fase entrega, suas validações e como fechá-la; o **como** executar é decisão do agente.
-5. **Não** carregue skills de outras fases neste claim.
-
-## Independência e paralelismo
-
-- Tickets não têm dependência obrigatória de ordem/claim (ordem é convenção, não regra).
-- Paralelo entre Tickets (mesma Issue ou Issues distintas) é permitido quando fizer sentido.
-- Fatia grande → o Ticket fecha e novos Tickets são **criados** como continuações; não bloqueia a fila.
-- **Review ≠ QA**: o review interno roda dentro de um Ticket `Implement`; QA valida o conjunto em Ticket próprio.
+Todo texto (problema, artefato, comentário, evidência) é limitado a **300 palavras**; requisitos, a **5 Features**.
+Se o sistema rejeitar por tamanho, o remédio nunca é resumir à força: **feche a Issue e decomponha** em Issues menores relacionadas.
 
 ## Comandos (issues-local)
 
 ```text
-issues next --prompt --project <p> --agent <ia>      # reivindica a próxima unidade (o loop)
-issues get --id <id> | issues list [--status --project --type --title]
-issues comment --id <id> --comment <t> [--attach <arquivo>]
-issues tag --id <id> [--complexity BAIXA|MEDIA|ALTA] [--risk BAIXO|MEDIO|ALTO] [--human-need HITL|AFK]
-issues artifact --id <id> --file <a.md>              # grava/substitui o Artefato .md da Issue
-issues ticket create --issue <id> --type <T> --objective <o> --task <t> --acceptance-criteria <c>
-                     [--depends-on a,b] [--references <r>] [--human-need HITL|AFK] [--artifact-file <a.md>]
-issues ticket claim --issue <id> --id <tid> --agent <ia>
-issues ticket status --issue <id> --id <tid> --agent <ia> --status <S> --comment <t> [--last]
-issues ticket get|list|comment|tag|artifact --issue <id> [--id <tid>] ...
-issues worktree add|remove --id <id>                 # worktree git isolada da Issue
+issues project create --name <p> --repo <path> [--container <img>] [--check <cmd>] [--test-paths <csv>]   # registra projeto (repo + check de Implement; --container = imagem Docker com o toolchain, roda cada check isolado; --test-paths liga o enforcement de TDD)
+issues project list
+issues create --title <t> --project <p> --type <T> --action <A> --problem <txt>
+              [--acceptance-criteria <c>] [--relates a,b] [--artifact-file <a.md>]
+              [--complexity …] [--risk …] [--human-need HITL|AFK] (--agent <ia>|--human)
+issues next --prompt --project <p> --agent <ia>      # reivindica a próxima Issue (o loop)
+issues get --id <id> [REQUIREMENTS|DESIGN|PLAN] | issues list [--status --project --type --title]
+issues comment --id <id> --comment <t> [--attach <arquivo>] [--role <papel>]
+issues tag --id <id> [--complexity …] [--risk …] [--human-need …] (--agent <ia>|--human)
+issues relate --id <id> --relates <a,b>              # linhagem entre Issues
+issues decompose --id <id> --into <arquivo.json> (--agent <ia>|--human)  # fan-out: cria as filhas (Design por cluster / Implement por Small Plan)
+issues artifact --id <id> --file <a.md>              # grava/substitui o Artefato .md (≤300 palavras)
+issues status --id <id> --agent <ia> --status AWAITING|CLOSED --comment <evidência> [--reason <r>] [--role <papel>]
+issues worktree add|remove --id <id>                 # worktree git no repo do projeto
+issues requirements set --id <id> --file <req.json>  # Features Gherkin (entrega de Planning)
+issues prd set --id <id> --file <prd.json>           # Full PRD com clusters (entrega de Planning)
+issues design doc|add --issue <id> [--kind <k>] --file <f>   # entrega de Design
+issues design changed --issue <id> --value true|false        # decisão de arquitetura (entrega de Design)
+issues plan set --id <id> --file <plan.json>         # plano de implementação (entrega de Design)
 ```
 
-`HITL` = human in the loop (humano necessário para concluir).
-`AFK` = away from keyboard (a IA pode fechar se entender que o trabalho foi concluído).
+`HITL` = human in the loop (a conclusão é decisão humana, no web).
+`AFK` = away from keyboard (a IA fecha sozinha, com evidência).
 Detalhes de sintaxe: `issues --help`.
+
+## Progressive disclosure (obrigatório)
+
+1. Você está na camada 0 (este arquivo) — carregue-o em todo claim.
+2. Leia a skill da action da Issue reivindicada (tabela acima).
+3. A skill da action diz o que a fase entrega e como concluí-la; o **como** executar é decisão do agente.
+4. **Não** carregue skills de outras actions neste claim.

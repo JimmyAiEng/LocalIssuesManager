@@ -8,43 +8,82 @@ import { main } from "../../src/cli.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
 const bin = resolve("bin/issues");
-const env = () => ({ ...process.env, ISSUES_ROOT: mkdtempSync(join(tmpdir(), "issues-cli-")) });
 const run = (args: string[], vars: NodeJS.ProcessEnv) =>
   execFileSync(bin, args, { env: vars, encoding: "utf8" });
 
+// Toda raiz nasce com o projeto "demo" registrado: Issues só existem em projeto registrado.
+const env = () => {
+  const root = mkdtempSync(join(tmpdir(), "issues-cli-"));
+  const vars = { ...process.env, ISSUES_ROOT: root };
+  run(["project", "create", "--name", "demo", "--repo", root], vars);
+  return vars;
+};
+
+// Os fluxos genéricos usam a action QA; seu gate de conclusão exige o Artefato .md, semeado
+// via qaArtifactFile nos testes que concluem a Issue.
 const createArgs = [
-  "create", "--title", "CLI issue", "--project", "demo", "--type", "Feat",
-  "--problem", "problem", "--artifacts", "src", "--acceptance-criteria", "done", "--agent", "pi",
+  "create", "--title", "CLI issue", "--project", "demo", "--type", "Feat", "--action", "QA",
+  "--problem", "problem", "--acceptance-criteria", "done", "--agent", "pi",
 ];
+const qaArtifactFile = join(mkdtempSync(join(tmpdir(), "issues-cli-qa-")), "qa.md");
+writeFileSync(qaArtifactFile, "# QA ok");
 
-// A criação de Ticket exige uma Issue classificada (risk+complexity) para derivar a autonomia.
-// `issues create` não recebe tags: quem classifica é `issues tag`. Feat·BAIXO·BAIXA → Implement AFK.
-const classify = (id: string, vars: NodeJS.ProcessEnv) =>
-  run(["tag", "--id", id, "--complexity", "BAIXA", "--risk", "BAIXO", "--human"], vars);
-
-const ticketArgs = (issueId: string) => [
-  "ticket", "create", "--issue", issueId, "--type", "Implement", "--objective", "o",
-  "--task", "t", "--acceptance-criteria", "c", "--agent", "pi",
-];
-
-test("CLI retorna JSON por padrão e next devolve { issue, ticket }", () => {
+test("CLI retorna JSON por padrão e next devolve a IssueView reivindicada", () => {
   const vars = env();
   const created = JSON.parse(run(createArgs, vars));
   assert.equal(created.status, "OPEN");
+  assert.equal(created.action, "QA");
   const claimed = JSON.parse(run(["next", "--agent", "pi", "--project", "demo"], vars));
-  assert.equal(claimed.issue.id, created.id);
-  assert.equal(claimed.ticket, null);
+  assert.equal(claimed.id, created.id);
+  assert.equal(claimed.status, "CLAIMED");
   const fetched = JSON.parse(run(["get", "--id", created.id], vars));
   assert.equal(fetched.owner, "pi");
+});
+
+test("CLI create sem projeto registrado falha com orientação", () => {
+  const root = mkdtempSync(join(tmpdir(), "issues-cli-noproj-"));
+  const vars = { ...process.env, ISSUES_ROOT: root };
+  const denied = spawnSync(bin, createArgs, { env: vars, encoding: "utf8" });
+  assert.notEqual(denied.status, 0);
+  assert.match(denied.stderr, /Projeto não registrado.*project create/);
+});
+
+test("CLI project create/list registram repo e check", () => {
+  const vars = env();
+  const created = JSON.parse(run(["project", "create", "--name", "outro",
+    "--repo", vars.ISSUES_ROOT as string, "--check", "npm test"], vars));
+  assert.equal(created.check, "npm test");
+  const listed = JSON.parse(run(["project", "list"], vars));
+  assert.deepEqual(listed.map((project: { name: string }) => project.name).sort(), ["demo", "outro"]);
+  const bogus = spawnSync(bin, ["project", "bogus"], { env: vars, encoding: "utf8" });
+  assert.notEqual(bogus.status, 0);
+  assert.match(bogus.stderr, /Usage: issues project/);
+});
+
+test("CLI project create aceita checks nomeados e persiste só os informados", () => {
+  const vars = env();
+  const created = JSON.parse(run(["project", "create", "--name", "pipe",
+    "--repo", vars.ISSUES_ROOT as string,
+    "--check-lint", "npm run lint", "--check-unit", "npm test", "--check-mutation", "npm run mutation"], vars));
+  assert.deepEqual(created.checks, { lint: "npm run lint", unit: "npm test", mutation: "npm run mutation" });
+  const listed = JSON.parse(run(["project", "list"], vars));
+  const pipe = listed.find((project: { name: string }) => project.name === "pipe");
+  assert.deepEqual(pipe.checks, { lint: "npm run lint", unit: "npm test", mutation: "npm run mutation" });
+});
+
+test("CLI project create aceita --container e persiste a imagem Docker", () => {
+  const vars = env();
+  const created = JSON.parse(run(["project", "create", "--name", "docked",
+    "--repo", vars.ISSUES_ROOT as string, "--container", "node:20", "--check", "npm test"], vars));
+  assert.equal(created.container, "node:20");
 });
 
 test("CLI next --id reivindica Issue específica sem --project; sem id nem project falha", () => {
   const vars = env();
   const created = JSON.parse(run(createArgs, vars));
   const claimed = JSON.parse(run(["next", "--id", created.id, "--agent", "pi"], vars));
-  assert.equal(claimed.issue.id, created.id);
-  assert.equal(claimed.issue.status, "CLAIMED");
-  assert.equal(claimed.ticket, null);
+  assert.equal(claimed.id, created.id);
+  assert.equal(claimed.status, "CLAIMED");
   const missing = spawnSync(bin, ["next", "--agent", "pi"], { env: vars, encoding: "utf8" });
   assert.notEqual(missing.status, 0);
   assert.match(missing.stderr, /project is required/);
@@ -77,60 +116,48 @@ test("CLI lista por tipo sem alterar filtros existentes", () => {
   assert.equal(issues[0].type, "Fix");
 });
 
-test("e2e: ciclo Issue+Ticket via CLI até CLOSED", () => {
+test("e2e: ciclo AFK via CLI — IA reivindica, entrega evidência e fecha", () => {
   const vars = env();
   const created = JSON.parse(run(createArgs, vars));
-  classify(created.id, vars);
   run(["next", "--agent", "pi", "--project", "demo"], vars);
-  const ongoing = JSON.parse(run(ticketArgs(created.id), vars));
-  assert.equal(ongoing.status, "ON-GOING");
-  const tid = ongoing.tickets[0].id;
-  const claimed = JSON.parse(run(["next", "--agent", "pi", "--project", "demo"], vars));
-  assert.equal(claimed.ticket.id, tid);
-  assert.equal(claimed.ticket.status, "CLAIMED");
-  run(["ticket", "status", "--issue", created.id, "--id", tid, "--agent", "pi",
-    "--status", "CLOSED", "--comment", "feito", "--reason", "concluido", "--last"], vars);
-  const cid = JSON.parse(run(["get", "--id", created.id], vars)).tickets
-    .find((ticket: { type: string }) => ticket.type === "Confirmation").id;
-  run(["ticket", "claim", "--issue", created.id, "--id", cid, "--agent", "pi"], vars);
-  run(["ticket", "status", "--issue", created.id, "--id", cid, "--agent", "pi",
-    "--status", "CLOSED", "--comment", "verificado", "--reason", "concluido"], vars); // avança a Issue para AWAITING
+  run(["artifact", "--id", created.id, "--file", qaArtifactFile], vars);
+  const closed = JSON.parse(run(["status", "--id", created.id, "--agent", "pi",
+    "--status", "CLOSED", "--comment", "feito: passos e decisões", "--reason", "concluido"], vars));
+  assert.equal(closed.status, "CLOSED");
+});
+
+test("e2e: ciclo HITL via CLI — AWAITING pela IA, decisão humana fecha", () => {
+  const vars = env();
+  const created = JSON.parse(run(createArgs.concat("--human-need", "HITL"), vars));
+  run(["next", "--agent", "pi", "--project", "demo"], vars);
+  run(["artifact", "--id", created.id, "--file", qaArtifactFile], vars);
+  const denied = spawnSync(bin, ["status", "--id", created.id, "--agent", "pi",
+    "--status", "CLOSED", "--comment", "feito", "--reason", "concluido"], { env: vars, encoding: "utf8" });
+  assert.notEqual(denied.status, 0);
+  assert.match(denied.stderr, /decisão humana/);
+  run(["status", "--id", created.id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência"], vars);
   const closed = JSON.parse(run(["decide", "--id", created.id, "--human", "--status", "CLOSED",
     "--comment", "aceito", "--reason", "concluido"], vars));
   assert.equal(closed.status, "CLOSED");
-  assert.equal(closed.tickets[0].status, "CLOSED");
 });
 
-test("e2e: grupo ticket suporta claim humano, get, list e decisão", () => {
+test("e2e: relate liga Issues e get devolve a linhagem com artefatos", () => {
   const vars = env();
-  const created = JSON.parse(run(createArgs, vars));
-  classify(created.id, vars);
-  run(["next", "--agent", "pi", "--project", "demo"], vars);
-  const tid = JSON.parse(run(ticketArgs(created.id), vars)).tickets[0].id;
-  run(["ticket", "claim", "--issue", created.id, "--id", tid, "--human"], vars);
-  const got = JSON.parse(run(["ticket", "get", "--issue", created.id, "--id", tid], vars));
-  assert.equal(got.owner, "human");
-  run(["ticket", "status", "--issue", created.id, "--id", tid, "--human",
-    "--status", "AWAITING", "--comment", "revisar"], vars);
-  const decided = JSON.parse(run(["ticket", "decide", "--issue", created.id, "--id", tid, "--human",
-    "--status", "OPEN", "--comment", "corrigir"], vars));
-  assert.equal(decided.tickets[0].status, "OPEN");
-  const list = JSON.parse(run(["ticket", "list", "--issue", created.id, "--status", "OPEN"], vars));
-  assert.equal(list.length, 1);
-});
-
-test("e2e: fechamento por IA respeita presença humana", () => {
-  const vars = env();
-  const machine = JSON.parse(run(createArgs, vars));
-  const closed = JSON.parse(run(["status", "--id", machine.id, "--agent", "pi", "--status", "CLOSED",
-    "--comment", "incorreta", "--reason", "errado"], vars));
-  assert.equal(closed.closed_reason, "errado");
-
-  const human = JSON.parse(run(createArgs.slice(0, -2).concat("--human"), vars));
-  const denied = spawnSync(bin, ["status", "--id", human.id, "--agent", "pi", "--status", "CLOSED",
-    "--comment", "cancelar", "--reason", "errado"], { env: vars, encoding: "utf8" });
-  assert.notEqual(denied.status, 0);
-  assert.equal(JSON.parse(run(["get", "--id", human.id], vars)).status, "OPEN");
+  const dir = mkdtempSync(join(tmpdir(), "issues-rel-"));
+  const md = join(dir, "spec.md");
+  writeFileSync(md, "# spec congelada");
+  const design = JSON.parse(run(["create", "--title", "design", "--project", "demo", "--type", "Feat",
+    "--action", "Design", "--problem", "p", "--artifact-file", md, "--agent", "pi"], vars));
+  const impl = JSON.parse(run(createArgs, vars));
+  const related = JSON.parse(run(["relate", "--id", impl.id, "--relates", design.id, "--kind", "child"], vars));
+  assert.deepEqual(related.relates, [{ id: design.id, kind: "child" }]);
+  const view = JSON.parse(run(["get", "--id", impl.id], vars));
+  assert.equal(view.related[0].artifact, "# spec congelada");
+  const target = JSON.parse(run(["get", "--id", design.id], vars));
+  assert.deepEqual(target.relates, [{ id: impl.id, kind: "parent" }]); // par recíproco na alvo
+  const missing = spawnSync(bin, ["relate", "--id", impl.id], { env: vars, encoding: "utf8" });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /--relates is required/);
 });
 
 test("e2e: comment --attach anexa mídia na Thread (repetível)", () => {
@@ -150,23 +177,24 @@ test("e2e: comment --attach anexa mídia na Thread (repetível)", () => {
   assert.equal(attachments[0].filename, "shot.png");
 });
 
-test("e2e: tag insere complexidade/humano/risco em Issue e Ticket; valor inválido falha", () => {
+test("e2e: comment --role grava o papel na Thread e rejeita papel fora do enum", () => {
   const vars = env();
   const created = JSON.parse(run(createArgs, vars));
-  classify(created.id, vars);
-  run(["next", "--agent", "pi", "--project", "demo"], vars);
-  const tid = JSON.parse(run(ticketArgs(created.id), vars)).tickets[0].id;
+  const result = JSON.parse(run(["comment", "--id", created.id, "--agent", "pi",
+    "--comment", "revisei o design", "--role", "architect"], vars));
+  assert.equal(result.thread.at(-1).role, "architect");
+  const bad = spawnSync(bin, ["comment", "--id", created.id, "--agent", "pi",
+    "--comment", "x", "--role", "wizard"], { env: vars, encoding: "utf8" });
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /Invalid role: wizard/);
+});
+
+test("e2e: tag insere complexidade/humano/risco; valor inválido falha", () => {
+  const vars = env();
+  const created = JSON.parse(run(createArgs, vars));
   const tagged = JSON.parse(run(["tag", "--id", created.id,
     "--complexity", "ALTA", "--human-need", "AFK", "--risk", "BAIXO", "--human"], vars));
   assert.deepEqual(tagged.tags, { complexity: "ALTA", human_need: "AFK", risk: "BAIXO" });
-  const ticketTagged = JSON.parse(run(["ticket", "tag", "--issue", created.id, "--id", tid,
-    "--complexity", "MEDIA", "--risk", "ALTO"], vars));
-  // human_need não vem do comando: é derivado da Issue (Feat·BAIXO·ALTA → Implement AFK)
-  assert.deepEqual(ticketTagged.tickets[0].tags, { human_need: "AFK", complexity: "MEDIA", risk: "ALTO" });
-  const derived = spawnSync(bin, ["ticket", "tag", "--issue", created.id, "--id", tid,
-    "--human-need", "HITL"], { env: vars, encoding: "utf8" });
-  assert.notEqual(derived.status, 0);
-  assert.match(derived.stderr, /derivado/);
   const bad = spawnSync(bin, ["tag", "--id", created.id, "--risk", "ENORME", "--human"], { env: vars, encoding: "utf8" });
   assert.notEqual(bad.status, 0);
   assert.match(bad.stderr, /Invalid risk: ENORME/);
@@ -177,6 +205,7 @@ test("CLI next --prompt (fila) retorna Markdown apontando sdlc-workflow, não JS
   run(createArgs, vars);
   const output = run(["next", "--prompt", "--agent", "pi", "--project", "demo"], vars);
   assert.match(output, /sdlc-workflow/);
+  assert.match(output, /action `QA`/);
   assert.throws(() => JSON.parse(output));
 });
 
@@ -189,25 +218,6 @@ test("CLI next --prompt --id reivindica Issue específica como Markdown", () => 
   assert.throws(() => JSON.parse(output));
 });
 
-test("CLI next --prompt com Ticket claimado inclui ## Ticket com o tipo", () => {
-  const vars = env();
-  const created = JSON.parse(run(createArgs, vars));
-  classify(created.id, vars);
-  run(["next", "--agent", "pi", "--project", "demo"], vars);
-  run(ticketArgs(created.id), vars);
-  const output = run(["next", "--prompt", "--agent", "pi", "--project", "demo"], vars);
-  assert.match(output, /## Ticket/);
-  assert.match(output, /- Tipo: /);
-});
-
-test("CLI next sem --prompt mantém JSON { issue, ticket } (regressão)", () => {
-  const vars = env();
-  const created = JSON.parse(run(createArgs, vars));
-  const claimed = JSON.parse(run(["next", "--agent", "pi", "--project", "demo"], vars));
-  assert.equal(claimed.issue.id, created.id);
-  assert.equal(claimed.ticket, null);
-});
-
 test("CLI next --prompt com fila vazia = stdout vazio e exit 0", () => {
   const vars = env();
   const result = spawnSync(bin, ["next", "--prompt", "--agent", "pi", "--project", "demo"], { env: vars, encoding: "utf8" });
@@ -215,7 +225,7 @@ test("CLI next --prompt com fila vazia = stdout vazio e exit 0", () => {
   assert.equal(result.stdout, "");
 });
 
-test("e2e: artifact grava .md da Issue/Ticket e create --artifact-file grava no id novo", () => {
+test("e2e: artifact grava .md da Issue e create --artifact-file grava no id novo", () => {
   const vars = env();
   const dir = mkdtempSync(join(tmpdir(), "issues-art-"));
   const md = join(dir, "doc.md");
@@ -230,52 +240,30 @@ test("e2e: artifact grava .md da Issue/Ticket e create --artifact-file grava no 
   const ok = JSON.parse(run(["artifact", "--id", created.id, "--file", updated], vars));
   assert.deepEqual(ok, { ok: true, id: created.id });
   assert.equal(queue.readArtifact("demo", created.id), "# issue atualizado");
-
-  classify(created.id, vars);
-  run(["next", "--agent", "pi", "--project", "demo"], vars);
-  const tid = JSON.parse(run(ticketArgs(created.id).concat("--artifact-file", md), vars)).tickets[0].id;
-  assert.equal(queue.readArtifact("demo", tid), "# artefato");
-  const tmd = join(dir, "t.md");
-  writeFileSync(tmd, "# ticket doc");
-  run(["ticket", "artifact", "--issue", created.id, "--id", tid, "--file", tmd], vars);
-  assert.equal(queue.readArtifact("demo", tid), "# ticket doc");
+  assert.equal(JSON.parse(run(["get", "--id", created.id], vars)).artifact, "# issue atualizado");
 });
 
-test("e2e: get/next/ticket get imprimem os campos de artefato no JSON", () => {
+test("e2e: artefato grande é rejeitado com orientação de decomposição", () => {
   const vars = env();
-  const dir = mkdtempSync(join(tmpdir(), "issues-view-"));
-  const md = join(dir, "doc.md");
-  writeFileSync(md, "# art issue");
-  const created = JSON.parse(run(createArgs.concat("--artifact-file", md), vars));
-
-  assert.equal(JSON.parse(run(["get", "--id", created.id], vars)).artifact, "# art issue");
-  classify(created.id, vars);
-  const queued = JSON.parse(run(["next", "--agent", "pi", "--project", "demo"], vars));
-  assert.equal(queued.issue.artifact, "# art issue"); // só-issue: artifact presente, ticket null
-  assert.equal(queued.ticket, null);
-
-  const tmd = join(dir, "t.md");
-  writeFileSync(tmd, "# art ticket");
-  const tid = JSON.parse(run(ticketArgs(created.id).concat("--artifact-file", tmd), vars)).tickets[0].id;
-  const claimed = JSON.parse(run(["next", "--agent", "pi", "--project", "demo"], vars));
-  assert.equal(claimed.ticket.id, tid);
-  assert.equal(claimed.ticket.artifact, "# art ticket");
-  assert.equal(claimed.ticket.issue_artifact, "# art issue");
-
-  const got = JSON.parse(run(["ticket", "get", "--issue", created.id, "--id", tid], vars));
-  assert.equal(got.artifact, "# art ticket");
-  assert.equal(got.issue_artifact, "# art issue");
+  const created = JSON.parse(run(createArgs, vars));
+  const dir = mkdtempSync(join(tmpdir(), "issues-artbig-"));
+  const md = join(dir, "big.md");
+  writeFileSync(md, Array(301).fill("palavra").join(" "));
+  const denied = spawnSync(bin, ["artifact", "--id", created.id, "--file", md], { env: vars, encoding: "utf8" });
+  assert.notEqual(denied.status, 0);
+  assert.match(denied.stderr, /limite 300/);
+  assert.match(denied.stderr, /Issues menores relacionadas/);
 });
 
-test("e2e: reset humano libera Issue CLAIMED e subcomando ticket inválido falha", () => {
+test("e2e: reset humano libera Issue CLAIMED e comando inválido falha com usage", () => {
   const vars = env();
   const created = JSON.parse(run(createArgs, vars));
   run(["next", "--agent", "cursor", "--project", "demo"], vars);
   const reset = JSON.parse(run(["reset", "--id", created.id, "--human", "--comment", "liberar"], vars));
   assert.equal(reset.owner, null);
-  const bogus = spawnSync(bin, ["ticket", "bogus", "--issue", created.id], { env: vars, encoding: "utf8" });
+  const bogus = spawnSync(bin, ["bogus"], { env: vars, encoding: "utf8" });
   assert.notEqual(bogus.status, 0);
-  assert.match(bogus.stderr, /Usage: issues ticket/);
+  assert.match(bogus.stderr, /Usage: issues/);
 });
 
 // --- Testes in-process: cobertura de linha (--experimental-test-coverage) só é registrada
@@ -293,7 +281,7 @@ async function withIssuesRoot<T>(root: string, fn: () => T | Promise<T>): Promis
   }
 }
 
-// async: a rota `ticket` de main() devolve Promise (gate de Design); await captura a saída completa.
+// async: a rota `status` de main() devolve Promise (gate da action); await captura a saída completa.
 async function captureMain(argv: string[]): Promise<{ stdout: string; stderr: string; exitCode: number | string | undefined }> {
   const outChunks: string[] = [];
   const errChunks: string[] = [];
@@ -311,104 +299,90 @@ async function captureMain(argv: string[]): Promise<{ stdout: string; stderr: st
   }
 }
 
-const inprocRoot = () => mkdtempSync(join(tmpdir(), "issues-inproc-"));
+const inprocRoot = async () => {
+  const root = mkdtempSync(join(tmpdir(), "issues-inproc-"));
+  await withIssuesRoot(root, () => captureMain(["project", "create", "--name", "demo", "--repo", root]));
+  return root;
+};
 
-// Mesma classificação do `classify` acima, pela via in-process (captureMain).
-const classifyMain = (id: string) => captureMain(["tag", "--id", id, "--complexity", "BAIXA", "--risk", "BAIXO", "--human"]);
-
-test("in-process: main() cobre ticket/worktree/requirements fora do execute() principal", async () => {
-  const root = inprocRoot();
+test("in-process: main() cobre project/worktree/requirements/relate fora do execute() principal", async () => {
+  const root = await inprocRoot();
   await withIssuesRoot(root, async () => {
     const created = JSON.parse((await captureMain(createArgs)).stdout);
-    await classifyMain(created.id);
-    await captureMain(["next", "--agent", "pi", "--project", "demo"]);
-    const ongoing = JSON.parse((await captureMain(ticketArgs(created.id))).stdout);
-    assert.equal(ongoing.status, "ON-GOING"); // passou por runTicket() -> ticket() -> ticketCreate()
-    const tid = ongoing.tickets[0].id;
-    const commented = JSON.parse((await captureMain(["ticket", "comment", "--issue", created.id, "--id", tid,
-      "--agent", "pi", "--comment", "nota"])).stdout); // ticketComment()
-    assert.equal(commented.tickets[0].thread.at(-1).comment, "nota");
+    const listed = JSON.parse((await captureMain(["project", "list"])).stdout);
+    assert.equal(listed[0].name, "demo"); // runProject() -> project("list")
+
+    const other = JSON.parse((await captureMain(createArgs)).stdout);
+    const related = JSON.parse((await captureMain(["relate", "--id", created.id, "--relates", other.id])).stdout);
+    assert.deepEqual(related.relates, [{ id: other.id, kind: "see-also" }]); // relate() default see-also
 
     const repo = mkdtempSync(join(tmpdir(), "issues-inproc-repo-"));
     execFileSync("git", ["init", "-b", "main"], { cwd: repo });
     execFileSync("git", ["config", "user.email", "t@t"], { cwd: repo });
     execFileSync("git", ["config", "user.name", "t"], { cwd: repo });
     execFileSync("git", ["commit", "--allow-empty", "-m", "init"], { cwd: repo });
-    const previousCwd = process.cwd();
-    process.chdir(repo);
-    try {
-      const added = JSON.parse((await captureMain(["worktree", "add", "--id", created.id])).stdout);
-      assert.ok(added.worktree); // runWorktree() -> worktree("add")
-      const removed = JSON.parse((await captureMain(["worktree", "remove", "--id", created.id])).stdout);
-      assert.equal(removed.worktree, null); // worktree("remove")
-    } finally {
-      process.chdir(previousCwd);
-    }
+    await captureMain(["project", "create", "--name", "demo", "--repo", repo]); // upsert: aponta o repo git
+    const added = JSON.parse((await captureMain(["worktree", "add", "--id", created.id])).stdout);
+    assert.ok(added.worktree); // runWorktree() -> worktree("add"), repo vindo do project.json
+    const removed = JSON.parse((await captureMain(["worktree", "remove", "--id", created.id])).stdout);
+    assert.equal(removed.worktree, null); // worktree("remove")
 
+    const reqIssue = JSON.parse((await captureMain(["create", "--title", "req", "--project", "demo",
+      "--type", "Feat", "--action", "Planning", "--problem", "p", "--agent", "pi"])).stdout);
     const reqFile = join(mkdtempSync(join(tmpdir(), "issues-inproc-req-")), "req.json");
     writeFileSync(reqFile, JSON.stringify({
       features: ["Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel"],
     }));
-    const saved = await captureMain(["requirements", "set", "--id", created.id, "--file", reqFile]);
+    const saved = await captureMain(["requirements", "set", "--id", reqIssue.id, "--file", reqFile]);
     assert.equal(JSON.parse(saved.stdout).features.length, 1); // runRequirements() -> requirements("set")
+    const reqs = await captureMain(["get", "--id", reqIssue.id, "--target", "REQUIREMENTS"]);
+    assert.equal(JSON.parse(reqs.stdout).features.length, 1); // get() branch --target REQUIREMENTS
 
     const badWorktree = await captureMain(["worktree", "bogus", "--id", created.id]);
     assert.match(badWorktree.stderr, /Usage: issues worktree/);
     const badRequirements = await captureMain(["requirements", "bogus", "--id", created.id]);
     assert.match(badRequirements.stderr, /Usage: issues requirements/);
   });
+  process.exitCode = undefined;
 });
 
-test("in-process: main() cobre status/decide/reset/ticket decide e get --target REQUIREMENTS", async () => {
-  const root = inprocRoot();
+test("in-process: main() cobre status/decide/reset e o gate assíncrono de status", async () => {
+  const root = await inprocRoot();
   await withIssuesRoot(root, async () => {
-    // status (execute() "status" branch, já parcialmente coberto via spawn) + decide + reset
     const forStatus = JSON.parse((await captureMain(createArgs)).stdout);
+    await captureMain(["next", "--id", forStatus.id, "--agent", "pi"]);
+    await captureMain(["artifact", "--id", forStatus.id, "--file", qaArtifactFile]); // gate QA
     const closed = JSON.parse((await captureMain(["status", "--id", forStatus.id, "--agent", "pi",
-      "--status", "CLOSED", "--comment", "x", "--reason", "concluido"])).stdout);
-    assert.equal(closed.status, "CLOSED");
+      "--status", "CLOSED", "--comment", "feito", "--reason", "concluido"])).stdout);
+    assert.equal(closed.status, "CLOSED"); // runStatus() assíncrono
 
     const forReset = JSON.parse((await captureMain(createArgs)).stdout);
     await captureMain(["next", "--id", forReset.id, "--agent", "pi"]);
     const afterReset = JSON.parse((await captureMain(["reset", "--id", forReset.id, "--human", "--comment", "liberar"])).stdout);
     assert.equal(afterReset.owner, null);
 
-    const forDecide = JSON.parse((await captureMain(createArgs)).stdout);
-    await classifyMain(forDecide.id);
+    const forDecide = JSON.parse((await captureMain(createArgs.concat("--human-need", "HITL"))).stdout);
     await captureMain(["next", "--id", forDecide.id, "--agent", "pi"]);
-    const ticket = JSON.parse((await captureMain(ticketArgs(forDecide.id))).stdout);
-    const tid = ticket.tickets[0].id;
-    await captureMain(["next", "--id", forDecide.id, "--agent", "pi"]); // claim o Ticket
-    await captureMain(["ticket", "status", "--issue", forDecide.id, "--id", tid, "--agent", "pi",
-      "--status", "CLOSED", "--comment", "feito", "--reason", "concluido", "--last"]);
-    const confId = JSON.parse((await captureMain(["get", "--id", forDecide.id])).stdout).tickets
-      .find((t: { type: string }) => t.type === "Confirmation").id;
-    // ticket claim/status humano cobre actorFrom() com --human (linha 246)
-    await captureMain(["ticket", "claim", "--issue", forDecide.id, "--id", confId, "--human"]);
-    await captureMain(["ticket", "status", "--issue", forDecide.id, "--id", confId, "--human",
-      "--status", "AWAITING", "--comment", "para decisão"]);
-    await captureMain(["ticket", "decide", "--issue", forDecide.id, "--id", confId, "--human",
-      "--status", "CLOSED", "--comment", "verificado", "--reason", "concluido"]);
+    await captureMain(["artifact", "--id", forDecide.id, "--file", qaArtifactFile]); // gate QA
+    await captureMain(["status", "--id", forDecide.id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência"]);
     const decided = JSON.parse((await captureMain(["decide", "--id", forDecide.id, "--human",
       "--status", "CLOSED", "--comment", "aceito", "--reason", "concluido"])).stdout);
     assert.equal(decided.status, "CLOSED");
 
-    const reqFile = join(mkdtempSync(join(tmpdir(), "issues-inproc-req2-")), "req.json");
-    writeFileSync(reqFile, JSON.stringify({
-      features: ["Feature: X\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a\n    When b\n    Then c"],
-    }));
-    await captureMain(["requirements", "set", "--id", forDecide.id, "--file", reqFile]);
-    const reqs = await captureMain(["get", "--id", forDecide.id, "--target", "REQUIREMENTS"]);
-    assert.equal(JSON.parse(reqs.stdout).features.length, 1); // get() branch --target REQUIREMENTS
+    const gateFail = await captureMain(["status", "--id", forStatus.id, "--agent", "pi",
+      "--status", "CLOSED", "--comment", "x", "--reason", "concluido"]);
+    assert.match(gateFail.stderr, /Expected CLAIMED/); // runStatus() reporta erro com exit 1
+    assert.equal(gateFail.exitCode, 1);
   });
+  process.exitCode = undefined;
 });
 
 test("in-process: main() cobre next sem --prompt, init com/sem --dogfood, --attach e conflito --human/--agent", async () => {
-  const root = inprocRoot();
+  const root = await inprocRoot();
   await withIssuesRoot(root, async () => {
     const created = JSON.parse((await captureMain(createArgs)).stdout);
     const claimed = await captureMain(["next", "--agent", "pi", "--project", "demo"]); // claimNext()/next() sem --prompt
-    assert.equal(JSON.parse(claimed.stdout).issue.id, created.id);
+    assert.equal(JSON.parse(claimed.stdout).id, created.id);
 
     const dogfoodTarget = mkdtempSync(join(tmpdir(), "issues-inproc-dogfood-"));
     const dogfood = await captureMain(["init", "--dogfood", "--target", dogfoodTarget]);
@@ -422,11 +396,11 @@ test("in-process: main() cobre next sem --prompt, init com/sem --dogfood, --atta
     const png = join(dir, "shot.png");
     writeFileSync(png, Buffer.from([137, 80, 78, 71, 9]));
     const commented = await captureMain(["comment", "--id", created.id, "--agent", "pi",
-      "--comment", "evidência", "--attach", png]); // parseOptions: --attach (linhas 230-232)
+      "--comment", "evidência", "--attach", png]); // parseOptions: --attach
     assert.equal(JSON.parse(commented.stdout).thread.at(-1).attachments[0].kind, "image");
 
     const conflict = await captureMain(["create", "--title", "x", "--project", "demo", "--type", "Feat",
-      "--problem", "p", "--human", "--agent", "pi"]); // actorFrom(): --human e --agent juntos
+      "--action", "QA", "--problem", "p", "--human", "--agent", "pi"]); // actorFrom(): --human e --agent juntos
     assert.match(conflict.stderr, /Choose --human or --agent/);
     assert.equal(conflict.exitCode, 1);
   });
@@ -434,7 +408,7 @@ test("in-process: main() cobre next sem --prompt, init com/sem --dogfood, --atta
 });
 
 test("in-process: parseOptions cobre --attach/flag no fim dos args (sem valor) e comment sem --comment", async () => {
-  const root = inprocRoot();
+  const root = await inprocRoot();
   await withIssuesRoot(root, async () => {
     const created = JSON.parse((await captureMain(createArgs)).stdout);
     const dir = mkdtempSync(join(tmpdir(), "issues-inproc-attonly-"));
@@ -447,7 +421,7 @@ test("in-process: parseOptions cobre --attach/flag no fim dos args (sem valor) e
     assert.equal(lastEntry.attachments[0].kind, "image");
 
     // --title no fim dos args sem valor: args[++index] ?? "" cai no fallback -> value() rejeita string vazia
-    const missingValue = await captureMain(["create", "--project", "demo", "--type", "Feat", "--problem", "p", "--agent", "pi", "--title"]);
+    const missingValue = await captureMain(["create", "--project", "demo", "--type", "Feat", "--action", "QA", "--problem", "p", "--agent", "pi", "--title"]);
     assert.match(missingValue.stderr, /--title is required/);
 
     // --attach no fim dos args sem valor: mesmo fallback, mas dentro do ramo dedicado de --attach

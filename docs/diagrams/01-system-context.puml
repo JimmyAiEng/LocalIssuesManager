@@ -1,0 +1,33 @@
+@startuml system-context
+title WorkflowDev — Contexto do Sistema (Issue-only, CLI + Web local)
+
+skinparam componentStyle rectangle
+left to right direction
+
+actor "Humano\n(planeja / valida)" as Human
+actor "IA / Harness\n(claude-code, cursor,\ncodex, pi)" as AI
+
+package "WorkflowDev (local)" {
+  [CLI  `issues`] as CLI
+  [Web local\n(127.0.0.1)] as Web
+  [Núcleo\n(domain + app)] as Core
+  database "Filesystem\n~/issues-manager" as FS
+  [Engine PlantUML\n(@plantuml/mcp-js)] as PUML
+}
+
+Human --> CLI : cria/decide/reset\nvalida entregas
+Human --> Web : board + decisão\nvisual (HITL)
+AI --> CLI : claim (`next`) e\nconclui via fila
+
+CLI --> Core
+Web --> Core
+Core --> FS : Issues em pastas\npor status
+Core --> PUML : valida/renderiza\ndiagramas de Design
+Web ..> PUML : SVG dos diagramas\n(rota .svg)
+
+note bottom of Core
+  Modelo Issue-only: cada Issue tem type (o problema)
+  e action (a entrega). Trabalho maior vira novas
+  Issues relacionadas (linhagem), não Tickets.
+end note
+@enduml

@@ -1,13 +1,16 @@
 import { initPack, linkPackSkillsForDogfood } from "./app/init_pack_use_case.js";
 import {
-  addComment, addWorktree, artifactFromFile, attachmentFromFile, createIssue, decideIssue, getIssue,
-  type IncomingAttachment, listIssues, nextIssue, type NextResult, removeWorktree, resetClaim,
+  addComment, artifactFromFile, attachmentFromFile, createIssue, decideIssue, getIssue,
+  type IncomingAttachment, type IssueView, listIssues, nextIssue, relateIssues, resetClaim,
   setArtifact, statusIssue, updateTags,
 } from "./app/issue_use_cases.js";
+import { decomposeIssue } from "./app/decomposition_use_cases.js";
+import { CHECK_ORDER, createProject, listProjects, type ProjectChecks } from "./app/project_use_cases.js";
+import { getPlan, setPlan } from "./app/plan_use_cases.js";
 import { composePrompt } from "./app/prompt_composition.js";
+import { getPrd, getRequirements, setPrd, setRequirements } from "./app/requirements_use_cases.js";
+import { addWorktree, removeWorktree } from "./app/worktree_use_cases.js";
 import { printDesignPackage, reportCliError, runDesign } from "./cli_design.js";
-import { getRequirements, setRequirements } from "./app/requirements_use_cases.js";
-import { claimTicket, createTicket, decideTicket, getTicket, listTickets, statusTicket } from "./app/ticket_use_cases.js";
 import { openBrowser, startWebServer } from "./web/server.js";
 
 type Options = Record<string, string | boolean | string[]>;
@@ -16,29 +19,58 @@ type Result = object | object[] | null;
 export function main(argv = process.argv.slice(2)): void | Promise<void> {
   try {
     const [command, ...raw] = argv;
-    if (command === "ticket") return runTicket(raw);
+    if (command === "project") return void runProject(raw);
     if (command === "worktree") return void runWorktree(raw);
     if (command === "requirements") return void runRequirements(raw);
+    if (command === "prd") return void runPrd(raw);
+    if (command === "plan") return void runPlan(raw);
     if (command === "design") return void runDesign(raw);
     if (command === "get" && raw[0] && !raw[0].startsWith("--")) raw.unshift("--target"); // get DESIGN|REQUIREMENTS posicional
     const options = parseOptions(raw);
     if (command === "web") return void launchWeb(options);
     if (command === "next" && options.prompt) return void nextPrompt(options);
     if (command === "get" && options.target === "DESIGN") return void printDesignPackage(value(options, "id"), Boolean(options.pretty));
+    if (command === "status") return runStatus(options); // async pelo gate da action
     print(execute(command, options), Boolean(options.pretty));
   } catch (error) {
     reportCliError(error);
   }
 }
 
-// Async pelo gate de Design em ticket status; DesignGateError sai como JSON {"errors":[...]}.
-async function runTicket(raw: string[]): Promise<void> {
+// Gates de conclusão (requirements/design/check) falham como DomainError; DesignGateError
+// sai como JSON {"errors":[...]}.
+async function runStatus(options: Options): Promise<void> {
   try {
-    const options = parseOptions(raw.slice(1));
-    print(await ticket(raw[0], options), Boolean(options.pretty));
+    print(await status(options), Boolean(options.pretty));
   } catch (error) {
     reportCliError(error);
   }
+}
+
+function runProject(raw: string[]): void {
+  const options = parseOptions(raw.slice(1));
+  print(project(raw[0], options), Boolean(options.pretty));
+}
+
+function project(sub: string | undefined, options: Options): Result {
+  if (sub === "create") {
+    return createProject({ name: value(options, "name"), repo: value(options, "repo"), container: optional(options, "container"),
+      check: optional(options, "check"), checks: projectChecks(options), testPaths: testPaths(options) });
+  }
+  if (sub === "list") return listProjects();
+  throw new Error("Usage: issues project <create|list> [--name <n> --repo <path> [--container <image>] [--check <cmd>] [--check-lint <cmd> --check-unit <cmd> --check-fitness <cmd> --check-e2e <cmd> --check-mutation <cmd>] [--test-paths <csv>]]");
+}
+
+// Checks nomeados do pipeline de Implement (lint→unit→fitness→e2e→mutation); só os informados.
+function projectChecks(options: Options): ProjectChecks | undefined {
+  const entries = CHECK_ORDER.map((step) => [step, optional(options, `check-${step}`)] as const).filter(([, cmd]) => cmd !== undefined);
+  return entries.length ? (Object.fromEntries(entries) as ProjectChecks) : undefined;
+}
+
+// --test-paths: CSV de globs (ex. "test/,**/*.test.ts") que liga o enforcement de TDD no Implement.
+function testPaths(options: Options): string[] | undefined {
+  const paths = optional(options, "test-paths")?.split(",").map((path) => path.trim()).filter(Boolean);
+  return paths?.length ? paths : undefined;
 }
 
 function runWorktree(raw: string[]): void {
@@ -62,42 +94,50 @@ function requirements(sub: string | undefined, options: Options): Result {
   throw new Error("Usage: issues requirements set --id <issueId> --file <req.json>");
 }
 
+function runPrd(raw: string[]): void {
+  const options = parseOptions(raw.slice(1));
+  print(prd(raw[0], options), Boolean(options.pretty));
+}
+
+function prd(sub: string | undefined, options: Options): Result {
+  if (sub === "set") return setPrd({ issueId: value(options, "id"), file: value(options, "file") });
+  throw new Error("Usage: issues prd set --id <issueId> --file <prd.json>");
+}
+
+function runPlan(raw: string[]): void {
+  const options = parseOptions(raw.slice(1));
+  print(plan(raw[0], options), Boolean(options.pretty));
+}
+
+function plan(sub: string | undefined, options: Options): Result {
+  if (sub === "set") return setPlan({ issueId: value(options, "id"), file: value(options, "file") });
+  throw new Error("Usage: issues plan set --id <issueId> --file <plan.json>");
+}
+
 function execute(command: string | undefined, options: Options): Result {
   if (command === "create") return create(options);
   if (command === "next") return next(options);
   if (command === "comment") return comment(options);
   if (command === "tag") return tag(options);
-  if (command === "status") return status(options);
   if (command === "decide") return decide(options);
   if (command === "reset") return reset(options);
+  if (command === "relate") return relate(options);
+  if (command === "decompose") return decompose(options);
   if (command === "get") return get(options);
   if (command === "list") return list(options);
   if (command === "artifact") return issueArtifact(options);
   if (command === "init") return init(options);
-  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|get|list|artifact|requirements|design|ticket|worktree|web|init> [flags]");
-}
-
-function ticket(sub: string | undefined, options: Options): Result | Promise<Result> {
-  if (sub === "create") return ticketCreate(options);
-  if (sub === "claim") return ticketClaim(options);
-  if (sub === "comment") return ticketComment(options);
-  if (sub === "tag") return ticketTag(options);
-  if (sub === "status") return ticketStatus(options);
-  if (sub === "decide") return ticketDecide(options);
-  if (sub === "get") return ticketGet(options);
-  if (sub === "list") return ticketList(options);
-  if (sub === "artifact") return ticketArtifact(options);
-  throw new Error("Usage: issues ticket <create|claim|comment|tag|status|decide|get|list|artifact> [flags]");
+  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|relate|decompose|get|list|artifact|requirements|prd|plan|design|project|worktree|web|init> [flags]");
 }
 
 function create(options: Options): Result {
   const actor = actorFrom(options);
   return createIssue({ title: value(options, "title"),
-    project: value(options, "project"), type: value(options, "type"),
-    problem: value(options, "problem"), artifacts: optional(options, "artifacts"),
-    acceptance_criteria: optional(options, "acceptance-criteria"), artifact: artifactFile(options),
+    project: value(options, "project"), type: value(options, "type"), action: value(options, "action"),
+    problem: value(options, "problem"), acceptance_criteria: optional(options, "acceptance-criteria"),
+    artifact: artifactFile(options), relates: optionalList(options, "relates"),
     complexity: optional(options, "complexity"), human_need: optional(options, "human-need"),
-    risk: optional(options, "risk"), actor }).toJSON();
+    risk: optional(options, "risk"), attachments: readAttachments(options), actor }).toJSON();
 }
 
 function issueArtifact(options: Options): Result {
@@ -106,23 +146,17 @@ function issueArtifact(options: Options): Result {
   return { ok: true, id };
 }
 
-function ticketArtifact(options: Options): Result {
-  const id = value(options, "id");
-  setArtifact({ issueId: value(options, "issue"), ticketId: id, content: artifactFromFile(value(options, "file")) });
-  return { ok: true, id };
-}
-
-// Lê o conteúdo do Artefato .md de --artifact-file (nome distinto de --artifacts legado, string livre).
+// Lê o conteúdo do Artefato .md de --artifact-file (nome distinto do flag legado, string livre).
 function artifactFile(options: Options): string | undefined {
   const path = optional(options, "artifact-file");
   return path ? artifactFromFile(path) : undefined;
 }
 
 function next(options: Options): Result {
-  return claimNext(options); // views prontas (issue+ticket com artefatos); só imprime
+  return claimNext(options); // view pronta (com artefato e relacionadas); só imprime
 }
 
-function claimNext(options: Options): NextResult | null {
+function claimNext(options: Options): IssueView | null {
   const id = optional(options, "id");
   const project = id ? optional(options, "project") : value(options, "project");
   return nextIssue({ agent: value(options, "agent"), project, id });
@@ -130,13 +164,14 @@ function claimNext(options: Options): NextResult | null {
 
 function nextPrompt(options: Options): void {
   const result = claimNext(options);
-  process.stdout.write(result ? `${composePrompt(result.issue, result.ticket)}\n` : "");
+  process.stdout.write(result ? `${composePrompt(result)}\n` : "");
 }
 
 function comment(options: Options): Result {
   const actor = actorFrom(options);
   return addComment({ issueId: value(options, "id"),
-    comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor }).toJSON();
+    comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor,
+    role: optional(options, "role") }).toJSON();
 }
 
 function tag(options: Options): Result {
@@ -145,12 +180,13 @@ function tag(options: Options): Result {
     risk: optional(options, "risk") }).toJSON();
 }
 
-function status(options: Options): Result {
+async function status(options: Options): Promise<Result> {
   if (options.human && options.agent) throw new Error("Choose --human or --agent");
   const agent = options.human ? undefined : value(options, "agent");
-  return statusIssue({ id: value(options, "id"), agent,
+  return (await statusIssue({ id: value(options, "id"), agent,
     human: Boolean(options.human), status: value(options, "status"),
-    comment: value(options, "comment"), closed_reason: optional(options, "reason") }).toJSON();
+    comment: value(options, "comment"), closed_reason: optional(options, "reason"),
+    role: optional(options, "role") })).toJSON();
 }
 
 function decide(options: Options): Result {
@@ -164,10 +200,24 @@ function reset(options: Options): Result {
     human: Boolean(options.human), comment: value(options, "comment") }).toJSON();
 }
 
+function relate(options: Options): Result {
+  const relates = optionalList(options, "relates");
+  if (!relates?.length) throw new Error("--relates is required (ids separados por vírgula)");
+  return relateIssues({ id: value(options, "id"), relates, kind: optional(options, "kind") }).toJSON();
+}
+
+// Fan-out: cria as filhas descritas em --into (JSON { mode, children }); o actor é quem decompõe.
+function decompose(options: Options): Result {
+  return decomposeIssue({ issueId: value(options, "id"), file: value(options, "into"), actor: actorFrom(options) });
+}
+
 function get(options: Options): Result {
   const id = value(options, "id");
-  if (optional(options, "target") === "REQUIREMENTS") return getRequirements({ issueId: id });
-  return getIssue(id); // IssueView pronta (com artifact)
+  const target = optional(options, "target");
+  if (target === "REQUIREMENTS") return getRequirements({ issueId: id });
+  if (target === "PRD") return getPrd({ issueId: id });
+  if (target === "PLAN") return getPlan({ issueId: id });
+  return getIssue(id); // IssueView pronta (com artefato e relacionadas)
 }
 
 function list(options: Options): Result {
@@ -183,61 +233,13 @@ function init(options: Options): Result {
     target: optional(options, "target"), force: Boolean(options.force) });
 }
 
-function ticketCreate(options: Options): Result {
-  const actor = actorFrom(options);
-  return createTicket({ issueId: value(options, "issue"),
-    type: value(options, "type"), objective: value(options, "objective"), task: value(options, "task"),
-    acceptance_criteria: value(options, "acceptance-criteria"), artifacts: optional(options, "artifacts"),
-    references: optional(options, "references"), depends_on: optionalList(options, "depends-on"),
-    artifact: artifactFile(options), actor }).toJSON();
-}
-
-function ticketClaim(options: Options): Result {
-  const actor = actorFrom(options);
-  return claimTicket({ issueId: value(options, "issue"), ticketId: value(options, "id"), actor }).toJSON();
-}
-
-function ticketComment(options: Options): Result {
-  const actor = actorFrom(options);
-  return addComment({ issueId: value(options, "issue"), ticketId: value(options, "id"),
-    comment: optional(options, "comment") ?? "", attachments: readAttachments(options), actor }).toJSON();
-}
-
-function ticketTag(options: Options): Result {
-  return updateTags({ issueId: value(options, "issue"), ticketId: value(options, "id"),
-    complexity: optional(options, "complexity"), human_need: optional(options, "human-need"),
-    risk: optional(options, "risk") }).toJSON();
-}
-
-async function ticketStatus(options: Options): Promise<Result> {
-  const actor = actorFrom(options);
-  return (await statusTicket({ issueId: value(options, "issue"),
-    ticketId: value(options, "id"), actor, status: value(options, "status"),
-    comment: value(options, "comment"), closed_reason: optional(options, "reason"), last: Boolean(options.last) })).toJSON();
-}
-
-function ticketDecide(options: Options): Result {
-  return decideTicket({ issueId: value(options, "issue"),
-    ticketId: value(options, "id"), human: Boolean(options.human), status: value(options, "status"),
-    comment: value(options, "comment"), closed_reason: optional(options, "reason"), last: Boolean(options.last) }).toJSON();
-}
-
-function ticketGet(options: Options): Result {
-  return getTicket({ issueId: value(options, "issue"), ticketId: value(options, "id") }); // TicketView pronta
-}
-
-function ticketList(options: Options): Result {
-  return listTickets({ issueId: value(options, "issue"),
-    type: optional(options, "type"), status: optional(options, "status") });
-}
-
 function parseOptions(args: string[]): Options {
   const options: Options = {};
   for (let index = 0; index < args.length; index++) {
     const key = args[index];
     if (!key.startsWith("--")) throw new Error(`Unexpected argument: ${key}`);
     const name = key.slice(2);
-    if (["human", "pretty", "no-open", "force", "dogfood", "last", "prompt"].includes(name)) options[name] = true;
+    if (["human", "pretty", "no-open", "force", "dogfood", "prompt"].includes(name)) options[name] = true;
     else if (name === "attach") {
       options.attach = (options.attach as string[] | undefined) ?? [];
       (options.attach as string[]).push(args[++index] ?? "");

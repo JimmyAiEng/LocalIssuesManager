@@ -15,9 +15,8 @@ O **como executar** cada fase é decisão do agente — não há skills de execu
 | Skill | Camada | Papel |
 |---|---|---|
 | `sdlc-workflow` | 0 | Mapa SDLC + comandos issues-local; sempre via `AGENTS.md` |
-| `planning-phase` | 1 | Fase Planning (Ticket type=`Planning`) → gate G1 |
-| `design-phase` | 1 | Fase Design (Ticket type=`Design`) → gate G2 |
-| `implement-phase` | 1 | Fase Implement (Ticket type=`Implement`) → revisão de fatia |
-| `qa-phase` | 1 | Fase QA (Ticket type=`QA`) → gate G3 |
-| `deployment-phase` | 1 | Fase Deploy (Ticket type=`Deploy`) → gate G4 |
-| `confirmation-phase` | 1 | Ticket `Confirmation` (injetado pelo sistema) → destravar agregado |
+| `planning-phase` | 1 | Issue action=`Planning` → requisitos Gherkin (gate de conclusão) |
+| `design-phase` | 1 | Issue action=`Design` → design.md + diagramas PlantUML (gate de conclusão) |
+| `implement-phase` | 1 | Issue action=`Implement` → worktree + check do projeto (gate de conclusão) |
+| `qa-phase` | 1 | Issue action=`QA` → validação do conjunto (evidência) |
+| `deployment-phase` | 1 | Issue action=`Deploy` → PR + go/no-go humano (evidência) |

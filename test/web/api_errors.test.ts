@@ -5,14 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { nextIssue } from "../../src/app/issue_use_cases.js";
-import { claimTicket } from "../../src/app/ticket_use_cases.js";
+import { createProject } from "../../src/app/project_use_cases.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
-// Cobertura de rota x erro complementar ao api.test.ts (happy paths): 400/404/405 e a
+// Cobertura de rota x erro complementar ao api.test.ts (happy paths): 400/404 e a
 // justificativa para o único 409 do domínio (Stale Issue save em queue_repository.ts).
-// Issue já classificada: a criação de Ticket exige risk+complexity para derivar a autonomia.
-const input = { title: "Web issue", project: "web", type: "Fix", problem: "p", complexity: "BAIXA", risk: "BAIXO" };
-const ticketInput = { type: "Implement", objective: "o", task: "t", acceptance_criteria: "c" };
+const input = { title: "Web issue", project: "web", type: "Fix", action: "QA", problem: "p" };
 
 test("API 400: corpo não-JSON, JSON não-objeto (array/null) e corpo maior que 64MB", async () => withWeb(async (url) => {
   const naoJson = await raw(url, "POST", "/api/issues", "isto não é json");
@@ -29,8 +27,9 @@ test("API 400: corpo não-JSON, JSON não-objeto (array/null) e corpo maior que 
 }));
 
 test("API 400: campo string obrigatório ausente ou com tipo errado", async () => withWeb(async (url) => {
-  assert.equal((await request(url, "POST", "/api/issues", { project: "web", type: "Fix", problem: "p" })).status, 400); // sem title
+  assert.equal((await request(url, "POST", "/api/issues", { project: "web", type: "Fix", action: "QA", problem: "p" })).status, 400); // sem title
   assert.equal((await request(url, "POST", "/api/issues", { ...input, title: 123 })).status, 400); // title não-string
+  assert.equal((await request(url, "POST", "/api/issues", { title: "x", project: "web", type: "Fix", problem: "p" })).status, 400); // sem action
   const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
   assert.equal((await request(url, "POST", `/api/issues/${id}/comment`, {})).status, 400); // sem comment
   assert.equal((await request(url, "POST", `/api/issues/${id}/close`, { comment: "x" })).status, 400); // sem closed_reason
@@ -57,48 +56,25 @@ test("API 400: transições de domínio inválidas (claim/close/decision/reset f
   assert.equal((await request(url, "POST", `/api/issues/${id}/reset`, { comment: "x" })).status, 400); // Issue não está CLAIMED
   await request(url, "POST", `/api/issues/${id}/claim`, {});
   assert.equal((await request(url, "POST", `/api/issues/${id}/claim`, {})).status, 400); // já CLAIMED
-  assert.equal((await request(url, "POST", `/api/issues/${id}/close`, { comment: "x", closed_reason: "concluido" })).status, 400); // close exige OPEN
 }));
 
-test("API 400: transições de Ticket inválidas (claim duplo e decisão fora de AWAITING)", async () => withWeb(async (url, root) => {
-  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
-  nextIssue({ agent: "pi", project: "web" }, root);
-  const tid = ((await request(url, "POST", `/api/issues/${id}/tickets`, ticketInput)).body.tickets as { id: string }[])[0].id;
-  await request(url, "POST", `/api/issues/${id}/tickets/${tid}/claim`, {});
-  assert.equal((await request(url, "POST", `/api/issues/${id}/tickets/${tid}/claim`, {})).status, 400); // já CLAIMED
-  assert.equal((await request(url, "POST", `/api/issues/${id}/tickets/${tid}/decision`, { status: "CLOSED", comment: "x", closed_reason: "concluido" })).status, 400); // Ticket não está AWAITING
-}));
-
-test("API 400: Ticket inexistente numa Issue existente (Issue.ticket() lança DomainError, não NotFoundError)", async () => withWeb(async (url) => {
-  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
-  const result = await request(url, "POST", `/api/issues/${id}/tickets/${randomUUID()}/claim`, {});
-  assert.equal(result.status, 400); // achado: ticket ausente é DomainError→400 no domínio atual, não 404
-}));
-
-test("API 400: Ticket de tipo Confirmation não pode ser criado manualmente e filtro de listagem inválido", async () => withWeb(async (url, root) => {
-  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
-  nextIssue({ agent: "pi", project: "web" }, root);
-  assert.equal((await request(url, "POST", `/api/issues/${id}/tickets`, { ...ticketInput, type: "Confirmation" })).status, 400);
+test("API 400: filtro de listagem inválido", async () => withWeb(async (url) => {
   assert.equal((await request(url, "GET", "/api/issues?type=Bogus")).status, 400);
   assert.equal((await request(url, "GET", "/api/issues?status=Bogus")).status, 400);
+  assert.equal((await request(url, "GET", "/api/issues?status=ON-GOING")).status, 400); // status extinto
 }));
 
 test("API 404: Issue inexistente em todas as rotas por id", async () => withWeb(async (url) => {
   const missing = randomUUID();
   assert.equal((await request(url, "GET", `/api/issues/${missing}`)).status, 404);
   assert.equal((await request(url, "GET", `/api/issues/${missing}/requirements`)).status, 404);
+  assert.equal((await request(url, "GET", `/api/issues/${missing}/design`)).status, 404);
   assert.equal((await request(url, "POST", `/api/issues/${missing}/comment`, { comment: "x" })).status, 404);
   assert.equal((await request(url, "POST", `/api/issues/${missing}/tags`, { risk: "ALTO" })).status, 404);
-  assert.equal((await request(url, "POST", `/api/issues/${missing}/tickets`, ticketInput)).status, 404);
   assert.equal((await request(url, "POST", `/api/issues/${missing}/claim`, {})).status, 404);
   assert.equal((await request(url, "POST", `/api/issues/${missing}/close`, { comment: "x", closed_reason: "concluido" })).status, 404);
   assert.equal((await request(url, "POST", `/api/issues/${missing}/decision`, { status: "OPEN", comment: "x" })).status, 404);
   assert.equal((await request(url, "POST", `/api/issues/${missing}/reset`, { comment: "x" })).status, 404);
-  assert.equal((await request(url, "POST", `/api/issues/${missing}/tickets/${randomUUID()}/claim`, {})).status, 404);
-  assert.equal((await request(url, "POST", `/api/issues/${missing}/tickets/${randomUUID()}/status`, { status: "CLOSED", comment: "x" })).status, 404);
-  assert.equal((await request(url, "POST", `/api/issues/${missing}/tickets/${randomUUID()}/decision`, { status: "CLOSED", comment: "x" })).status, 404);
-  assert.equal((await request(url, "POST", `/api/issues/${missing}/tickets/${randomUUID()}/comment`, { comment: "x" })).status, 404);
-  assert.equal((await request(url, "POST", `/api/issues/${missing}/tickets/${randomUUID()}/tags`, { risk: "ALTO" })).status, 404);
 }));
 
 test("API 404: attachment com UUID válido mas inexistente, e id não-UUID", async () => withWeb(async (url) => {
@@ -106,44 +82,16 @@ test("API 404: attachment com UUID válido mas inexistente, e id não-UUID", asy
   assert.equal((await fetch(`${url}/api/attachments/nao-e-uuid`)).status, 404);
 }));
 
-test("API 404: Planning não pode ir a AWAITING sem requisitos persistidos (gate do próprio domínio)", async () => withWeb(async (url, root) => {
-  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
-  nextIssue({ agent: "pi", project: "web" }, root);
-  const tid = ((await request(url, "POST", `/api/issues/${id}/tickets`, { ...ticketInput, type: "Planning" })).body.tickets as { id: string }[])[0].id;
-  claimTicket({ issueId: id, ticketId: tid, actor: "pi" }, root);
-  const result = await request(url, "POST", `/api/issues/${id}/tickets/${tid}/status`, { status: "AWAITING", comment: "revisar" });
-  assert.equal(result.status, 404);
-}));
-
-test("API 400: gate de Design→AWAITING devolve payload estruturado {error, errors[]}", async () => withWeb(async (url, root) => {
-  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
-  nextIssue({ agent: "pi", project: "web" }, root);
-  const tid = ((await request(url, "POST", `/api/issues/${id}/tickets`, { ...ticketInput, type: "Design" })).body.tickets as { id: string }[])[0].id;
-  claimTicket({ issueId: id, ticketId: tid, actor: "pi" }, root);
-  const result = await request(url, "POST", `/api/issues/${id}/tickets/${tid}/status`, { status: "AWAITING", comment: "revisar" });
-  assert.equal(result.status, 400);
-  assert.ok(result.body.error);
-  assert.deepEqual((result.body.errors as { code: string }[]).map((error) => error.code),
-    ["missing_design_md", "missing_diagram"]);
-}));
-
 test("API 404: rotas desconhecidas sob /api e método não mapeado", async () => withWeb(async (url) => {
   assert.equal((await request(url, "GET", "/api/frobnicate")).status, 404);
   assert.equal((await request(url, "POST", "/api/frobnicate")).status, 404);
   const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
   assert.equal((await request(url, "POST", `/api/issues/${id}/frobnicate`, {})).status, 404); // ação de Issue desconhecida
+  assert.equal((await request(url, "GET", `/api/issues/${id}/frobnicate/extra`)).status, 404); // GET de 3 segmentos sem match
   const put = await fetch(`${url}/api/issues/${id}`, { method: "PUT", body: "{}" });
   assert.equal(put.status, 404); // método não-GET/POST dentro de /api
   const del = await fetch(`${url}/api/issues`, { method: "DELETE" });
   assert.equal(del.status, 404);
-}));
-
-test("API 404: ação de Ticket desconhecida e rota de 3 segmentos sem ação", async () => withWeb(async (url, root) => {
-  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
-  nextIssue({ agent: "pi", project: "web" }, root);
-  const tid = ((await request(url, "POST", `/api/issues/${id}/tickets`, ticketInput)).body.tickets as { id: string }[])[0].id;
-  assert.equal((await request(url, "POST", `/api/issues/${id}/tickets/${tid}/frobnicate`, {})).status, 404);
-  assert.equal((await request(url, "POST", `/api/issues/${id}/tickets/${tid}`, {})).status, 404); // 3 segmentos, sem ação
 }));
 
 test("API 409: não há caminho determinístico via HTTP (load+mutate+save é síncrono por requisição); a corrida vira 400 de domínio", async () => withWeb(async (url) => {
@@ -162,8 +110,18 @@ test("API 409: não há caminho determinístico via HTTP (load+mutate+save é s�
   assert.deepEqual([a.status, b.status].sort(), [200, 400]);
 }));
 
+test("API 404: gate de Planning sem requisitos bloqueia o close humano? não — close humano não passa por gate", async () => withWeb(async (url, root) => {
+  // O gate por action só vale para a IA (transitionByAgent); o humano fecha por override.
+  const id = (await request(url, "POST", "/api/issues", { ...input, action: "Planning" })).body.id as string;
+  nextIssue({ agent: "pi", project: "web" }, root);
+  const closed = await request(url, "POST", `/api/issues/${id}/close`, { comment: "cancelada", closed_reason: "obsoleto" });
+  assert.equal(closed.status, 200);
+  assert.equal(closed.body.status, "CLOSED");
+}));
+
 async function withWeb(run: (url: string, root: string) => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "issues-web-"));
+  createProject({ name: "web", repo: root }, root);
   const web = await startWebServer(0, root);
   try { await run(web.url, root); } finally { await close(web); }
 }

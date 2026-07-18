@@ -7,87 +7,9 @@ import test from "node:test";
 import { Attachment } from "../../src/domain/attachment_entity.js";
 import { Issue } from "../../src/domain/issue_entity.js";
 import { Queue } from "../../src/domain/queue_repository.js";
-import { Ticket } from "../../src/domain/ticket_entity.js";
 
-const body = { title: "one", project: "space / project", type: "Feat" as const, problem: "p" };
+const body = { title: "one", project: "space / project", type: "Feat" as const, action: "Implement" as const, problem: "p" };
 const root = () => mkdtempSync(join(tmpdir(), "queue-test-"));
-
-// addTicket exige risk+complexity para derivar a autonomia; Feat·BAIXO·BAIXA → Implement AFK.
-const classify = (issue: Issue): Issue => {
-  issue.tag({ complexity: "BAIXA", risk: "BAIXO" }, "human");
-  return issue;
-};
-
-function ongoingIssue(queue: Queue, project: string, id: string, ticketDate: Date) {
-  const issue = classify(Issue.create({ ...body, project }, "pi"));
-  issue.id = id;
-  issue.claim("pi");
-  const ticket = Ticket.create({ issue_id: id, objective: "o", task: "t",
-    acceptance_criteria: "c", type: "Implement", actor: "pi" }, ticketDate);
-  issue.addTicket(ticket);
-  queue.save(issue);
-  return { issue, ticket };
-}
-
-const closeConfirmation = (issue: Issue, actor: "pi" | "codex" = "pi") => {
-  const conf = issue.tickets.find((candidate) => candidate.type === "Confirmation")!;
-  issue.claimTicket(conf.id, actor);
-  issue.transitionTicket(conf.id, actor, "CLOSED", "verificado", "concluido");
-};
-
-test("oldestOpenTicket omite Ticket cuja dependência não está AWAITING/CLOSED", () => {
-  const queue = new Queue(root());
-  const issue = classify(Issue.create({ ...body, project: "p" }, "pi"));
-  issue.claim("pi");
-  const t1 = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
-    acceptance_criteria: "c", type: "Implement", actor: "pi" }, new Date("2026-01-01"));
-  issue.addTicket(t1);
-  const t2 = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
-    acceptance_criteria: "c", type: "Implement", depends_on: [t1.id], actor: "pi" }, new Date("2026-01-02"));
-  issue.addTicket(t2);
-  queue.save(issue);
-
-  // T1 OPEN → next entrega T1, nunca T2
-  assert.equal(queue.oldestOpenTicket("p")?.ticket.id, t1.id);
-  // T1 CLAIMED → T2 ainda bloqueado; T1 já não está OPEN, então nada a entregar
-  issue.claimTicket(t1.id, "pi");
-  queue.save(issue);
-  assert.equal(queue.oldestOpenTicket("p"), null);
-  // T1 CLOSED → T2 liberado
-  issue.transitionTicket(t1.id, "pi", "AWAITING", "done");
-  issue.decideTicket(t1.id, "CLOSED", "ok", "concluido");
-  queue.save(issue);
-  assert.equal(queue.oldestOpenTicket("p")?.ticket.id, t2.id);
-});
-
-test("oldestOpenTicket não entrega fase posterior com fase anterior não fechada", () => {
-  const queue = new Queue(root());
-  const issue = classify(Issue.create({ ...body, project: "p", type: "Fix" }, "pi")); // Fix: Planning deriva AFK
-  issue.claim("pi");
-  const implement = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
-    acceptance_criteria: "c", type: "Implement", actor: "pi" }, new Date("2026-01-01"));
-  issue.addTicket(implement);
-  // fase anterior pode nascer depois de uma posterior já existir
-  const planning = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
-    acceptance_criteria: "c", type: "Planning", actor: "pi" }, new Date("2026-01-02"));
-  issue.addTicket(planning);
-  queue.save(issue);
-
-  // Implement é o OPEN mais antigo, mas Planning aberto o tira da fila
-  assert.equal(queue.oldestOpenTicket("p")?.ticket.id, planning.id);
-  issue.claimTicket(planning.id, "pi");
-  issue.transitionTicket(planning.id, "pi", "CLOSED", "ok", "concluido");
-  queue.save(issue);
-  assert.equal(queue.oldestOpenTicket("p")?.ticket.id, implement.id);
-});
-
-test("addTicket recusa dependência inexistente na Issue", () => {
-  const issue = classify(Issue.create(body, "pi"));
-  issue.claim("pi");
-  const orphan = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
-    acceptance_criteria: "c", type: "Implement", depends_on: ["nao-existe"], actor: "pi" });
-  assert.throws(() => issue.addTicket(orphan), /Dependency not found: nao-existe/);
-});
 
 test("Queue move o mesmo JSON entre pastas sem cópia obsoleta", () => {
   const dir = root();
@@ -114,6 +36,27 @@ test("nomes de Projeto em dot-segment permanecem dentro de projects", () => {
   }
 });
 
+test("registro de projeto: write/read/list com project.json e pastas de status criadas", () => {
+  const dir = root();
+  const queue = new Queue(dir);
+  assert.equal(queue.readProject("app"), null);
+  assert.deepEqual(queue.listProjects(), []);
+  queue.writeProject({ name: "app", repo: "/tmp/repo", check: "npm test" });
+  queue.writeProject({ name: "space / project", repo: "/tmp/other" });
+  assert.deepEqual(queue.readProject("app"), { name: "app", repo: "/tmp/repo", check: "npm test" });
+  assert.deepEqual(queue.readProject("space / project"), { name: "space / project", repo: "/tmp/other" });
+  assert.deepEqual(queue.listProjects().map((project) => project.name).sort(), ["app", "space / project"]);
+  assert.equal(existsSync(join(dir, "projects", "app", "open")), true);
+  assert.equal(existsSync(join(dir, "projects", "app", "project.json")), true);
+});
+
+test("registro de projeto é upsert: regravar atualiza o check", () => {
+  const queue = new Queue(root());
+  queue.writeProject({ name: "app", repo: "/tmp/repo" });
+  queue.writeProject({ name: "app", repo: "/tmp/repo", check: "npm run check" });
+  assert.equal(queue.readProject("app")?.check, "npm run check");
+});
+
 test("oldestOpen usa timestamp de entrada em OPEN e desempate estável", () => {
   const queue = new Queue(root());
   const newer = Issue.create({ ...body, project: "p", title: "new" }, "pi", new Date("2026-02-01"));
@@ -123,28 +66,7 @@ test("oldestOpen usa timestamp de entrada em OPEN e desempate estável", () => {
   queue.save(newer);
   queue.save(older);
   assert.equal(queue.oldestOpen("p")?.id, older.id);
-});
-
-test("oldestOpenTicket prioriza Ticket OPEN mais antigo com desempate por id", () => {
-  const queue = new Queue(root());
-  const recent = ongoingIssue(queue, "p", "a", new Date("2026-02-01"));
-  const old = ongoingIssue(queue, "p", "b", new Date("2026-01-01"));
-  const target = queue.oldestOpenTicket("p");
-  assert.equal(target?.issue.id, old.issue.id);
-  assert.equal(target?.ticket.id, old.ticket.id);
-  assert.notEqual(recent.ticket.id, target?.ticket.id);
-  assert.equal(queue.oldestOpenTicket("missing"), null);
-});
-
-test("save sobrescreve in-place quando apenas um Ticket muda", () => {
-  const dir = root();
-  const queue = new Queue(dir);
-  const { issue, ticket } = ongoingIssue(queue, "p", "x", new Date("2026-01-01"));
-  const loaded = queue.load(issue.id)!;
-  loaded.claimTicket(ticket.id, "pi");
-  queue.save(loaded);
-  assert.equal(existsSync(join(dir, "projects/p/ongoing", `${issue.id}.json`)), true);
-  assert.equal(queue.load(issue.id)?.tickets[0].status, "CLAIMED");
+  assert.equal(queue.oldestOpen("missing"), null);
 });
 
 test("save rejeita snapshot sem transição", () => {
@@ -167,27 +89,15 @@ test("save rejeita segundo Claim obsoleto", () => {
   assert.equal(queue.load(issue.id)?.owner, "pi");
 });
 
-test("save rejeita mutação de Ticket sobre snapshot antigo por revisão", () => {
-  const queue = new Queue(root());
-  const { issue, ticket } = ongoingIssue(queue, "p", "y", new Date("2026-01-01"));
-  const first = queue.load(issue.id)!;
-  const stale = queue.load(issue.id)!;
-  first.claimTicket(ticket.id, "pi");
-  queue.save(first);
-  stale.claimTicket(ticket.id, "codex");
-  assert.throws(() => queue.save(stale), /stale/i);
-  assert.equal(queue.load(issue.id)?.tickets[0].owner, "pi");
-});
-
 test("pastas AWAITING e CLOSED preservam a separação por status", () => {
   const dir = root();
   const queue = new Queue(dir);
-  const { issue, ticket } = ongoingIssue(queue, "p", "awaiting", new Date("2026-01-01"));
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
-  closeConfirmation(issue); // avança a Issue para AWAITING
+  const issue = Issue.create({ ...body, project: "p" }, "pi");
+  issue.claim("pi");
+  issue.submit("pi", "evidência");
   queue.save(issue);
   const closed = Issue.create({ ...body, project: "p", title: "closed" }, "pi");
+  closed.claim("pi");
   closed.closeByAgent("pi", "done", "concluido");
   queue.save(closed);
   assert.equal(existsSync(join(dir, "projects/p/awaiting", `${issue.id}.json`)), true);
@@ -213,8 +123,7 @@ test("list aplica todos os filtros mesmo a JSONs em diretórios inconsistentes",
 });
 
 test("list filtra Issues por tipo", () => {
-  const dir = root();
-  const queue = new Queue(dir);
+  const queue = new Queue(root());
   queue.save(Issue.create({ ...body, project: "p", title: "feat", type: "Feat" }, "pi"));
   queue.save(Issue.create({ ...body, project: "p", title: "fix", type: "Fix" }, "pi"));
   assert.deepEqual(queue.list({ project: "p", type: "Fix" }).map((issue) => issue.title), ["fix"]);
@@ -232,7 +141,7 @@ test("Claims concorrentes têm um único vencedor persistido", async () => {
 
 test("save não apaga Reset humano com snapshot antigo", () => {
   const queue = new Queue(root());
-  const issue = classify(Issue.create({ ...body, project: "p" }, "pi"));
+  const issue = Issue.create({ ...body, project: "p" }, "pi");
   queue.save(issue);
   issue.claim("pi");
   queue.save(issue);
@@ -240,10 +149,9 @@ test("save não apaga Reset humano com snapshot antigo", () => {
   const reset = queue.load(issue.id)!;
   reset.reset("liberar");
   queue.save(reset);
-  stale.addTicket(Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
-    acceptance_criteria: "c", type: "Implement", actor: "pi" }));
+  stale.comment("pi", "ainda trabalhando");
   assert.throws(() => queue.save(stale), /stale/i);
-  assert.equal(queue.load(issue.id)?.human_presence, true);
+  assert.equal(queue.load(issue.id)?.status, "OPEN");
 });
 
 test("purgeClosed remove CLOSED com >= 7 dias e preserva < 7 dias (tempo mockado)", () => {
@@ -252,9 +160,9 @@ test("purgeClosed remove CLOSED com >= 7 dias e preserva < 7 dias (tempo mockado
   const closedDir = join(dir, "projects/p/closed");
   mkdirSync(closedDir, { recursive: true });
   const put = (id: string, closedAt: string) => {
-    const issue = Issue.create({ ...body, project: "p" }, "pi");
+    const issue = Issue.create({ ...body, project: "p" }, "human");
     issue.id = id;
-    issue.closeByAgent("pi", "done", "concluido", new Date(closedAt));
+    issue.closeByHuman("done", "concluido", new Date(closedAt));
     writeFileSync(join(closedDir, `${id}.json`), JSON.stringify(issue));
   };
   put("old", "2026-07-06T00:00:00Z"); // 8 dias -> remove
@@ -280,9 +188,9 @@ test("save não purga CLOSED expirado; purga é manutenção explícita, fora do
   const queue = new Queue(dir);
   const closedDir = join(dir, "projects/p/closed");
   mkdirSync(closedDir, { recursive: true });
-  const stale = Issue.create({ ...body, project: "p" }, "pi");
+  const stale = Issue.create({ ...body, project: "p" }, "human");
   stale.id = "stale";
-  stale.closeByAgent("pi", "done", "concluido", new Date("2020-01-01"));
+  stale.closeByHuman("done", "concluido", new Date("2020-01-01"));
   writeFileSync(join(closedDir, "stale.json"), JSON.stringify(stale));
   queue.save(Issue.create({ ...body, project: "p" }, "pi"));
   assert.equal(existsSync(join(closedDir, "stale.json")), true); // save não varre CLOSED
@@ -293,14 +201,14 @@ test("save não purga CLOSED expirado; purga é manutenção explícita, fora do
 test("blob de anexo é gravado fora das pastas de status e sobrevive à transição", () => {
   const dir = root();
   const queue = new Queue(dir);
-  const { issue, ticket } = ongoingIssue(queue, "p", "att", new Date("2026-01-01"));
+  const issue = Issue.create({ ...body, project: "p" }, "pi");
+  issue.claim("pi");
+  queue.save(issue);
   const attachment = Attachment.create({ filename: "prova.png", mediaType: "image/png", size: 3 }).toJSON();
   queue.writeAttachment("p", attachment, Buffer.from("png"));
 
-  // move a Issue de ongoing -> awaiting (renomeia a pasta do JSON)
-  issue.claimTicket(ticket.id, "pi");
-  issue.transitionTicket(ticket.id, "pi", "CLOSED", "ok", "concluido", true);
-  closeConfirmation(issue); // avança a Issue para AWAITING
+  // move a Issue de claimed -> awaiting (renomeia a pasta do JSON)
+  issue.submit("pi", "evidência");
   queue.save(issue);
 
   const found = queue.findAttachment(attachment.id);
@@ -310,22 +218,30 @@ test("blob de anexo é gravado fora das pastas de status e sobrevive à transiç
   assert.equal(queue.findAttachment("00000000-0000-0000-0000-000000000000"), null);
 });
 
-test("purgeClosed remove os anexos das Issues purgadas", () => {
+test("purgeClosed remove anexos, Artefato .md, design/, requirements e prd da Issue purgada", () => {
   const dir = root();
   const queue = new Queue(dir);
   const issue = Issue.create({ ...body, project: "p" }, "pi");
-  issue.id = "withatt";
+  issue.id = "withall";
   const att = Attachment.create({ filename: "a.png", mediaType: "image/png", size: 3 }).toJSON();
   issue.comment("pi", "veja", [att]);
   queue.writeAttachment("p", att, Buffer.from("png"));
-  issue.closeByAgent("pi", "done", "concluido", new Date("2026-01-01"));
+  queue.writeArtifact("p", issue.id, "# artefato");
+  queue.writeDesign("p", issue.id, "design.md", "# doc");
+  queue.writeRequirements("p", issue.id, JSON.stringify({ features: [] }));
+  queue.writePrd("p", issue.id, JSON.stringify({ visao: "v", clusters: [] }));
+  issue.status = "CLOSED"; // força o estado terminal no JSON (o purge lê status do disco)
+  issue.status_changed_at = "2026-01-01T00:00:00.000Z";
   mkdirSync(join(dir, "projects/p/closed"), { recursive: true });
-  writeFileSync(join(dir, "projects/p/closed/withatt.json"), JSON.stringify(issue));
+  writeFileSync(join(dir, "projects/p/closed/withall.json"), JSON.stringify(issue));
   const blob = join(dir, "projects/p/attachments", `${att.id}.png`);
-  assert.equal(existsSync(blob), true);
-  assert.deepEqual(queue.purgeClosed(new Date("2026-07-14")), ["withatt"]);
-  assert.equal(existsSync(blob), false);
-  assert.equal(existsSync(join(dir, "projects/p/closed/withatt.json")), false);
+  const artifact = join(dir, "projects/p/artifacts", `${issue.id}.md`);
+  const design = join(dir, "projects/p/design", issue.id);
+  const requirements = join(dir, "projects/p/requirements", `${issue.id}.json`);
+  const prd = join(dir, "projects/p/prd", `${issue.id}.json`);
+  for (const path of [blob, artifact, design, requirements, prd]) assert.equal(existsSync(path), true);
+  assert.deepEqual(queue.purgeClosed(new Date("2026-07-14")), ["withall"]);
+  for (const path of [blob, artifact, design, requirements, prd]) assert.equal(existsSync(path), false);
 });
 
 test("findAttachment pula projeto sem pasta attachments até achar no projeto seguinte", () => {
@@ -358,70 +274,25 @@ test("Artefato .md é sobrescrito por completo na reescrita (nunca append)", () 
   assert.equal(queue.readArtifact("p", "owner"), "segundo");
 });
 
-test("purgeClosed remove os Artefatos .md da Issue e de cada Ticket purgado", () => {
+test("Design faz round-trip write/read/list por Issue e regravar substitui", () => {
   const dir = root();
   const queue = new Queue(dir);
-  const issue = classify(Issue.create({ ...body, project: "p" }, "pi"));
-  issue.id = "witharti";
-  issue.claim("pi");
-  const ticket = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
-    acceptance_criteria: "c", type: "Implement", actor: "pi" });
-  issue.addTicket(ticket);
-  queue.writeArtifact("p", issue.id, "# artefato da issue");
-  queue.writeArtifact("p", ticket.id, "# artefato do ticket");
-  issue.status = "CLOSED"; // força o estado terminal no JSON (o purge lê status do disco)
-  issue.status_changed_at = "2026-01-01T00:00:00.000Z";
-  mkdirSync(join(dir, "projects/p/closed"), { recursive: true });
-  writeFileSync(join(dir, "projects/p/closed/witharti.json"), JSON.stringify(issue));
-  const issueMd = join(dir, "projects/p/artifacts", `${issue.id}.md`);
-  const ticketMd = join(dir, "projects/p/artifacts", `${ticket.id}.md`);
-  assert.equal(existsSync(issueMd), true);
-  assert.equal(existsSync(ticketMd), true);
-  assert.deepEqual(queue.purgeClosed(new Date("2026-07-14")), ["witharti"]);
-  assert.equal(existsSync(issueMd), false);
-  assert.equal(existsSync(ticketMd), false);
-});
-
-test("Design faz round-trip write/read/list por Ticket e regravar substitui", () => {
-  const dir = root();
-  const queue = new Queue(dir);
-  assert.equal(queue.readDesign("space / project", "tid", "design.md"), null);
-  assert.deepEqual(queue.listDesign("space / project", "tid"), []);
-  queue.writeDesign("space / project", "tid", "design.md", "# doc");
-  queue.writeDesign("space / project", "tid", "class.puml", "@startuml\n@enduml");
-  queue.writeDesign("space / project", "tid", "design.md", "# doc v2");
-  assert.equal(queue.readDesign("space / project", "tid", "design.md"), "# doc v2");
-  assert.deepEqual(queue.listDesign("space / project", "tid").sort(), ["class.puml", "design.md"]);
+  assert.equal(queue.readDesign("space / project", "iid", "design.md"), null);
+  assert.deepEqual(queue.listDesign("space / project", "iid"), []);
+  queue.writeDesign("space / project", "iid", "design.md", "# doc");
+  queue.writeDesign("space / project", "iid", "class.puml", "@startuml\n@enduml");
+  queue.writeDesign("space / project", "iid", "design.md", "# doc v2");
+  assert.equal(queue.readDesign("space / project", "iid", "design.md"), "# doc v2");
+  assert.deepEqual(queue.listDesign("space / project", "iid").sort(), ["class.puml", "design.md"]);
   const segment = encodeURIComponent("space / project");
-  assert.equal(existsSync(join(dir, "projects", segment, "design", "tid", "class.puml")), true);
-});
-
-test("purgeClosed remove a pasta design/<ticketId>/ de cada Ticket da Issue purgada", () => {
-  const dir = root();
-  const queue = new Queue(dir);
-  const issue = classify(Issue.create({ ...body, project: "p" }, "pi"));
-  issue.id = "withdesign";
-  issue.claim("pi");
-  const ticket = Ticket.create({ issue_id: issue.id, objective: "o", task: "t",
-    acceptance_criteria: "c", type: "Design", actor: "pi" });
-  issue.addTicket(ticket);
-  queue.writeDesign("p", ticket.id, "design.md", "# doc");
-  queue.writeDesign("p", ticket.id, "class.puml", "@startuml\n@enduml");
-  issue.status = "CLOSED"; // força o estado terminal no JSON (o purge lê status do disco)
-  issue.status_changed_at = "2026-01-01T00:00:00.000Z";
-  mkdirSync(join(dir, "projects/p/closed"), { recursive: true });
-  writeFileSync(join(dir, "projects/p/closed/withdesign.json"), JSON.stringify(issue));
-  const designDir = join(dir, "projects/p/design", ticket.id);
-  assert.equal(existsSync(designDir), true);
-  assert.deepEqual(queue.purgeClosed(new Date("2026-07-14")), ["withdesign"]);
-  assert.equal(existsSync(designDir), false);
+  assert.equal(existsSync(join(dir, "projects", segment, "design", "iid", "class.puml")), true);
 });
 
 function claim(dir: string, agent: string, project = "p"): Promise<{ owner: string } | null> {
   return new Promise((resolve) => {
     execFile("bin/issues", ["next", "--agent", agent, "--project", project],
       { env: { ...process.env, ISSUES_ROOT: dir }, encoding: "utf8" }, (error, stdout) => {
-        resolve(error || stdout.trim() === "null" ? null : JSON.parse(stdout).issue);
+        resolve(error || stdout.trim() === "null" ? null : JSON.parse(stdout));
       });
   });
 }

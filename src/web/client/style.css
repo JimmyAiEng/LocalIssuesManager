@@ -152,6 +152,7 @@ code { overflow-wrap: anywhere; font-family: var(--mono); font-size: .9em; }
 .msg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: .3rem; }
 .msg-who { font-family: var(--mono); font-size: .78rem; font-weight: 700; color: var(--accent); }
 .msg--human .msg-who { color: var(--dim); }
+.msg-role { margin-right: auto; font-family: var(--mono); font-size: .68rem; color: var(--dim); border: 1px solid var(--dim); border-radius: 999px; padding: 0 .45rem; }
 .msg-head time { color: var(--faint); font-size: .74rem; }
 .msg-status { font-family: var(--mono); font-size: .68rem; color: var(--dim); }
 .msg p { margin: 0; }

@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   attachmentsMarkup,
-  canClaimTicket,
-  canCreateTicket,
   classifyMutationError,
   escapeHtml,
   filterIssues,
@@ -15,43 +13,30 @@ import {
   options,
   parseChecklist,
   pendingDecisions,
-  phaseBlockerOf,
-  phaseSteps,
   splitThread,
   statusAge,
   statusAgeFrom,
-  suggestNextTicketType,
-  tagRoute,
-  ticketCreationGate,
-  ticketHumanActions,
   validateClose,
   validateCreate,
-  validateCreateTicket,
   validateDecide,
   validateReset,
-  validateTicketStatus,
 } from "../../src/web/client/view_model.js";
 import { parseFeature, requirementsMarkup } from "../../src/web/client/gherkin.js";
 
 const issues = [
-  { id: "later", title: "Needle later", project: "app", type: "QA", status: "OPEN", created_at: "2026-01-02T00:00:00Z" },
-  { id: "first", title: "Needle first", project: "app", type: "QA", status: "OPEN", created_at: "2026-01-01T00:00:00Z" },
-  { id: "going", title: "Needle going", project: "app", type: "QA", status: "ON-GOING", created_at: "2026-01-01T00:00:00Z" },
-  { id: "other", title: "Needle other", project: "other", type: "Feat", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" },
+  { id: "later", title: "Needle later", project: "app", type: "Fix", action: "QA", status: "OPEN", created_at: "2026-01-02T00:00:00Z" },
+  { id: "first", title: "Needle first", project: "app", type: "Fix", action: "QA", status: "OPEN", created_at: "2026-01-01T00:00:00Z" },
+  { id: "going", title: "Needle going", project: "app", type: "Fix", action: "Implement", status: "CLAIMED", created_at: "2026-01-01T00:00:00Z" },
+  { id: "other", title: "Needle other", project: "other", type: "Feat", action: "QA", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" },
 ];
 
-test("rotas de classificação distinguem Issue e Ticket existentes", () => {
-  assert.equal(tagRoute("i1", "issue"), "/api/issues/i1/tags");
-  assert.equal(tagRoute("i1", "ticket", "t1"), "/api/issues/i1/tickets/t1/tags");
-});
-
-test("view model combina filtros por tipo e mantém as cinco colunas ordenadas", () => {
-  const filtered = filterIssues(issues, { title: "needle", project: "app", type: "QA" });
+test("view model combina filtros por tipo e mantém as quatro colunas ordenadas", () => {
+  const filtered = filterIssues(issues, { title: "needle", project: "app", type: "Fix" });
   const columns = groupIssues(filtered);
   assert.deepEqual(columns.OPEN.map((issue) => issue.id), ["first", "later"]);
-  assert.deepEqual(columns["ON-GOING"].map((issue) => issue.id), ["going"]);
+  assert.deepEqual(columns.CLAIMED.map((issue) => issue.id), ["going"]);
   assert.deepEqual(columns.AWAITING, []);
-  assert.equal(Object.keys(columns).length, 5);
+  assert.equal(Object.keys(columns).length, 4);
 });
 
 test("filtro por Owner isola as Issues de um dono", () => {
@@ -66,53 +51,36 @@ test("filtro por Owner isola as Issues de um dono", () => {
 
 test("dentro da coluna, decisões pendentes vêm antes de created_at ascendente", () => {
   const column = [
-    { id: "novo-limpo", title: "a", project: "p", type: "QA", status: "ON-GOING", created_at: "2026-01-03T00:00:00Z" },
-    { id: "antigo-com-decisao", title: "b", project: "p", type: "QA", status: "ON-GOING", created_at: "2026-01-01T00:00:00Z", tickets: [{ id: "t", type: "QA", status: "AWAITING", owner: null }] },
-    { id: "medio-limpo", title: "c", project: "p", type: "QA", status: "ON-GOING", created_at: "2026-01-02T00:00:00Z" },
+    { id: "novo", title: "a", project: "p", type: "Fix", action: "QA", status: "AWAITING", created_at: "2026-01-03T00:00:00Z" },
+    { id: "antigo", title: "b", project: "p", type: "Fix", action: "QA", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" },
   ];
-  assert.deepEqual(groupIssues(column)["ON-GOING"].map((issue) => issue.id), ["antigo-com-decisao", "medio-limpo", "novo-limpo"]);
+  assert.deepEqual(groupIssues(column).AWAITING.map((issue) => issue.id), ["antigo", "novo"]);
 });
 
-test("pendingDecisions junta Issues AWAITING e Tickets AWAITING, mais antigo primeiro, ignorando CLOSED", () => {
+test("pendingDecisions lista Issues AWAITING com action, mais antiga primeiro", () => {
   const list = [
-    { id: "i1", title: "Issue final", project: "app", status: "AWAITING", created_at: "2026-01-01T00:00:00Z", status_changed_at: "2026-01-05T00:00:00Z" },
-    { id: "i2", title: "Com ticket", project: "app", status: "ON-GOING", created_at: "2026-01-01T00:00:00Z", status_changed_at: "2026-01-02T00:00:00Z", tickets: [{ id: "t1", type: "QA", status: "AWAITING", owner: null }, { id: "t2", type: "Implement", status: "OPEN", owner: null }] },
-    { id: "i3", title: "Fechada", project: "app", status: "CLOSED", created_at: "2026-01-01T00:00:00Z", tickets: [{ id: "t3", type: "QA", status: "AWAITING", owner: null }] },
+    { id: "i1", title: "Mais nova", project: "app", action: "Implement", status: "AWAITING", created_at: "2026-01-01T00:00:00Z", status_changed_at: "2026-01-05T00:00:00Z" },
+    { id: "i2", title: "Mais antiga", project: "app", action: "QA", status: "AWAITING", created_at: "2026-01-01T00:00:00Z", status_changed_at: "2026-01-02T00:00:00Z" },
+    { id: "i3", title: "Fechada", project: "app", action: "QA", status: "CLOSED", created_at: "2026-01-01T00:00:00Z" },
   ];
   const decisions = pendingDecisions(list);
-  assert.deepEqual(decisions.map((decision) => [decision.issueId, decision.kind, decision.ticketType ?? null]), [
-    ["i2", "ticket", "QA"],
-    ["i1", "issue", null],
+  assert.deepEqual(decisions.map((decision) => [decision.issueId, decision.action]), [
+    ["i2", "QA"],
+    ["i1", "Implement"],
   ]);
 });
 
-test("hasPendingDecision cobre Issue AWAITING e Ticket AWAITING", () => {
-  assert.equal(hasPendingDecision({ status: "AWAITING", tickets: [] }), true);
-  assert.equal(hasPendingDecision({ status: "ON-GOING", tickets: [{ status: "AWAITING" }] }), true);
-  assert.equal(hasPendingDecision({ status: "ON-GOING", tickets: [{ status: "OPEN" }] }), false);
+test("hasPendingDecision é o AWAITING da Issue", () => {
+  assert.equal(hasPendingDecision({ status: "AWAITING" }), true);
   assert.equal(hasPendingDecision({ status: "OPEN" }), false);
+  assert.equal(hasPendingDecision({ status: "CLAIMED" }), false);
 });
 
-test("phaseSteps deriva concluída/ativa/pendente por Ticket, sem Confirmation", () => {
-  const steps = phaseSteps({
-    tickets: [
-      { type: "Planning", status: "CLOSED" },
-      { type: "Design", status: "CLOSED" },
-      { type: "Implement", status: "ON-GOING" },
-      { type: "Confirmation", status: "OPEN" },
-    ],
-  });
-  assert.deepEqual(steps.map((step) => step.short), ["P", "D", "I", "Q", "D"]);
-  assert.deepEqual(steps.map((step) => step.state), ["done", "done", "active", "pending", "pending"]);
-});
-
-// Espelha o guard de Issue.addTicket: risk + complexity são a entrada da heurística de autonomia.
-// human_need é override opcional (ausente = AFK), então não classifica nem desclassifica a Issue.
+// Espelha requiresHuman: risk + complexity alimentam a autonomia da Issue.
 test("isUnclassified marca Issue não-CLOSED sem risk ou sem complexity", () => {
   assert.equal(isUnclassified({ status: "OPEN", tags: { complexity: "BAIXA", human_need: "AFK" } }), true); // só risk ausente
   assert.equal(isUnclassified({ status: "OPEN", tags: { human_need: "AFK", risk: "BAIXO" } }), true); // só complexity ausente
   assert.equal(isUnclassified({ status: "OPEN", tags: { complexity: "BAIXA", risk: "BAIXO" } }), false); // human_need ausente não desclassifica
-  assert.equal(isUnclassified({ status: "OPEN", tags: { complexity: "BAIXA", human_need: "AFK", risk: "BAIXO" } }), false);
   assert.equal(isUnclassified({ status: "CLOSED", tags: {} }), false);
 });
 
@@ -121,10 +89,10 @@ test("options extrai valores únicos e ordenados de uma propriedade", () => {
   assert.deepEqual(options([], "project"), []);
 });
 
-test("isStale sinaliza CLAIMED/ON-GOING parada há mais de 24h", () => {
+test("isStale sinaliza CLAIMED parada há mais de 24h", () => {
   const now = new Date("2026-01-03T00:00:00Z");
   assert.equal(isStale({ status: "CLAIMED", status_changed_at: "2026-01-01T00:00:00Z" }, now), true);
-  assert.equal(isStale({ status: "ON-GOING", status_changed_at: "2026-01-02T12:00:00Z" }, now), false);
+  assert.equal(isStale({ status: "CLAIMED", status_changed_at: "2026-01-02T12:00:00Z" }, now), false);
   assert.equal(isStale({ status: "OPEN", status_changed_at: "2026-01-01T00:00:00Z" }, now), false);
   assert.equal(isStale({ status: "AWAITING", status_changed_at: "2026-01-01T00:00:00Z" }, now), false);
 });
@@ -151,67 +119,26 @@ test("statusAge cai para phases.at(-1) e depois para created_at quando falta sta
   assert.equal(viaCreatedAt, "há 1 dia");
 });
 
-test("somente ações humanas válidas por Status, sem Claim nem reset de ON-GOING", () => {
+test("somente ações humanas válidas por Status", () => {
   assert.deepEqual(humanActions("OPEN"), ["close"]);
   assert.deepEqual(humanActions("CLAIMED"), ["reset"]);
-  assert.deepEqual(humanActions("ON-GOING"), []);
   assert.deepEqual(humanActions("AWAITING"), ["decide-open", "decide-close"]);
   assert.deepEqual(humanActions("CLOSED"), []);
 });
 
-test("ações humanas de Ticket: decisão em AWAITING, status quando dono humano", () => {
-  assert.deepEqual(ticketHumanActions({ status: "AWAITING", owner: null }), ["ticket-decide-open", "ticket-decide-close"]);
-  assert.deepEqual(ticketHumanActions({ status: "CLAIMED", owner: "human" }), ["ticket-await", "ticket-reopen", "ticket-close"]);
-  assert.deepEqual(ticketHumanActions({ status: "CLAIMED", owner: "pi" }), []);
-  assert.deepEqual(ticketHumanActions({ status: "OPEN", owner: null }), []);
-  assert.deepEqual(ticketHumanActions({ status: "CLOSED", owner: "pi" }), []);
-});
-
-test("Humano pode assumir só Ticket OPEN, habilitando mudança de status como Owner", () => {
-  assert.equal(canClaimTicket({ status: "OPEN", owner: null }), true);
-  assert.equal(canClaimTicket({ status: "CLAIMED", owner: "pi" }), false);
-  assert.equal(canClaimTicket({ status: "AWAITING", owner: null }), false);
-  assert.equal(canClaimTicket({ status: "CLOSED", owner: "pi" }), false);
-});
-
-test("criar Ticket só quando a Issue está CLAIMED ou ON-GOING", () => {
-  assert.equal(canCreateTicket("CLAIMED"), true);
-  assert.equal(canCreateTicket("ON-GOING"), true);
-  assert.equal(canCreateTicket("OPEN"), false);
-  assert.equal(canCreateTicket("AWAITING"), false);
-});
-
-test("criar Issue exige campos obrigatórios e Tipo válido; artefatos/critérios opcionais", () => {
-  const draft = { title: "", project: "app", type: "Nope", problem: "p", artifacts: "", acceptance_criteria: "" };
+test("criar Issue exige campos obrigatórios (incluindo action) e enums válidos", () => {
+  const draft = { title: "", project: "app", type: "Nope", action: "Nope", problem: "p", acceptance_criteria: "" };
   const result = validateCreate(draft);
   assert.equal(result.ok, false);
   assert.match(result.errors.title, /obrigat/i);
   assert.match(result.errors.type, /Tipo/);
-  assert.equal(result.errors.artifacts, undefined);
+  assert.match(result.errors.action, /Action/);
   assert.equal(result.errors.acceptance_criteria, undefined);
 });
 
-test("criar Issue aceita apenas obrigatórios com Tipo do enum", () => {
-  const draft = { title: "Nova", project: "app", type: "Feat", problem: "p", artifacts: "", acceptance_criteria: "" };
+test("criar Issue aceita apenas obrigatórios com Tipo e Action do enum", () => {
+  const draft = { title: "Nova", project: "app", type: "Feat", action: "Planning", problem: "p", acceptance_criteria: "" };
   assert.deepEqual(validateCreate(draft), { ok: true, errors: {} });
-});
-
-test("criar Ticket exige objetivo, tarefa, critérios e Tipo válido", () => {
-  const bad = { objective: "", task: "t", acceptance_criteria: "c", type: "Nope", artifacts: "", references: "" };
-  const result = validateCreateTicket(bad);
-  assert.equal(result.ok, false);
-  assert.match(result.errors.objective, /obrigat/i);
-  assert.match(result.errors.type, /Tipo/);
-  const ok = { objective: "o", task: "t", acceptance_criteria: "c", type: "Implement", artifacts: "", references: "" };
-  assert.deepEqual(validateCreateTicket(ok), { ok: true, errors: {} });
-});
-
-test("status de Ticket: comentário sempre; CLOSED também exige Motivo", () => {
-  assert.equal(validateTicketStatus({ status: "AWAITING", comment: "pronto" }).ok, true);
-  assert.match(validateTicketStatus({ status: "AWAITING", comment: "" }).errors.comment, /obrigat/i);
-  assert.equal(validateTicketStatus({ status: "CLOSED", comment: "fim", closed_reason: "concluido" }).ok, true);
-  assert.match(validateTicketStatus({ status: "CLOSED", comment: "fim", closed_reason: "" }).errors.closed_reason, /Motivo/);
-  assert.match(validateTicketStatus({ status: "CLOSED", comment: "", closed_reason: "concluido" }).errors.comment, /obrigat/i);
 });
 
 test("fechar exige apenas Motivo válido (comentário opcional); reset exige comentário", () => {
@@ -255,33 +182,6 @@ test("anexos renderizam img clicável para imagem e video controls para vídeo",
 test("sem anexos não renderiza bloco algum", () => {
   assert.equal(attachmentsMarkup([]), "");
   assert.equal(attachmentsMarkup(undefined), "");
-});
-
-test("suggestNextTicketType aponta a fase mais antiga ainda não concluída", () => {
-  assert.equal(suggestNextTicketType([]), "Planning");
-  assert.equal(suggestNextTicketType([{ type: "Planning", status: "CLOSED" }]), "Design");
-  assert.equal(suggestNextTicketType([{ type: "Planning", status: "CLOSED" }, { type: "Design", status: "OPEN" }]), "Design");
-  assert.equal(suggestNextTicketType([
-    { type: "Planning", status: "CLOSED" }, { type: "Design", status: "CLOSED" }, { type: "Implement", status: "ON-GOING" },
-  ]), "Implement");
-  assert.equal(suggestNextTicketType(["Planning", "Design", "Implement", "QA", "Deploy"].map((type) => ({ type, status: "CLOSED" }))), "");
-});
-
-test("phaseBlockerOf espelha Issue.phaseBlocker; Confirmation nunca bloqueia", () => {
-  assert.equal(phaseBlockerOf([], "Design"), null);
-  assert.equal(phaseBlockerOf([{ type: "Planning", status: "OPEN" }], "Planning"), null);
-  assert.equal(phaseBlockerOf([{ type: "Planning", status: "OPEN" }], "Design")?.type, "Planning");
-  assert.equal(phaseBlockerOf([{ type: "Planning", status: "CLOSED" }], "Design"), null);
-  assert.equal(phaseBlockerOf([{ id: "c", type: "Confirmation", status: "OPEN" }], "Deploy"), null);
-});
-
-test("ticketCreationGate: sem Ticket bloqueia; com Ticket só avisa; classificada libera", () => {
-  const unclassified = { status: "CLAIMED", tags: { complexity: "BAIXA" } };
-  assert.equal(ticketCreationGate({ ...unclassified, tickets: [] }), "blocked");
-  assert.equal(ticketCreationGate({ ...unclassified, tickets: [{ type: "Planning", status: "OPEN" }] }), "warn");
-  assert.equal(ticketCreationGate({ status: "CLAIMED", tags: { complexity: "BAIXA", human_need: "AFK", risk: "BAIXO" }, tickets: [] }), "ok");
-  // Espelho do domínio: risk + complexity bastam para o servidor, logo bastam para o cliente.
-  assert.equal(ticketCreationGate({ status: "CLAIMED", tags: { complexity: "BAIXA", risk: "BAIXO" }, tickets: [] }), "ok");
 });
 
 test("splitThread separa as anteriores das últimas 5", () => {
@@ -337,15 +237,10 @@ test("parseFeature ignora step antes de qualquer Scenario (sem scenario atual pa
 
 test("funções tolerantes a undefined: campos ausentes (não só vazios) usam o fallback ??", () => {
   assert.deepEqual(pendingDecisions(undefined), []); // issues ?? []
-  const noStatusChangedAt = { id: "i1", title: "t", project: "p", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" };
+  const noStatusChangedAt = { id: "i1", title: "t", project: "p", action: "QA", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" };
   assert.deepEqual(pendingDecisions([noStatusChangedAt]), [{ issueId: "i1", issueTitle: "t", project: "p",
-    since: "2026-01-01T00:00:00Z", kind: "issue" }]); // status_changed_at ?? created_at
+    action: "QA", since: "2026-01-01T00:00:00Z" }]); // status_changed_at ?? created_at
 
-  assert.deepEqual(phaseSteps({}).map((step) => step.state), ["pending", "pending", "pending", "pending", "pending"]); // tickets ?? []
-  assert.equal(phaseBlockerOf([{ type: "Design", status: "OPEN" }], "Confirmation"), null); // rank<0 (type inválido)
-  assert.equal(phaseBlockerOf(undefined, "Design"), null); // tickets ?? []
-
-  assert.equal(ticketCreationGate({ status: "CLAIMED", tags: {} }), "blocked"); // issue.tickets ?? []
   assert.deepEqual(splitThread(undefined), { older: [], recent: [] }); // entries ?? []
   assert.equal(isUnclassified({ status: "OPEN" }), true); // issue.tags ?? {}
   assert.equal(isStale({ status: "CLAIMED", created_at: "2026-01-01T00:00:00Z" }, new Date("2026-01-03T00:00:00Z")), true); // status_changed_at ?? created_at
@@ -353,7 +248,6 @@ test("funções tolerantes a undefined: campos ausentes (não só vazios) usam o
   assert.equal(escapeHtml(undefined), ""); // value ?? ""
 
   assert.equal(validateCreate({}).errors.title, "Campo obrigatório"); // values[field] ?? "" (chave ausente)
-  assert.equal(validateCreateTicket({}).errors.objective, "Campo obrigatório");
   assert.equal(validateReset({}).errors.comment, "Campo obrigatório"); // values.comment ?? ""
   assert.equal(validateClose({}).errors.closed_reason, "Motivo obrigatório"); // values.closed_reason ?? ""
 });

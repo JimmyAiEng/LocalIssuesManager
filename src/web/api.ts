@@ -1,16 +1,12 @@
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { getDesignPackage } from "../app/design_use_cases.js";
 import {
   addComment, claimIssue as claimIssueCase, createIssue, decideIssue, getIssue, type IncomingAttachment,
   listIssues, resetClaim, statusIssue, updateTags,
 } from "../app/issue_use_cases.js";
-import { getDesignPackage } from "../app/design_use_cases.js";
 import { renderSvg, sourceHash } from "../app/plantuml_check.js";
 import { getRequirements } from "../app/requirements_use_cases.js";
-import {
-  claimTicket as claimTicketCase, createTicket as createTicketCase,
-  decideTicket as decideTicketCase, statusTicket as statusTicketCase,
-} from "../app/ticket_use_cases.js";
 import { DESIGN_KINDS, DesignGateError } from "../domain/design_gate.js";
 import { ConflictError, DomainError, NotFoundError } from "../domain/domain_error.js";
 import { Queue } from "../domain/queue_repository.js";
@@ -43,15 +39,10 @@ async function dispatch(request: IncomingMessage, response: ServerResponse, root
   const body = await readBody(request);
   if (request.method !== "POST") return respond(response, 404, { error: "Not found" });
   if (route.length === 0) return create(response, body, root);
-  if (route.length === 2 && route[1] === "comment") return comment(response, route[0], undefined, body, root);
-  if (route.length === 2 && route[1] === "tags") return tag(response, route[0], undefined, body, root);
-  if (route.length === 2 && route[1] === "tickets") return createTicket(response, route[0], body, root);
-  if (route.length === 4 && route[1] === "tickets") return ticketAction(response, route, body, root);
   return issueAction(response, route, body, root);
 }
 
-// Rotas de leitura. GET sem match cai no 404 — mesmo desfecho de antes, quando a
-// ausência de match seguia para o ramo POST e batia no "Not found".
+// Rotas de leitura. GET sem match cai no 404.
 async function getAction(
   request: IncomingMessage, response: ServerResponse, url: URL, route: string[], root?: string,
 ): Promise<void> {
@@ -63,15 +54,17 @@ async function getAction(
   if (route.length === 2 && route[1] === "design") {
     return respond(response, 200, await getDesignPackage({ issueId: route[0] }, root));
   }
-  if (route.length === 4 && route[1] === "design") return serveDiagram(request, response, route, root);
+  if (route.length === 3 && route[1] === "design") return serveDiagram(request, response, route, root);
   respond(response, 404, { error: "Not found" });
 }
 
-function issueAction(response: ServerResponse, route: string[], body: Body, root?: string): void {
+function issueAction(response: ServerResponse, route: string[], body: Body, root?: string): void | Promise<void> {
   if (route[1] === "claim") return claimIssue(response, route[0], root);
   if (route[1] === "close") return close(response, route[0], body, root);
   if (route[1] === "decision") return decide(response, route[0], body, root);
   if (route[1] === "reset") return reset(response, route[0], body, root);
+  if (route[1] === "comment") return comment(response, route[0], body, root);
+  if (route[1] === "tags") return tag(response, route[0], body, root);
   respond(response, 404, { error: "Not found" });
 }
 
@@ -84,23 +77,15 @@ function list(response: ServerResponse, url: URL, root?: string): void {
 }
 
 function get(response: ServerResponse, id: string, root?: string): void {
-  respond(response, 200, getIssue(id, root)); // IssueView (ganha o artefato de brinde)
+  respond(response, 200, getIssue(id, root)); // IssueView (com artefato e relacionadas)
 }
 
 function create(response: ServerResponse, body: Body, root?: string): void {
   const issue = createIssue({ title: text(body, "title"), project: text(body, "project"),
-    type: text(body, "type"), problem: text(body, "problem"), artifacts: optionalText(body, "artifacts") ?? "",
+    type: text(body, "type"), action: text(body, "action"), problem: text(body, "problem"),
     acceptance_criteria: optionalText(body, "acceptance_criteria") ?? "", actor: "human",
     complexity: optionalText(body, "complexity"), human_need: optionalText(body, "human_need"), risk: optionalText(body, "risk"),
     attachments: decodeAttachments(body) }, root);
-  respond(response, 201, issue.toJSON());
-}
-
-function createTicket(response: ServerResponse, id: string, body: Body, root?: string): void {
-  const issue = createTicketCase({ issueId: id, type: text(body, "type"),
-    objective: text(body, "objective"), task: text(body, "task"), acceptance_criteria: text(body, "acceptance_criteria"),
-    artifacts: optionalText(body, "artifacts"), references: optionalText(body, "references"),
-    actor: "human", attachments: decodeAttachments(body) }, root);
   respond(response, 201, issue.toJSON());
 }
 
@@ -108,24 +93,15 @@ function claimIssue(response: ServerResponse, id: string, root?: string): void {
   respond(response, 200, claimIssueCase({ id }, root).toJSON());
 }
 
-function ticketAction(response: ServerResponse, route: string[], body: Body, root?: string): void | Promise<void> {
-  if (route[3] === "claim") return claimTicket(response, route[0], route[2], root);
-  if (route[3] === "status") return statusTicket(response, route[0], route[2], body, root);
-  if (route[3] === "decision") return decideTicket(response, route[0], route[2], body, root);
-  if (route[3] === "comment") return comment(response, route[0], route[2], body, root);
-  if (route[3] === "tags") return tag(response, route[0], route[2], body, root);
-  respond(response, 404, { error: "Not found" });
-}
-
-function tag(response: ServerResponse, id: string, ticketId: string | undefined, body: Body, root?: string): void {
+function tag(response: ServerResponse, id: string, body: Body, root?: string): void {
   // actor "human" como todas as mutações desta API: o painel web é o teclado do humano.
-  const issue = updateTags({ issueId: id, ticketId, actor: "human",
+  const issue = updateTags({ issueId: id, actor: "human",
     complexity: optionalText(body, "complexity"), human_need: optionalText(body, "human_need"), risk: optionalText(body, "risk") }, root);
   respond(response, 200, issue.toJSON());
 }
 
-function comment(response: ServerResponse, id: string, ticketId: string | undefined, body: Body, root?: string): void {
-  const issue = addComment({ issueId: id, ticketId,
+function comment(response: ServerResponse, id: string, body: Body, root?: string): void {
+  const issue = addComment({ issueId: id,
     comment: text(body, "comment"), attachments: decodeAttachments(body), actor: "human" }, root);
   respond(response, 201, issue.toJSON());
 }
@@ -143,20 +119,17 @@ function decodeAttachments(body: Body): IncomingAttachment[] {
   });
 }
 
-// SVG do diagrama de um Ticket de Design. Servido como recurso próprio para o client
+// SVG de um diagrama da Issue de Design. Servido como recurso próprio para o client
 // embutir via <img> (que não executa script no SVG) em vez de injetar no innerHTML.
 // ETag = hash do fonte: o browser revalida barato e o diagrama não pisca a cada poll.
 async function serveDiagram(request: IncomingMessage, response: ServerResponse, route: string[], root?: string): Promise<void> {
-  const [issueId, , ticketId, file] = route;
+  const [issueId, , file] = route;
   const kind = file.endsWith(".svg") ? file.slice(0, -".svg".length) : "";
   if (!(DESIGN_KINDS as readonly string[]).includes(kind)) return respond(response, 404, { error: "Not found" });
-  // ticketId vira segmento de caminho em disco: sem este guard, "../.." escapa da fila
-  // e serve qualquer <kind>.puml da máquina. Mesma checagem de serveAttachment.
-  if (!UUID.test(ticketId)) return respond(response, 404, { error: "Not found" });
   const queue = new Queue(root);
   const issue = queue.loadRequired(issueId); // inexistente → 404 de domínio
-  const source = queue.readDesign(issue.project, ticketId, `${kind}.puml`);
-  if (source === null) return respond(response, 404, { error: `Diagrama ${kind}.puml não entregue no Ticket ${ticketId}` });
+  const source = queue.artifacts.readText(issue.project, { issueId: issue.id, type: "design", name: `${kind}.puml` });
+  if (source === null) return respond(response, 404, { error: `Diagrama ${kind}.puml não entregue na Issue ${issue.id}` });
   const etag = `"${sourceHash(source)}"`;
   if (request.headers["if-none-match"] === etag) {
     response.writeHead(304, { etag, "cache-control": "no-cache" });
@@ -169,34 +142,15 @@ async function serveDiagram(request: IncomingMessage, response: ServerResponse, 
 
 function serveAttachment(response: ServerResponse, id: string, root?: string): void {
   if (!UUID.test(id)) return respond(response, 404, { error: "Not found" });
-  const found = new Queue(root).findAttachment(id);
+  const found = new Queue(root).artifacts.findMedia(id);
   if (!found) return respond(response, 404, { error: "Not found" });
   const bytes = readFileSync(found.path);
   response.writeHead(200, { "content-type": found.mediaType, "content-length": bytes.length });
   response.end(bytes);
 }
 
-function claimTicket(response: ServerResponse, id: string, tid: string, root?: string): void {
-  const issue = claimTicketCase({ issueId: id, ticketId: tid, actor: "human" }, root);
-  respond(response, 200, issue.toJSON());
-}
-
-async function statusTicket(response: ServerResponse, id: string, tid: string, body: Body, root?: string): Promise<void> {
-  const issue = await statusTicketCase({ issueId: id, ticketId: tid, actor: "human",
-    status: text(body, "status"), comment: text(body, "comment"), closed_reason: optionalText(body, "closed_reason"),
-    attachments: decodeAttachments(body) }, root);
-  respond(response, 200, issue.toJSON());
-}
-
-function decideTicket(response: ServerResponse, id: string, tid: string, body: Body, root?: string): void {
-  const issue = decideTicketCase({ issueId: id, ticketId: tid, human: true,
-    status: text(body, "status"), comment: text(body, "comment"), closed_reason: optionalText(body, "closed_reason"),
-    attachments: decodeAttachments(body) }, root);
-  respond(response, 200, issue.toJSON());
-}
-
-function close(response: ServerResponse, id: string, body: Body, root?: string): void {
-  const issue = statusIssue({ id, human: true, status: "CLOSED",
+async function close(response: ServerResponse, id: string, body: Body, root?: string): Promise<void> {
+  const issue = await statusIssue({ id, human: true, status: "CLOSED",
     comment: text(body, "comment"), closed_reason: text(body, "closed_reason") }, root);
   respond(response, 200, issue.toJSON());
 }

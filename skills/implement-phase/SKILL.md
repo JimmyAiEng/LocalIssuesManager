@@ -1,38 +1,46 @@
 ---
 name: implement-phase
 description: >-
-  Fase Implement do workflow (Unit of Work): entregar fatia funcional via TDD,
-  passar o pipeline de validação e o review interno. Use quando o Ticket
-  claimado tem type=Implement.
+  Action Implement do workflow (Unit of Work): entregar fatia funcional via TDD
+  numa worktree, com o check do projeto passando. Use quando a Issue reivindicada
+  tem action=Implement.
 ---
 
-Seu objetivo é entregar fatia **funcional/integrável** conforme a spec, com testes e review interno.
-
-Quando o conjunto Implement acordado estiver feito, abre-se Ticket(s) **QA**.
+Seu objetivo é entregar uma fatia **funcional/integrável** conforme a spec (veja os artefatos das Issues relacionadas no prompt), com testes.
 
 ## Fluxo da Unit of Work
 
-1. **Test Coding (TDD)**: escreva primeiro os testes que provam a fatia, a partir da spec e dos critérios de aceitação. Rode os testes. Eles devem falhar
-2. **Coding**: implemente até os testes passarem.
-3. **Pipeline de validação**, nesta ordem — falhou, volte ao código:
-   Lint > testes unitários > fitness functions de arquitetura > testes E2E (se aplicável) > testes de mutação **só na parte alterada**.
-4. **Review interno** da fatia (mutantes sobreviventes e achados de review viram novos testes/código — volte ao passo 1).
+1. **Worktree primeiro**: `issues worktree add --id <id>` — o trabalho acontece isolado no repo do projeto; sem worktree a Issue não fecha.
+2. **Test Coding (TDD)**: escreva primeiro os testes que provam a fatia, a partir da spec e dos critérios de aceitação. Rode-os; devem falhar.
+3. **Coding**: implemente até os testes passarem.
+4. **Pipeline de validação** com as ferramentas que o próprio repositório define (lint, testes, fitness, e2e, mutação na parte alterada).
+5. **Review interno** da fatia; achados viram novos testes/código.
 
-Use as ferramentas que o **próprio repositório** define (scripts, CI, docs); esta skill não fixa qual lint, framework de teste ou comando rodar.
-Se uma etapa não existir no repositório (ex.: sem mutação configurada), registre isso no comentário do Ticket e siga.
+## Gate de conclusão
+
+Ao concluir (`AWAITING` ou `CLOSED`), o sistema roda **sozinho** o check configurado do projeto (`issues project create --check <cmd>`) dentro da worktree.
+Se o check falhar, a Issue **não conclui**: o erro traz o rabo da saída — corrija na worktree e tente de novo.
+
+### Enforcement de TDD (opt-in por `--test-paths`)
+
+Quando o projeto define os paths de teste (`issues project create --test-paths "test/,**/*.test.ts"`), o gate inspeciona o histórico git da worktree (`git log --name-only` desde o ponto de fork, via `merge-base`) e **exige a ordem TDD**: o primeiro commit que toca código de produção precisa ser precedido, cronologicamente, por ao menos um commit **só-de-testes**.
+Um primeiro commit que mistura produção e teste **viola** (não foi precedido por testes) e a mensagem de erro cita o SHA/assunto do commit infrator.
+"Arquivo de produção" é todo arquivo tocado que **não** casa com `--test-paths`; "commit só-de-testes" é aquele cujos arquivos casam todos.
+Worktree sem commits novos (nenhum código de produção tocado desde o fork) **passa** — o enforcement só dispara quando há commit de produção.
+Projeto sem `--test-paths` mantém o comportamento anterior (nenhuma verificação de histórico).
+
+Quando o projeto define `--container <imagem>`, cada check roda isolado no Docker (`docker run --rm -v <worktree>:/work -w /work <imagem> sh -c <cmd>`), montando a worktree em `/work`.
+A imagem precisa trazer o toolchain do projeto (Node, gerenciador de pacotes, ferramentas de lint/teste/mutação), pois nada do host é herdado.
+Sem `--container`, o check roda no host (comportamento legado).
+Docker indisponível com `--container` configurado gera erro explícito na conclusão — não há fallback silencioso para o host.
 
 ## Heurísticas
 
-- Cada Ticket = código integrável, revisável pelo humano.
-- Fatia grande → fecha **criando** Tickets de continuação; paralelo ok.
-- Review interno **não** substitui um Ticket tipo `QA`.
-- **Como** implementar (ferramentas, desenho do teste, review) é decisão do agente.
-
-## Saídas
-
-Código + testes da fatia; pipeline de validação verde; achados de review tratados ou registrados; Evidências textuais de que o código passou, inclusive com descrição sumária do que foi implementado.
+- Fatia grande → feche esta Issue e crie Issues `Implement` de continuação, relacionadas.
+- Review interno **não** substitui uma Issue `QA` para o conjunto.
+- **Como** implementar (ferramentas, desenho do teste) é decisão do agente.
 
 ## Encerramento
 
-Mova o **Ticket** para `AWAITING`:
-`issues ticket status --issue <id> --id <tid> --agent <ia> --status AWAITING --comment "…"`.
+Conclua com a evidência (o que foi implementado, passos, decisões):
+`issues status --id <id> --agent <ia> --status AWAITING|CLOSED --comment "<evidência>" [--reason concluido]`.

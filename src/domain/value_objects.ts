@@ -4,16 +4,23 @@ import { DomainError } from "./domain_error.js";
 export const AGENT_IDS = ["cursor", "claude-code", "codex", "pi"] as const;
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"] as const;
 export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"] as const;
-export const TICKET_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy", "Confirmation"] as const;
-export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "ON-GOING", "AWAITING", "CLOSED"] as const;
-export const TICKET_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "CLOSED"] as const;
+export const ACTION_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy"] as const;
+export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "CLOSED"] as const;
+// Linhagem direcionada entre Issues: parent/child expressam o fan-out Planning→Design→Implement
+// (ancestral↔descendente); see-also é a relação simétrica sem direção (o default retrocompatível).
+export const RELATION_KINDS = ["parent", "child", "see-also"] as const;
+// Papel especializado do workflow que uma entrada da thread representa. Ortogonal ao AgentId
+// (que identifica o harness): rastreia QUEM fez o trabalho, para auditar e rotear retrabalho.
+export const ROLES = ["requirement", "breaking-issues", "architect", "test-coding", "coding", "quality-review", "pr-analysis"] as const;
 
 export type AgentId = (typeof AGENT_IDS)[number];
 export type ClosedReason = (typeof CLOSED_REASONS)[number];
 export type IssueType = (typeof ISSUE_TYPES)[number];
-export type TicketType = (typeof TICKET_TYPES)[number];
+export type ActionType = (typeof ACTION_TYPES)[number];
 export type IssueStatus = (typeof ISSUE_STATUSES)[number];
-export type TicketStatus = (typeof TICKET_STATUSES)[number];
+export type RelationKind = (typeof RELATION_KINDS)[number];
+export type Role = (typeof ROLES)[number];
+export type Relation = { id: string; kind: RelationKind };
 export type Actor = "human" | AgentId;
 export type Decision = "OPEN" | "CLOSED";
 
@@ -27,6 +34,21 @@ export type TagCategory = keyof typeof TAG_VALUES;
 export type Tags = { [K in TagCategory]?: (typeof TAG_VALUES)[K][number] };
 export type TagUpdates = Partial<Record<TagCategory, string>>;
 export type HumanNeed = (typeof TAG_VALUES)["human_need"][number];
+
+// Todo texto escrito (problema, artefato, comentário, evidência) é limitado: conteúdo
+// grande denuncia Issue grande demais — o remédio é decompor, não escrever mais.
+export const MAX_DOC_WORDS = 300;
+
+export function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+export function assertBrief(text: string, label: string): void {
+  const words = wordCount(text);
+  if (words > MAX_DOC_WORDS) {
+    throw new DomainError(`${label} tem ${words} palavras (limite ${MAX_DOC_WORDS}): conteúdo grande indica Issue grande demais — resuma, ou feche esta Issue e crie Issues menores relacionadas (--relates)`);
+  }
+}
 
 // Severidade = quanta supervisão humana o valor exige, do menor para o maior. NÃO é a ordem de
 // TAG_VALUES: lá human_need é ["HITL","AFK"], e HITL exige MAIS supervisão que AFK. Comparar índice
@@ -78,7 +100,9 @@ export type Thread = {
   comment: string;
   status: IssueStatus;
   closed_reason: ClosedReason | null;
+  decided_by?: Actor; // presente só na decisão humana (decide): audita quem aprovou o Code Review final
   attachments?: AttachmentData[]; // ausente em threads antigas e em transições sem anexo
+  role?: Role; // papel especializado do workflow (auditoria); ausente em threads sem papel declarado
 };
 
 export function threadEntry(actor: Actor, timestamp: string, comment: string,
@@ -86,12 +110,12 @@ export function threadEntry(actor: Actor, timestamp: string, comment: string,
   return { actor, timestamp, comment, status, closed_reason };
 }
 
-// Guard de campo obrigatório, compartilhado pelos agregados.
+// Guard de campo obrigatório, compartilhado pelo agregado e use cases.
 export function required(value: string, name: string): void {
   if (!value.trim()) throw new DomainError(`${name} is required`);
 }
 
-// Regras comuns de uma decisão humana OPEN|CLOSED (Issue e Ticket).
+// Regras comuns de uma decisão humana OPEN|CLOSED.
 export function assertDecision(status: Decision, comment: string, reason: ClosedReason | undefined): void {
   if (status === "OPEN") required(comment, "comment");
   if (status === "CLOSED" && !reason) throw new DomainError("Closed reason is required");
@@ -115,16 +139,38 @@ export function parseIssueType(value: string): IssueType {
   return parseEnum(ISSUE_TYPES, value, "type");
 }
 
-export function parseTicketType(value: string): TicketType {
-  return parseEnum(TICKET_TYPES, value, "ticket type");
+export function parseActionType(value: string): ActionType {
+  return parseEnum(ACTION_TYPES, value, "action");
 }
 
 export function parseIssueStatus(value: string): IssueStatus {
   return parseEnum(ISSUE_STATUSES, value, "status");
 }
 
-export function parseTicketStatus(value: string): TicketStatus {
-  return parseEnum(TICKET_STATUSES, value, "ticket status");
+export function parseRelationKind(value: string): RelationKind {
+  return parseEnum(RELATION_KINDS, value, "kind");
+}
+
+export function parseRole(value: string): Role {
+  return parseEnum(ROLES, value, "role");
+}
+
+// Inversa da relação direcionada: o par recíproco gravado na Issue alvo. see-also é simétrica.
+export function inverseKind(kind: RelationKind): RelationKind {
+  return kind === "parent" ? "child" : kind === "child" ? "parent" : "see-also";
+}
+
+// Normaliza relates persistidos: entradas antigas (string[]) viram see-also; o shape novo passa direto.
+export function normalizeRelations(relates: readonly (string | Relation)[] | undefined): Relation[] {
+  const seen = new Set<string>();
+  const result: Relation[] = [];
+  for (const entry of relates ?? []) {
+    const relation = typeof entry === "string" ? { id: entry, kind: "see-also" as RelationKind } : entry;
+    if (seen.has(relation.id)) continue; // dedup por id (linhagem é um id ↔ um kind)
+    seen.add(relation.id);
+    result.push(relation);
+  }
+  return result;
 }
 
 function parseEnum<const Values extends readonly string[]>(

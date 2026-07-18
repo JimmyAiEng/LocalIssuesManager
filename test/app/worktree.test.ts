@@ -4,52 +4,57 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { addWorktree, createIssue, getIssue, removeWorktree } from "../../src/app/issue_use_cases.js";
+import { createIssue, getIssue } from "../../src/app/issue_use_cases.js";
+import { createProject } from "../../src/app/project_use_cases.js";
+import { addWorktree, removeWorktree } from "../../src/app/worktree_use_cases.js";
 
-test("worktree add cria a worktree e grava o path; remove limpa", () => {
-  const repo = mkdtempSync(join(tmpdir(), "wt-repo-"));
-  const root = mkdtempSync(join(tmpdir(), "wt-store-"));
+function gitRepo(prefix: string): string {
+  const repo = mkdtempSync(join(tmpdir(), prefix));
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-b", "main");
   git("config", "user.email", "t@t");
   git("config", "user.name", "t");
   git("commit", "--allow-empty", "-m", "init");
+  return repo;
+}
 
-  const issue = createIssue({ title: "wt", project: "app", type: "Feat", problem: "p", actor: "human" }, root);
+function setup(prefix: string): { repo: string; root: string; issueId: string } {
+  const repo = gitRepo(prefix);
+  const root = mkdtempSync(join(tmpdir(), "wt-store-"));
+  createProject({ name: "app", repo }, root);
+  const issue = createIssue({ title: "wt", project: "app", type: "Feat", action: "Implement", problem: "p", actor: "human" }, root);
+  return { repo, root, issueId: issue.id };
+}
 
-  const added = addWorktree({ issueId: issue.id, cwd: repo }, root);
+test("worktree add usa o repo do projeto registrado, grava o path e remove limpa", () => {
+  const { root, issueId } = setup("wt-repo-");
+
+  const added = addWorktree({ issueId }, root); // sem cwd: resolve pelo project.json
   assert.ok(added.worktree, "worktree gravada na Issue");
-  assert.equal(added.worktree!.branch, `issue/${issue.id.slice(0, 8)}`);
+  assert.equal(added.worktree!.branch, `issue/${issueId.slice(0, 8)}`);
   assert.ok(existsSync(added.worktree!.path), "diretório da worktree existe");
 
   // idempotente: segunda chamada devolve a mesma worktree sem recriar
-  const again = addWorktree({ issueId: issue.id, cwd: repo }, root);
+  const again = addWorktree({ issueId }, root);
   assert.equal(again.worktree!.path, added.worktree!.path);
 
-  const removed = removeWorktree({ issueId: issue.id, cwd: repo }, root);
+  const removed = removeWorktree({ issueId }, root);
   assert.equal(removed.worktree, null, "campo limpo após remove");
   assert.ok(!existsSync(added.worktree!.path), "diretório removido");
+  assert.equal(removeWorktree({ issueId }, root).worktree, null); // idempotente
 
   // persistido em disco
-  assert.equal(getIssue(issue.id, root).worktree, null);
+  assert.equal(getIssue(issueId, root).worktree, null);
 });
 
 test("removeWorktree propaga erro claro quando o git falha (worktree já removida por fora)", () => {
-  const repo = mkdtempSync(join(tmpdir(), "wt-repo-fail-"));
-  const root = mkdtempSync(join(tmpdir(), "wt-store-fail-"));
-  const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
-  git("init", "-b", "main");
-  git("config", "user.email", "t@t");
-  git("config", "user.name", "t");
-  git("commit", "--allow-empty", "-m", "init");
-
-  const issue = createIssue({ title: "wt-fail", project: "app", type: "Feat", problem: "p", actor: "human" }, root);
-  const added = addWorktree({ issueId: issue.id, cwd: repo }, root);
+  const { repo, root, issueId } = setup("wt-repo-fail-");
+  const added = addWorktree({ issueId, cwd: repo }, root);
   // remove a worktree por fora (git), deixando a Issue com um worktree.path que o git não reconhece mais
   execFileSync("git", ["worktree", "remove", added.worktree!.path, "--force"], { cwd: repo });
 
   assert.throws(
-    () => removeWorktree({ issueId: issue.id, cwd: repo }, root),
+    () => removeWorktree({ issueId, cwd: repo }, root),
     (error: unknown) => error instanceof Error && /git worktree remove .* falhou:/.test(error.message),
   );
 });

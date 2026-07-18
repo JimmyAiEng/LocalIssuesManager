@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { createProject } from "../../src/app/project_use_cases.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
 // E2E pela superfície humana real (servidor web HTTP) e pela infra (`issues init`, `web`).
@@ -12,21 +13,20 @@ const bin = resolve("bin/issues");
 const cli = (args: string[], root: string): string =>
   execFileSync(bin, args, { env: { ...process.env, ISSUES_ROOT: root }, encoding: "utf8" });
 
-// Issue já classificada: a criação de Ticket exige risk+complexity para derivar a autonomia.
-const issueBody = { title: "Web issue", project: "web", type: "Fix", problem: "quebra", complexity: "BAIXA", risk: "BAIXO" };
-const ticketArgs = (issueId: string) => [
-  "ticket", "create", "--issue", issueId, "--type", "Implement",
-  "--objective", "o", "--task", "t", "--acceptance-criteria", "c", "--agent", "pi",
-];
+const issueBody = { title: "Web issue", project: "web", type: "Fix", action: "QA", problem: "quebra", human_need: "HITL" };
 
 // --- CA-05: fluxo humano equivalente via API web -----------------------------
-test("CA-05: humano cria Issue pela web e decide AWAITING -> CLOSED (IA conduz via CLI no mesmo store)", async () =>
+test("CA-05: humano cria Issue HITL pela web; IA entrega evidência via CLI; humano decide AWAITING -> CLOSED", async () =>
   withWeb(async (url, root) => {
     const created = await request(url, "POST", "/api/issues", issueBody);
     assert.equal(created.status, 201);
-    assert.equal(created.body.human_presence, true);
     const id = created.body.id as string;
-    driveToAwaiting(id, root); // IA fecha Ticket + Confirmation pela CLI real
+    // IA conduz pela CLI real no mesmo store: claim + artefato de QA (gate) + evidência para AWAITING.
+    cli(["next", "--agent", "pi", "--project", "web"], root);
+    const qa = join(mkdtempSync(join(tmpdir(), "issues-qa-")), "qa.md");
+    writeFileSync(qa, "# QA ok");
+    cli(["artifact", "--id", id, "--file", qa], root);
+    cli(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência: relatório"], root);
     assert.equal((await request(url, "GET", `/api/issues/${id}`)).body.status, "AWAITING");
     const decided = await request(url, "POST", `/api/issues/${id}/decision`,
       { status: "CLOSED", comment: "aceito", closed_reason: "concluido" });
@@ -71,22 +71,9 @@ test("RF-12/CA-06: `issues init` cria AGENTS.md, .agents/skills e wiring do harn
   assert.ok(lstatSync(link).isSymbolicLink());
 });
 
-// IA conduz a Issue até AWAITING pela CLI real (Ticket + Confirmation), como no PRD §5.
-function driveToAwaiting(id: string, root: string): void {
-  cli(["next", "--agent", "pi", "--project", "web"], root);
-  const tid = JSON.parse(cli(ticketArgs(id), root)).tickets[0].id as string;
-  cli(["ticket", "claim", "--issue", id, "--id", tid, "--agent", "pi"], root);
-  cli(["ticket", "status", "--issue", id, "--id", tid, "--agent", "pi",
-    "--status", "CLOSED", "--comment", "feito", "--reason", "concluido", "--last"], root);
-  const cid = JSON.parse(cli(["get", "--id", id], root)).tickets
-    .find((t: { type: string }) => t.type === "Confirmation").id as string;
-  cli(["ticket", "claim", "--issue", id, "--id", cid, "--agent", "pi"], root);
-  cli(["ticket", "status", "--issue", id, "--id", cid, "--agent", "pi",
-    "--status", "CLOSED", "--comment", "verificado", "--reason", "concluido"], root);
-}
-
 async function withWeb(runner: (url: string, root: string) => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "issues-e2e-web-"));
+  createProject({ name: "web", repo: root }, root);
   const web = await startWebServer(0, root);
   try {
     await runner(web.url, root);

@@ -1,186 +1,156 @@
-# Design — Issues Locais (CLI + web + pack)
+# Design — Issues Locais
 
 | Campo | Valor |
-|-------|--------|
-| Versão | 3.1 (compilado) |
+|---|---|
+| Versão | 4.0 |
 | Status | Vigente |
-| Fontes compiladas | `DESIGN.md` (v1) · modelo v3 Issue+Ticket |
-| Requisitos | `PRD.md` |
-| Migração de store | Fora de escopo (base limpa no rollout v3) |
-
----
+| Modelo | Issue-only · Workflow por Action · Artifact unificado |
+| Decisões | ADR 0005 e ADR 0006 |
 
 ## 1. Arquitetura
 
-Camadas:
-
 ```text
-cli.ts / web/*  →  app/*_use_case  →  domain (Issue, Ticket, Queue, Loop, Harness)
+CLI / Web
+    ↓
+Application use cases + Workflow services
+    ↓
+Domain (Issue, Artifact, Workflow, GatePolicy)
+    ↓
+Queue + ArtifactStore concretos
+    ↓
+Filesystem / Git / PlantUML / project checks
 ```
 
-| Camada | Pode importar | Não pode |
-|--------|---------------|----------|
-| `domain/*` (exceto Queue/loop FS) | outros `domain/*` | `app/`, `cli` |
-| `queue_repository.ts` / stores FS | `domain/*` + FS | `app/`, `cli` |
-| `app/*` | `domain/*` | `cli` |
-| `cli.ts` | `app/*`, `web/server` no comando `web` | `domain/*` direto |
-| `web/*` | só `app/*` + HTTP/browser | `domain/*`, persistência direta |
+- `Issue` protege identidade, transições, Owner, Thread, tags e relações.
+- `Artifact` valida os dados intrínsecos de cada Artifact Type.
+- `Workflow` é selecionado pela `Action` e não é persistido.
+- `GatePolicy` combina validade da entrega e necessidade de decisão humana.
+- `app/services/workflows` coleta evidências e orquestra a conclusão por Action.
+- `Queue` persiste Issues e projetos. `ArtifactStore` concentra a persistência de Artifacts.
+- CLI e Web utilizam os mesmos use cases; não acessam persistência diretamente.
 
-### Layout do repositório (essencial)
+## 2. Domínio
 
-```text
-WorkflowDev/
-├── CONTEXT.md · PRD.md · DESIGN.md · AGENTS.md
-├── skills/                    ← pack source (SKILL.md)
-├── .agents/skills → skills/   ← discovery (dogfood; ver skills/INSTALL.md)
-├── bin/issues
-└── src/
-    ├── domain/     issue_entity · ticket_entity · value_objects · queue · loop · harness …
-    ├── app/        *_use_case.ts (incl. init_pack, worktree, harness, loop)
-    ├── cli.ts
-    └── web/        server · api · client/
-```
+### Issue
 
-### Disco (runtime)
+Agregado da unidade de trabalho. Campos principais:
 
 ```text
-~/issues-manager/projects/<project>/{open,claimed,ongoing,awaiting,closed}/<id>.json
-~/issues-manager/loop/{harnesses,loops}.json · <loop>.log
+id · title · project · type · action · problem · acceptance_criteria
+status · owner · closed_reason · tags · relates · worktree
+architecture_changed · thread · phases · revision
 ```
 
-Um JSON por **agregado Issue**; Tickets vão **dentro** do JSON. Transição de Issue = `mv` entre pastas.
+Transições:
 
----
+```text
+OPEN --claim--> CLAIMED
+CLAIMED --submit--> AWAITING
+CLAIMED --closeByAgent/closeByHuman--> CLOSED
+AWAITING --decide--> OPEN | CLOSED
+CLAIMED --reset--> OPEN
+```
 
-## 2. Value objects
+A Issue não executa PlantUML, Git, checks, consultas à linhagem ou regras específicas de Workflow.
 
-| Constante | Valores |
-|-----------|---------|
-| `AGENT_IDS` | `cursor` · `claude-code` · `codex` · `pi` |
-| `CLOSED_REASONS` | `obsoleto` · `duplicado` · `concluido` · `errado` |
-| `ISSUE_TYPES` | `Fix` · `Feat` · `Research` · `Refactor` |
-| `TICKET_TYPES` | `Planning` · `Design` · `Implement` · `QA` · `Deploy` · `Confirmation` |
-| `ISSUE_STATUSES` | `OPEN` · `CLAIMED` · `ON-GOING` · `AWAITING` · `CLOSED` |
-| `TICKET_STATUSES` | `OPEN` · `CLAIMED` · `AWAITING` · `CLOSED` |
-| Tags | `complexity` BAIXA\|MEDIA\|ALTA · `human_need` HITL\|AFK · `risk` BAIXO\|MEDIO\|ALTO |
+### Artifact
 
-Enums antigos `TAGS` (fase na Issue) e `Maintenance` **removidos**. `Deployment` (Issue) → tipo Ticket `Deploy`.
+Artifact Types:
 
----
+```text
+doc | requirements | prd | design | plan | media
+```
 
-## 3. Entidades
+Regras intrínsecas:
 
-### 3.1 Issue (`issue_entity.ts`)
+- `doc` e documentos breves: até 300 palavras;
+- `requirements`: Features Gherkin válidas;
+- `prd`: estrutura e referências válidas contra Requirements;
+- `design`: documentos breves e diagramas validados pelo adapter PlantUML;
+- `plan`: estrutura de Small Plan válida;
+- `media`: imagem/vídeo suportado, até 25 MiB.
 
-Campos: `id`, `title`, `project`, `type`, `problem`, `artifacts?`, `acceptance_criteria?`, `status`, `owner`, `closed_reason`, timestamps, `human_presence`, `thread`, `phases`, `tickets[]`, `tags`, `worktree?`.
+`Attachment` permanece como façade compatível para o contrato persistido da Thread e para `/api/attachments`, mas é internamente um Artifact `media`.
 
-| Método | Regra |
-|--------|-------|
-| `create` | `OPEN`, `tickets=[]` |
-| `claim` | `OPEN → CLAIMED`; sem thread |
-| `addTicket` | `CLAIMED`/`ON-GOING`; 1º → `ON-GOING`; rejeita create de `Confirmation` |
-| `await` | `ON-GOING` + todos Tickets `CLOSED` → `AWAITING` |
-| `decide` | humano; `AWAITING → OPEN\|CLOSED` |
-| `reset` | humano; só `CLAIMED → OPEN` |
-| `closeByAgent` / `closeByHuman` | regras `human_presence` |
-| `tag` / `tagTicket` | merge tags; `assertTicketAutonomy` |
-| `#confirmWhenDone` | injeta Ticket `Confirmation` ao fechar o último Ticket não-Confirmation |
+### Workflow e GatePolicy
 
-### 3.2 Ticket (`ticket_entity.ts`)
+`workflowFor(action)` seleciona:
 
-Campos: `id`, `issue_id`, `objective`, `task`, `acceptance_criteria`, `type`, `status`, `owner` (Actor), `closed_reason`, `artifacts?`, `references?`, `depends_on[]`, timestamps, `thread`, `tags`.
+| Action | Workflow | Entrega principal |
+|---|---|---|
+| Planning | Requirement Engineering | Requirements + PRD + filhas Design |
+| Design | Design | Plan; pacote UML quando arquitetura muda; filhas Implement |
+| Implement | Unit of Work | Worktree + TDD configurado + checks do Projeto |
+| QA | Quality Review | Artifact `doc` de validação |
+| Deploy | Merge/PR Analysis | PR + análise; decisão humana obrigatória |
 
-| Método | Regra |
-|--------|-------|
-| `create` | `OPEN` |
-| `claim` | `OPEN → CLAIMED` (IA ou humano) |
-| `changeStatus` | owner; `CLAIMED → AWAITING\|OPEN\|CLOSED` |
-| `decide` | humano; `AWAITING → OPEN\|CLOSED` |
+`GateAssessment` possui três resultados:
 
----
+```text
+approved | human-required | rejected
+```
 
-## 4. Fila e persistência
+Entrega inválida é rejeitada antes do roteamento. `human_need=HITL`, risco ALTO, complexidade ALTA, mudança arquitetural e Deploy podem exigir decisão humana.
 
-- `Queue.oldestOpenTicket(project?)` — Tickets `OPEN` em Issues `ON-GOING`, FIFO por `created_at`, respeitando `depends_on`.
-- `NextIssueUseCase`: Ticket-first; senão `oldestOpen` da Issue.
-- Stale save: revisão/`history` do agregado; mutação de Ticket reescreve o JSON da Issue.
+## 3. Aplicação
 
----
+`statusIssue` mantém o contrato público e delega a conclusão da IA para:
 
-## 5. Superfície de comandos
+```text
+src/app/services/workflows/
+  index.ts       completeIssue (dispatcher)
+  planning.ts
+  design.ts
+  implement.ts
+  qa.ts
+  deploy.ts
+```
 
-### CLI (Formato A)
+Cada módulo conhece somente a orquestração da sua Action. Dependências externas permanecem na aplicação:
 
-Issue: `create` · `next` → `{ issue, ticket? }` · `status` · `decide` · `reset` · `get` · `list` · `comment` · `tag`
+- PlantUML: `plantuml_check.ts`;
+- Git/TDD: `implement_gate.ts`;
+- checks do projeto: `project_use_cases.ts`;
+- filesystem: `Queue` e `ArtifactStore` concretos.
 
-Ticket: `ticket create|claim|comment|tag|status|decide|get|list`
+O fechamento humano direto continua sendo override para cancelamento/classificação administrativa. A decisão de uma Issue `AWAITING` continua exclusiva do humano.
 
-Infra: `harness` · `loop` · `worktree` · `init` · `web`
+## 4. Persistência
 
-`init --dogfood` / `npm run skills:link`: liga `skills/` → paths de discovery dos harnesses (pack source).
+O layout físico existente é preservado para compatibilidade:
 
-### Web
+```text
+projects/<project>/
+  project.json
+  open|claimed|awaiting|closed/<issue-id>.json
+  artifacts/<issue-id>.md
+  requirements/<issue-id>.json
+  prd/<issue-id>.json
+  design/<issue-id>/{design.md,plan.json,<kind>.puml}
+  attachments/<artifact-id>.<ext>
+```
 
-- Quadro por Status (incl. `ON-GOING`); filtro tipo/projeto/título.
-- Detalhe: Tickets, tags editor, ações humanas, criar Ticket.
-- Rotas: Issues CRUD de fluxo humano + Tickets create/status/decision/tags; conflito → 409.
+Apesar do layout legado, todos os tipos são acessados pela API única de `ArtifactStore`. Os antigos métodos de Artifact em `Queue` existem apenas como façade de compatibilidade local; novos callers usam `queue.artifacts`.
 
----
+## 5. Regras estruturais
 
-## 6. Pack de skills
+- arquivo de código ≤ 300 linhas;
+- função ≤ 20 linhas;
+- domínio não importa aplicação ou bordas;
+- CLI/Web não acessam domínio diretamente fora dos contratos permitidos;
+- sem interfaces Port/Repository especulativas;
+- Workflow não é entidade persistida;
+- Artifacts relacionados compõem contexto, mas não satisfazem o gate da Issue atual.
 
-| Path | Papel |
-|------|-------|
-| `skills/<nome>/SKILL.md` | Source publicado no npm |
-| `.agents/skills/` | Cópia canônica no consumidor (`init`) |
-| `.cursor/.claude/.codex/.pi/skills` | Symlinks → `.agents/skills` |
+## 6. Validação
 
-Roteamento: tipo do Ticket → `*-phase`. Detalhe: `skills/INSTALL.md`.
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run test:coverage
+npm run check:fitness
+npm run build
+```
 
----
-
-## 7. Infra opcional (fora do núcleo de domínio de Tickets)
-
-| Peça | Design |
-|------|--------|
-| **Worktree** | CLI `worktree add/remove`; field na Issue; sandbox git por Issue; loop ainda não força cwd |
-| **Harness** | `{ name, agent, command com {prompt} }` |
-| **Loop** | Drain com concurrency; spawn no host; prompt força AGENTS + fase; agendamento SO |
-| **dpi / Docker** | Tooling pessoal fora deste repo; não faz parte do domínio |
-
----
-
-## 8. Fitness functions
-
-| ID | Regra |
-|----|-------|
-| FF-01 | `domain/` (exceto FS em repositórios) não importa `app/`/`cli` |
-| FF-02 | Adaptadores importam só `app/` |
-| FF-03 | Arquivo ≤ 300 linhas |
-| FF-04 | Função ≤ 20 linhas |
-| FF-05 | Zero Ports desnecessários |
-| FF-06 | Módulos profundos (API pública estreita) |
-
----
-
-## 9. Critérios de aceite do design
-
-1. Enums, entidades e transições conferem com `PRD.md`.
-2. `next` unificado e grupo `ticket` implementados.
-3. Web consome os mesmos use cases; Tags e Tickets no detalhe.
-4. Pack instalável com discovery nos quatro harnesses.
-5. Confirmation e `depends-on` documentados e implementados no domínio.
-
----
-
-## 10. Histórico de fatiamento v3 (Implement — referência)
-
-| Fatia | Entrega |
-|-------|---------|
-| S1 | Domínio Issue+Ticket + enums |
-| S2 | Persistência `ongoing` + `oldestOpenTicket` |
-| S3 | Use cases + CLI |
-| S4 | Web Tickets |
-| S5 | Pack/docs roteamento por Ticket |
-
-Extensões posteriores: tags/HITL, depends-on, Confirmation, loop/harness/worktree, init wiring multi-harness.
+A suíte contém testes unitários de Artifact, ArtifactStore, Workflow, GatePolicy e dispatcher, além do E2E completo Planning → Design → Implement → QA → Deploy.

@@ -1,0 +1,63 @@
+@startuml components
+title WorkflowDev — Componentes e camadas
+skinparam componentStyle rectangle
+
+package "Bordas" {
+  [CLI] as CLI
+  [Web API] as API
+  [Web client] as WEB
+}
+
+package "Aplicação" {
+  [Issue use cases] as IUC
+  [Artifact use cases] as AUC
+  [completeIssue dispatcher] as COMPLETE
+  [Planning workflow] as PLAN
+  [Design workflow] as DESIGN
+  [Implement workflow] as IMPLEMENT
+  [QA workflow] as QA
+  [Deploy workflow] as DEPLOY
+  [PlantUML / Git / checks] as EFFECTS
+}
+
+package "Domínio" {
+  [Issue] as ISSUE
+  [Artifact + validators] as ARTIFACT
+  [Workflow definitions] as WORKFLOW
+  [GatePolicy] as POLICY
+  [Requirements / PRD / Plan] as SPECS
+  [Queue] as QUEUE
+  [ArtifactStore] as STORE
+}
+
+database "Filesystem" as FS
+
+CLI --> IUC
+CLI --> AUC
+API --> IUC
+API --> AUC
+WEB ..> API : HTTP/JSON
+IUC --> COMPLETE : conclusão por IA
+COMPLETE --> PLAN
+COMPLETE --> DESIGN
+COMPLETE --> IMPLEMENT
+COMPLETE --> QA
+COMPLETE --> DEPLOY
+COMPLETE --> WORKFLOW
+COMPLETE --> POLICY
+DESIGN --> EFFECTS
+IMPLEMENT --> EFFECTS
+AUC --> ARTIFACT
+PLAN --> SPECS
+DESIGN --> SPECS
+IUC --> ISSUE
+IUC --> QUEUE
+QUEUE *-- STORE
+QUEUE --> FS
+STORE --> FS
+
+note bottom of COMPLETE
+  Orquestra por Action; não persiste Workflow
+  nem duplica regras de transição da Issue.
+end note
+@enduml

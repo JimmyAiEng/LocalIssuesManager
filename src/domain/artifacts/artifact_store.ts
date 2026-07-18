@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Artifact, type ArtifactType, extForArtifactMedia, type MediaType, mediaTypeForArtifactExt } from "./artifact.js";
-import { defaultRoot } from "./root.js";
+import { defaultRoot } from "../root.js";
+import type { ArtifactType, TextArtifactType } from "./artifact.js";
+import { extForMediaType, type MediaArtifact, type MediaType, mediaTypeForExt } from "./media_artifact.js";
 
-export type ArtifactRef = { issueId: string; type: Exclude<ArtifactType, "media">; name?: string };
+export type ArtifactRef = { issueId: string; type: TextArtifactType; name?: string };
 export type StoredMedia = { path: string; mediaType: MediaType };
 
 export class ArtifactStore {
@@ -23,16 +24,15 @@ export class ArtifactStore {
 
   list(project: string, issueId: string, type: ArtifactType): string[] {
     if (type === "media") return [];
-    if (type !== "design") return this.readText(project, { issueId, type }) === null ? [] : [defaultName(type)];
-    const directory = this.#designDir(project, issueId);
-    return existsSync(directory) ? readdirSync(directory) : [];
+    if (type === "uml") return this.#designFiles(project, issueId, ".puml");
+    const name = defaultName(type);
+    return this.readText(project, { issueId, type, name }) === null ? [] : [name];
   }
 
-  writeMedia(project: string, artifact: Pick<Artifact, "id" | "mediaType">, bytes: Buffer): void {
-    if (!artifact.mediaType) throw new Error("media artifact required");
+  writeMedia(project: string, artifact: Pick<MediaArtifact, "id" | "mediaType">, bytes: Buffer): void {
     const directory = join(this.#project(project), "attachments");
     mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, `${artifact.id}.${extForArtifactMedia(artifact.mediaType)}`), bytes);
+    writeFileSync(join(directory, `${artifact.id}.${extForMediaType(artifact.mediaType)}`), bytes);
   }
 
   findMedia(id: string): StoredMedia | null {
@@ -44,38 +44,39 @@ export class ArtifactStore {
   }
 
   purgeIssue(project: string, issueId: string): void {
-    rmSync(this.#textPath(project, { issueId, type: "doc" }), { force: true });
-    rmSync(this.#textPath(project, { issueId, type: "requirements" }), { force: true });
-    rmSync(this.#textPath(project, { issueId, type: "prd" }), { force: true });
+    rmSync(this.#textPath(project, { issueId, type: "document" }), { force: true });
+    rmSync(this.#textPath(project, { issueId, type: "requirement" }), { force: true });
     rmSync(this.#designDir(project, issueId), { recursive: true, force: true });
   }
 
   purgeMedia(project: string, id: string, mediaType: MediaType): void {
-    rmSync(join(this.#project(project), "attachments", `${id}.${extForArtifactMedia(mediaType)}`), { force: true });
+    rmSync(join(this.#project(project), "attachments", `${id}.${extForMediaType(mediaType)}`), { force: true });
   }
 
   #textPath(project: string, ref: ArtifactRef): string {
     const base = this.#project(project);
-    if (ref.type === "doc") return join(base, "artifacts", `${ref.issueId}.md`);
-    if (ref.type === "requirements") return join(base, "requirements", `${ref.issueId}.json`);
-    if (ref.type === "prd") return join(base, "prd", `${ref.issueId}.json`);
-    if (ref.type === "plan") return join(this.#designDir(project, ref.issueId), "plan.json");
-    return join(this.#designDir(project, ref.issueId), ref.name ?? "design.md");
+    if (ref.type === "document" && ref.name === "design.md") return join(this.#designDir(project, ref.issueId), "design.md");
+    if (ref.type === "document") return join(base, "artifacts", `${ref.issueId}.md`);
+    if (ref.type === "requirement") return join(base, "requirements", `${ref.issueId}.json`);
+    if (ref.type === "implementation-plan") return join(this.#designDir(project, ref.issueId), "plan.json");
+    return join(this.#designDir(project, ref.issueId), ref.name ?? "diagram.puml");
   }
 
+  #designFiles(project: string, issueId: string, suffix: string): string[] {
+    const directory = this.#designDir(project, issueId);
+    return existsSync(directory) ? readdirSync(directory).filter((name) => name.endsWith(suffix)) : [];
+  }
   #designDir(project: string, issueId: string): string { return join(this.#project(project), "design", issueId); }
   #project(project: string): string { return join(this.#root, "projects", projectSegment(project)); }
-
   #projects(): string[] {
     const directory = join(this.#root, "projects");
     return existsSync(directory) ? readdirSync(directory) : [];
   }
-
   #findMediaIn(project: string, id: string): StoredMedia | null {
     const directory = join(this.#root, "projects", project, "attachments");
     if (!existsSync(directory)) return null;
     const file = readdirSync(directory).find((name) => name.startsWith(`${id}.`));
-    const mediaType = file && mediaTypeForArtifactExt(file.slice(file.lastIndexOf(".") + 1));
+    const mediaType = file && mediaTypeForExt(file.slice(file.lastIndexOf(".") + 1));
     return file && mediaType ? { path: join(directory, file), mediaType } : null;
   }
 }
@@ -85,8 +86,9 @@ function projectSegment(project: string): string {
   return encoded === "." ? "%2E" : encoded === ".." ? "%2E%2E" : encoded;
 }
 
-function defaultName(type: Exclude<ArtifactType, "media">): string {
-  if (type === "doc") return "artifact.md";
-  if (type === "design") return "design.md";
-  return `${type}.json`;
+function defaultName(type: TextArtifactType): string {
+  if (type === "document") return "artifact.md";
+  if (type === "requirement") return "requirements.json";
+  if (type === "implementation-plan") return "plan.json";
+  return "diagram.puml";
 }

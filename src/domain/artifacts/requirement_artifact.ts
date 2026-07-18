@@ -1,11 +1,12 @@
-import { DomainError } from "./domain_error.js";
-import { assertBrief } from "./value_objects.js";
+import { DomainError } from "../domain_error.js";
+import { assertBrief } from "../value_objects.js";
+import type { ArtifactDefinition } from "./artifact.js";
 
 const MAX_FEATURES = 5;
 
 // Artefato de requisitos: JSON com uma ou mais Features em Gherkin (pt-BR).
 // Validado por código (sintaxe/estrutura), sem I/O — regra pura do domínio.
-export type Requirements = { features: string[] };
+export type RequirementSet = { features: string[] };
 
 const STEP_KEYWORDS = ["Given", "When", "Then", "And"] as const;
 const STORY_PREFIXES = ["Como um", "Eu quero poder", "Para que eu"] as const;
@@ -15,16 +16,32 @@ const isStep = (line: string): boolean =>
 
 // Valida o artefato bruto (parse de JSON já feito) e devolve-o normalizado.
 // Lança DomainError com mensagem clara (apontando a Feature) em qualquer violação.
-export function validateGherkinRequirements(raw: unknown): Requirements {
+export const RequirementArtifact = {
+  type: "requirement" as const,
+  validate(rawText: string): RequirementSet {
+    let parsed: unknown;
+    try { parsed = JSON.parse(rawText); }
+    catch { throw new DomainError("Requirements deve ser um arquivo JSON válido"); }
+    return validateParsed(parsed);
+  },
+  validateParsed,
+  featureNames(requirements: RequirementSet): string[] {
+    return requirements.features.map(featureName);
+  },
+} satisfies ArtifactDefinition;
+
+function validateParsed(raw: unknown): RequirementSet {
   const features = featureList(raw);
-  features.forEach((feature, index) => {
-    if (typeof feature !== "string") {
-      throw new DomainError(`Feature ${index + 1}: deve ser texto Gherkin (string)`);
-    }
-    assertBrief(feature, `Feature ${index + 1}`);
-    validateFeature(feature, index);
-  });
+  features.forEach((feature, index) => { validateGherkinFeature(feature, index); });
   return { features: features as string[] };
+}
+
+function validateGherkinFeature(feature: unknown, index: number): void {
+  if (typeof feature !== "string") {
+    throw new DomainError(`Feature ${index + 1}: deve ser texto Gherkin (string)`);
+  }
+  assertBrief(feature, `Feature ${index + 1}`);
+  validateFeature(feature, index);
 }
 
 // Estrutura e cardinalidade: 1 a 5 Features — escopo grande denuncia Issue grande.
@@ -45,25 +62,9 @@ function featureList(raw: unknown): unknown[] {
   return features;
 }
 
-// Nome de cada Feature (o texto após "Feature:" no cabeçalho) — chave usada pelos clusters do PRD
-// para referenciar Features. Assume requirements já validados (o cabeçalho sempre existe).
-export function featureNames(requirements: Requirements): string[] {
-  return requirements.features.map((text) => {
-    const header = text.split("\n").map((line) => line.trim()).find((line) => line.startsWith("Feature:"));
-    return header ? header.replace(/^Feature:\s*/, "").trim() : "";
-  });
-}
-
-// Conveniência para a camada app: parseia o texto JSON (só JSON é aceito) e valida.
-// Mantém-se pura (sem I/O); malformação de JSON vira DomainError claro.
-export function parseAndValidateRequirements(rawText: string): Requirements {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    throw new DomainError("Requirements deve ser um arquivo JSON válido");
-  }
-  return validateGherkinRequirements(parsed);
+function featureName(text: string): string {
+  const header = text.split("\n").map((line) => line.trim()).find((line) => line.startsWith("Feature:"));
+  return header ? header.replace(/^Feature:\s*/, "").trim() : "";
 }
 
 function validateFeature(text: string, index: number): void {

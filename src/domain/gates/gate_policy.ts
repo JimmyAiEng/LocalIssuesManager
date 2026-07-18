@@ -1,4 +1,4 @@
-import type { Tags } from "./value_objects.js";
+import type { Tags } from "../value_objects.js";
 
 export type GateViolation = { code: string; message: string };
 export type GateAssessment =

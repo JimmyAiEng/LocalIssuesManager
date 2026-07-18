@@ -7,7 +7,7 @@ import test from "node:test";
 import { createIssue } from "../../src/app/issue_use_cases.js";
 import { createProject } from "../../src/app/project_use_cases.js";
 import { ConflictError } from "../../src/domain/domain_error.js";
-import { MAX_ATTACHMENT_SIZE } from "../../src/domain/attachment_entity.js";
+import { MAX_MEDIA_SIZE } from "../../src/domain/artifacts/media_artifact.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
@@ -361,7 +361,7 @@ test("falha HTTP: anexo com size 0 (data vazia) → 400", async () => withWeb(as
 
 test("falha HTTP: anexo acima de 25MB → 400", async () => withWeb(async (url) => {
   const id = (await request(url, "POST", "/api/issues", issueBody)).body.id as string;
-  const data = Buffer.alloc(MAX_ATTACHMENT_SIZE + 1).toString("base64"); // único caminho externo: size = bytes.length
+  const data = Buffer.alloc(MAX_MEDIA_SIZE + 1).toString("base64"); // único caminho externo: size = bytes.length
   const result = await request(url, "POST", `/api/issues/${id}/comment`,
     { comment: "x", attachments: [{ filename: "big.png", mediaType: "image/png", data }] });
   assert.equal(result.status, 400);

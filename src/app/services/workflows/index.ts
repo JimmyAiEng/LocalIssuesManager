@@ -1,8 +1,7 @@
 import { DomainError } from "../../../domain/domain_error.js";
-import { assessGate, type GateViolation } from "../../../domain/gate_policy.js";
+import { assessGate, gateFor, type GateViolation } from "../../../domain/gates/index.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import type { Queue } from "../../../domain/queue_repository.js";
-import { workflowFor } from "../../../domain/workflow.js";
 import { validateDeploy } from "./deploy.js";
 import { validateDesign } from "./design.js";
 import { validateImplement } from "./implement.js";
@@ -17,9 +16,7 @@ export async function completeIssue(queue: Queue, issue: Issue, status: Completi
   if (issue.action === "Deploy" && status === "CLOSED") return rejectDeployClose();
   if (preliminary.outcome === "rejected") await rejectInvalidDelivery(queue, issue, comment, preliminary.violations);
   await validateWorkflowDelivery(queue, issue, comment);
-  const forced = issue.action === "Design" && issue.architecture_changed ? "architecture_changed" :
-    issue.action === "Deploy" ? "deploy" : undefined;
-  const assessment = assessGate(issue.tags, { forceHuman: forced });
+  const assessment = assessGate(issue.tags, { forceHuman: forcedHumanReason(issue) });
   if (status === "CLOSED" && assessment.outcome === "human-required") rejectHumanRequired(issue);
 }
 
@@ -32,9 +29,14 @@ export async function validateWorkflowDelivery(queue: Queue, issue: Issue, comme
 }
 
 function missingArtifacts(queue: Queue, issue: Issue): GateViolation[] {
-  return workflowFor(issue.action).requiredArtifacts
+  return gateFor(issue.action).artifacts.types
     .filter((type) => queue.artifacts.list(issue.project, issue.id, type).length === 0)
     .map((type) => ({ code: "missing_artifact", message: `Artifact obrigatório ausente: ${type}` }));
+}
+
+function forcedHumanReason(issue: Issue): string | undefined {
+  if (gateFor(issue.action).humanApproval.mode === "required") return issue.action.toLowerCase();
+  return issue.action === "Design" && issue.architecture_changed ? "architecture_changed" : undefined;
 }
 
 async function rejectInvalidDelivery(queue: Queue, issue: Issue, comment: string,

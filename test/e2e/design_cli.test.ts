@@ -53,8 +53,8 @@ test("e2e: design doc + add + get DESIGN felizes fecham o gate (ready true)", ()
   const changed = json(["design", "changed", "--issue", issueId, "--value", "false"], vars);
   assert.deepEqual(changed, { ok: true, issue: issueId, architecture_changed: false });
   const queue = new Queue(vars.ISSUES_ROOT);
-  assert.equal(queue.artifacts.readText("demo", { issueId, type: "design", name: "design.md" }), "# Design");
-  assert.equal(queue.artifacts.readText("demo", { issueId, type: "design", name: "class.puml" }), VALID_CLASS);
+  assert.equal(queue.artifacts.readText("demo", { issueId, type: "document", name: "design.md" }), "# Design");
+  assert.equal(queue.artifacts.readText("demo", { issueId, type: "uml", name: "class.puml" }), VALID_CLASS);
 
   const pack = json(["get", "DESIGN", "--id", issueId], vars);
   assert.equal(pack.issueId, issueId);
@@ -71,7 +71,7 @@ test("e2e: design doc vazio falha com JSON {errors:[empty_doc]}, exit 1 e nada g
   assert.equal(denied.status, 1);
   const errors = JSON.parse(lastLine(denied.stderr)).errors;
   assert.equal(errors[0].code, "empty_doc");
-  assert.equal(new Queue(vars.ISSUES_ROOT).artifacts.readText("demo", { issueId, type: "design", name: "design.md" }), null);
+  assert.equal(new Queue(vars.ISSUES_ROOT).artifacts.readText("demo", { issueId, type: "document", name: "design.md" }), null);
 });
 
 test("e2e: design add inválido e kind incompatível falham com o contrato JSON e nada gravado", () => {
@@ -91,7 +91,7 @@ test("e2e: design add inválido e kind incompatível falham com o contrato JSON 
   const mismatchError = JSON.parse(lastLine(mismatch.stderr)).errors[0];
   assert.equal(mismatchError.code, "kind_mismatch");
   assert.match(mismatchError.message, /state/);
-  assert.deepEqual(new Queue(vars.ISSUES_ROOT).artifacts.list("demo", issueId, "design"), []);
+  assert.deepEqual(new Queue(vars.ISSUES_ROOT).artifacts.list("demo", issueId, "uml"), []);
 });
 
 test("e2e: get DESIGN incompleto reporta ready false; erro fora do gate sai cru", () => {
@@ -180,17 +180,17 @@ test("in-process: runDesign cobre doc/add/erros e printDesignPackage", async () 
     const doc = await exitCodeAfter(() => runDesign(["doc", "--issue", issueId,
       "--file", fixture("design.md", "# Design")]));
     assert.equal(doc, undefined);
-    assert.equal(queue.artifacts.readText("demo", { issueId, type: "design", name: "design.md" }), "# Design");
+    assert.equal(queue.artifacts.readText("demo", { issueId, type: "document", name: "design.md" }), "# Design");
 
     const added = await exitCodeAfter(() => runDesign(["add", "--issue", issueId,
       "--kind", "class", "--file", fixture("c.puml", VALID_CLASS), "--pretty"]));
     assert.equal(added, undefined);
-    assert.equal(queue.artifacts.readText("demo", { issueId, type: "design", name: "class.puml" }), VALID_CLASS);
+    assert.equal(queue.artifacts.readText("demo", { issueId, type: "uml", name: "class.puml" }), VALID_CLASS);
 
     const empty = await exitCodeAfter(() => runDesign(["doc", "--issue", issueId,
       "--file", fixture("vazio.md", " ")]));
     assert.equal(empty, 1);
-    assert.equal(queue.artifacts.readText("demo", { issueId, type: "design", name: "design.md" }), "# Design"); // nada regravado
+    assert.equal(queue.artifacts.readText("demo", { issueId, type: "document", name: "design.md" }), "# Design"); // nada regravado
 
     const changed = await exitCodeAfter(() => runDesign(["changed", "--issue", issueId, "--value", "true"]));
     assert.equal(changed, undefined);
@@ -226,7 +226,7 @@ test("in-process: main() roteia design e normaliza get DESIGN posicional", async
     const doc = await exitCodeAfter(() => main(["design", "doc", "--issue", issueId,
       "--file", fixture("design.md", "# Design")]));
     assert.equal(doc, undefined);
-    assert.equal(queue.artifacts.readText("demo", { issueId, type: "design", name: "design.md" }), "# Design"); // rota design de main()
+    assert.equal(queue.artifacts.readText("demo", { issueId, type: "document", name: "design.md" }), "# Design"); // rota design de main()
 
     assert.equal(await exitCodeAfter(() => main(["get", "DESIGN", "--id", issueId])), undefined); // posicional ok
     assert.equal(await exitCodeAfter(() => main(["get", "DESIGN", "--id", "nope"])), 1); // NotFound via dispatch

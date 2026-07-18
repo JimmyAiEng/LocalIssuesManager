@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import {
-  DESIGN_KINDS, type DesignDiagram, DesignGateError, evaluateDesignGate, kindAccepts, parseDesignKind,
+  DESIGN_KINDS, type DesignDiagram, DesignGateError, evaluateDesignGate, parseDesignKind,
   plantumlError, requireNonEmptyDoc, type DesignError,
-} from "../domain/design_gate.js";
-import { validateArtifactContent } from "../domain/artifact.js";
+} from "../domain/gates/design_gate.js";
+import { DocumentArtifact } from "../domain/artifacts/document_artifact.js";
+import { UmlArtifact } from "../domain/artifacts/uml_artifact.js";
 import { DomainError } from "../domain/domain_error.js";
 import type { Issue } from "../domain/issue_entity.js";
 import { Queue } from "../domain/queue_repository.js";
@@ -29,8 +30,8 @@ export function setDesignDoc(input: { issueId: string; file: string }, root?: st
   requireOpenDesignIssue(issue);
   const content = readFileSync(input.file, "utf8");
   requireNonEmptyDoc(content);
-  validateArtifactContent("design", content);
-  queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "design", name: "design.md" }, content);
+  DocumentArtifact.validate(content);
+  queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "document", name: "design.md" }, content);
   return { ok: true, issue: issue.id, path: "design.md" };
 }
 
@@ -46,12 +47,8 @@ export async function addDesignDiagram(
   const source = readFileSync(input.file, "utf8");
   const path = `${kind}.puml`;
   const check = await checkSyntax(source);
-  if (!check.valid) throw new DesignGateError([plantumlError(path, check)]);
-  if (!kindAccepts(kind, check.diagramType)) {
-    throw new DesignGateError([{ code: "kind_mismatch", path,
-      message: `kind "${kind}" não corresponde ao diagrama detectado "${check.diagramType}"` }]);
-  }
-  queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "design", name: path }, source);
+  validateUml(kind, path, check);
+  queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "uml", name: path }, source);
   return { ok: true, issue: issue.id, path };
 }
 
@@ -96,17 +93,27 @@ function requireImplementChild(queue: Queue, issue: Issue): void {
 
 async function packageFor(queue: Queue, issue: Issue): Promise<DesignPackage> {
   const { project, id: issueId } = issue;
-  const design_md = queue.artifacts.readText(project, { issueId, type: "design", name: "design.md" });
+  const design_md = queue.artifacts.readText(project, { issueId, type: "document", name: "design.md" });
   const diagrams: Record<string, string | null> = {};
   const checks: DesignDiagram[] = [];
   for (const kind of DESIGN_KINDS) {
-    const source = queue.artifacts.readText(project, { issueId, type: "design", name: `${kind}.puml` });
+    const source = queue.artifacts.readText(project, { issueId, type: "uml", name: `${kind}.puml` });
     diagrams[kind] = source;
     if (source !== null) checks.push({ kind, path: `${kind}.puml`, check: await checkSyntax(source) });
   }
   const errors = evaluateDesignGate(issue.architecture_changed, design_md, checks);
   return { issueId, design_md, architecture_changed: issue.architecture_changed,
     diagrams, validation: { ready: errors.length === 0, errors } };
+}
+
+function validateUml(kind: DesignDiagram["kind"], path: string,
+  check: DesignDiagram["check"]): void {
+  try { UmlArtifact.validate(kind, check); }
+  catch {
+    if (!check.valid) throw new DesignGateError([plantumlError(path, check)]);
+    throw new DesignGateError([{ code: "kind_mismatch", path,
+      message: `kind "${kind}" não corresponde ao diagrama detectado "${check.diagramType}"` }]);
+  }
 }
 
 function requireOpenDesignIssue(issue: Issue): void {

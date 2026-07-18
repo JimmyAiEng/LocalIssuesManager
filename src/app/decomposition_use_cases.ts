@@ -1,10 +1,9 @@
 import { readFileSync } from "node:fs";
 import { DomainError } from "../domain/domain_error.js";
-import { validatePlan } from "../domain/implementation_plan.js";
+import { ImplementationPlanArtifact } from "../domain/artifacts/implementation_plan_artifact.js";
+import { RequirementArtifact, type RequirementSet } from "../domain/artifacts/requirement_artifact.js";
 import type { Issue } from "../domain/issue_entity.js";
-import { clusterForTitle, parseAndValidatePrd, type Prd } from "../domain/prd.js";
 import { Queue } from "../domain/queue_repository.js";
-import { parseAndValidateRequirements } from "../domain/requirements.js";
 import { createIssue, relateIssues } from "./issue_use_cases.js";
 
 // Formato do arquivo --into: descreve as filhas do fan-out. mode concurrent (default) = filhas
@@ -12,7 +11,7 @@ import { createIssue, relateIssues } from "./issue_use_cases.js";
 // de criação, então a ordem do arquivo já é a ordem de execução). Small Plan por filha em `plan`.
 export type DecomposeChild = {
   title: string; type: string; action: string; problem: string;
-  acceptance_criteria?: string; cluster?: string; plan?: unknown;
+  acceptance_criteria?: string; plan?: unknown;
 };
 export type Decomposition = { mode?: string; children: DecomposeChild[] };
 export type DecomposeInput = { issueId: string; file: string; actor: string };
@@ -31,7 +30,8 @@ export function decomposeIssue(input: DecomposeInput, root?: string): { parent: 
     const issue = createChildIssue(parent, child, input.actor, root);
     relateIssues({ id: issue.id, relates: [parent.id], kind: "parent" }, root); // linhagem parent/child recíproca
     if (child.plan) queue.artifacts.writeText(parent.project,
-      { issueId: issue.id, type: "plan" }, JSON.stringify(validatePlan(child.plan)));
+      { issueId: issue.id, type: "implementation-plan" },
+      JSON.stringify(ImplementationPlanArtifact.validateParsed(child.plan)));
     if (mode === "sequential" && previous) relateIssues({ id: issue.id, relates: [previous], kind: "see-also" }, root);
     previous = issue.id;
     created.push(issue.id);
@@ -44,7 +44,7 @@ function createChildIssue(parent: Issue, child: DecomposeChild, actor: string, r
     problem: child.problem, acceptance_criteria: child.acceptance_criteria, actor }, root);
 }
 
-// Trava por action do pai: Planning só decompõe em Design (uma por cluster), Design só em Implement
+// Trava por action do pai: Planning só decompõe em Design (uma por Feature), Design só em Implement
 // (cada uma com o seu Small Plan). Valida cedo, com o mesmo critério que os gates depois cobram.
 function validateChildren(queue: Queue, parent: Issue, children: DecomposeChild[]): void {
   if (parent.action === "Planning") return validateDesignChildren(queue, parent, children);
@@ -52,29 +52,28 @@ function validateChildren(queue: Queue, parent: Issue, children: DecomposeChild[
   throw new DomainError(`Issue ${parent.id} (action=${parent.action}) não decompõe: só Planning (→Design) e Design (→Implement)`);
 }
 
-// A filha Design resolve o cluster pelo nome contido no título (convenção clusterForTitle): o
-// título precisa casar um cluster do PRD, senão o gate de Planning nunca a reconheceria.
+// Cada filha Design corresponde a uma Feature do RequirementArtifact pelo nome no título.
 function validateDesignChildren(queue: Queue, parent: Issue, children: DecomposeChild[]): void {
-  const prd = requireParentPrd(queue, parent);
+  const requirements = requireParentRequirements(queue, parent);
+  const names = RequirementArtifact.featureNames(requirements);
   for (const child of children) {
     if (child.action !== "Design") throw new DomainError(`Filha de Planning deve ter action=Design (recebido "${child.action}" em "${child.title}")`);
-    if (!clusterForTitle(prd, child.title)) throw new DomainError(`Título da filha Design "${child.title}" não casa nenhum cluster do PRD (${prd.clusters.map((c) => c.name).join(", ")}): inclua o nome do cluster no título`);
+    if (!names.some((name) => child.title.includes(name))) throw new DomainError(`Título da filha Design "${child.title}" não casa nenhuma Feature (${names.join(", ")}): inclua o nome da Feature no título`);
   }
 }
 
 function validateImplementChildren(children: DecomposeChild[]): void {
   for (const child of children) {
     if (child.action !== "Implement") throw new DomainError(`Filha de Design deve ter action=Implement (recebido "${child.action}" em "${child.title}")`);
-    if (child.plan === undefined) throw new DomainError(`Filha Implement "${child.title}" exige o Small Plan (campo "plan" no formato do implementation_plan)`);
-    validatePlan(child.plan); // valida antes de criar; erro claro por filha
+    if (child.plan === undefined) throw new DomainError(`Filha Implement "${child.title}" exige o Small Plan (campo "plan" no formato do implementation-plan)`);
+    ImplementationPlanArtifact.validateParsed(child.plan); // valida antes de criar
   }
 }
 
-function requireParentPrd(queue: Queue, parent: Issue): Prd {
-  const rawPrd = queue.artifacts.readText(parent.project, { issueId: parent.id, type: "prd" });
-  const rawReq = queue.artifacts.readText(parent.project, { issueId: parent.id, type: "requirements" });
-  if (rawPrd === null || rawReq === null) throw new DomainError(`Decompor Planning exige requisitos e PRD persistidos na Issue ${parent.id} (defina-os com 'issues requirements set' e 'issues prd set')`);
-  return parseAndValidatePrd(rawPrd, parseAndValidateRequirements(rawReq));
+function requireParentRequirements(queue: Queue, parent: Issue): RequirementSet {
+  const raw = queue.artifacts.readText(parent.project, { issueId: parent.id, type: "requirement" });
+  if (raw === null) throw new DomainError(`Decompor Planning exige Requirements persistidos na Issue ${parent.id} (defina-os com 'issues requirements set')`);
+  return RequirementArtifact.validate(raw);
 }
 
 function parseDecomposition(text: string): Decomposition {

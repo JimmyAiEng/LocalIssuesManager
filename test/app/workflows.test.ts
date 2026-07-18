@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { statusIssue } from "../../src/app/issue_use_cases.js";
 import { completeIssue } from "../../src/app/services/workflows/index.js";
-import { DesignGateError } from "../../src/domain/design_gate.js";
+import { DesignGateError } from "../../src/domain/gates/design_gate.js";
 import { Issue } from "../../src/domain/issue_entity.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 import type { ActionType } from "../../src/domain/value_objects.js";
@@ -35,9 +35,9 @@ test("dispatcher preserva DesignGateError estruturado", async () => {
 test("QA exige doc próprio, revalida corrupção e depois aprova", async () => {
   const { queue, issue } = context("QA");
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /sem o artefato/);
-  queue.artifacts.writeText("p", { issueId: issue.id, type: "doc" }, Array(301).fill("x").join(" "));
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, Array(301).fill("x").join(" "));
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /limite 300/);
-  queue.artifacts.writeText("p", { issueId: issue.id, type: "doc" }, "# QA");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "# QA");
   await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
 });
 
@@ -50,7 +50,7 @@ test("Deploy força humano antes de validar evidência", async () => {
 
 test("GatePolicy impede CLOSED com supervisão e permite AWAITING", async () => {
   const { queue, issue } = context("QA");
-  queue.artifacts.writeText("p", { issueId: issue.id, type: "doc" }, "# QA");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "# QA");
   issue.tag({ risk: "ALTO" }, "human");
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /decisão humana/);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { SyntaxCheck } from "../domain/design_gate.js";
+import type { SyntaxCheck } from "../domain/gates/design_gate.js";
 import { DomainError } from "../domain/domain_error.js";
 
 // Wrapper do engine PlantUML TeaVM (@plantuml/mcp-js), decisões D1/D2 da spec:

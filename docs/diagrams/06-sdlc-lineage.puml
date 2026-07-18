@@ -5,10 +5,10 @@ skinparam componentStyle rectangle
 top to bottom direction
 
 package "Planning (Issue)" {
-  [requirements Gherkin\n+ PRD (clusters)] as P
+  [RequirementArtifact\nFeatures Gherkin] as P
 }
 
-package "Design (1 por cluster)" {
+package "Design (1 por Feature)" {
   [design.md + .puml\n+ plan.json] as D1
   [design.md + .puml\n+ plan.json] as D2
 }
@@ -27,7 +27,7 @@ package "Deploy" {
   [PR + Code Review\n+ go/no-go humano] as DEP
 }
 
-P --> D1 : child (por cluster)
+P --> D1 : child (por Feature)
 P --> D2 : child
 D1 --> I1 : child
 D1 --> I2 : child

@@ -9,7 +9,7 @@ import {
   parseDesignKind,
   plantumlError,
   requireNonEmptyDoc,
-} from "../../src/domain/design_gate.js";
+} from "../../src/domain/gates/design_gate.js";
 
 const valid = (kind: DesignDiagram["kind"]): DesignDiagram => ({ kind, path: `${kind}.puml`, check: { valid: true } });
 

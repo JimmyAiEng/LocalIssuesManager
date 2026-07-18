@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { Attachment } from "../../src/domain/attachment_entity.js";
+import { MediaArtifact } from "../../src/domain/artifacts/media_artifact.js";
 import { Issue } from "../../src/domain/issue_entity.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
@@ -204,7 +204,7 @@ test("blob de anexo é gravado fora das pastas de status e sobrevive à transiç
   const issue = Issue.create({ ...body, project: "p" }, "pi");
   issue.claim("pi");
   queue.save(issue);
-  const attachment = Attachment.create({ filename: "prova.png", mediaType: "image/png", size: 3 }).toJSON();
+  const attachment = MediaArtifact.create({ filename: "prova.png", mediaType: "image/png", size: 3 }).toJSON();
   queue.writeAttachment("p", attachment, Buffer.from("png"));
 
   // move a Issue de claimed -> awaiting (renomeia a pasta do JSON)
@@ -218,18 +218,17 @@ test("blob de anexo é gravado fora das pastas de status e sobrevive à transiç
   assert.equal(queue.findAttachment("00000000-0000-0000-0000-000000000000"), null);
 });
 
-test("purgeClosed remove anexos, Artefato .md, design/, requirements e prd da Issue purgada", () => {
+test("purgeClosed remove Media, Document, UML e Requirement Artifacts da Issue", () => {
   const dir = root();
   const queue = new Queue(dir);
   const issue = Issue.create({ ...body, project: "p" }, "pi");
   issue.id = "withall";
-  const att = Attachment.create({ filename: "a.png", mediaType: "image/png", size: 3 }).toJSON();
+  const att = MediaArtifact.create({ filename: "a.png", mediaType: "image/png", size: 3 }).toJSON();
   issue.comment("pi", "veja", [att]);
   queue.writeAttachment("p", att, Buffer.from("png"));
   queue.writeArtifact("p", issue.id, "# artefato");
   queue.writeDesign("p", issue.id, "design.md", "# doc");
   queue.writeRequirements("p", issue.id, JSON.stringify({ features: [] }));
-  queue.writePrd("p", issue.id, JSON.stringify({ visao: "v", clusters: [] }));
   issue.status = "CLOSED"; // força o estado terminal no JSON (o purge lê status do disco)
   issue.status_changed_at = "2026-01-01T00:00:00.000Z";
   mkdirSync(join(dir, "projects/p/closed"), { recursive: true });
@@ -238,10 +237,9 @@ test("purgeClosed remove anexos, Artefato .md, design/, requirements e prd da Is
   const artifact = join(dir, "projects/p/artifacts", `${issue.id}.md`);
   const design = join(dir, "projects/p/design", issue.id);
   const requirements = join(dir, "projects/p/requirements", `${issue.id}.json`);
-  const prd = join(dir, "projects/p/prd", `${issue.id}.json`);
-  for (const path of [blob, artifact, design, requirements, prd]) assert.equal(existsSync(path), true);
+  for (const path of [blob, artifact, design, requirements]) assert.equal(existsSync(path), true);
   assert.deepEqual(queue.purgeClosed(new Date("2026-07-14")), ["withall"]);
-  for (const path of [blob, artifact, design, requirements, prd]) assert.equal(existsSync(path), false);
+  for (const path of [blob, artifact, design, requirements]) assert.equal(existsSync(path), false);
 });
 
 test("findAttachment pula projeto sem pasta attachments até achar no projeto seguinte", () => {
@@ -250,7 +248,7 @@ test("findAttachment pula projeto sem pasta attachments até achar no projeto se
   // "aaa" nunca recebe writeAttachment: nunca cria a pasta attachments (força o continue)
   queue.save(Issue.create({ ...body, project: "aaa" }, "pi"));
   queue.save(Issue.create({ ...body, project: "bbb" }, "pi"));
-  const attachment = Attachment.create({ filename: "prova.png", mediaType: "image/png", size: 3 }).toJSON();
+  const attachment = MediaArtifact.create({ filename: "prova.png", mediaType: "image/png", size: 3 }).toJSON();
   queue.writeAttachment("bbb", attachment, Buffer.from("png"));
   const found = queue.findAttachment(attachment.id);
   assert.equal(found?.mediaType, "image/png");
@@ -283,7 +281,7 @@ test("Design faz round-trip write/read/list por Issue e regravar substitui", () 
   queue.writeDesign("space / project", "iid", "class.puml", "@startuml\n@enduml");
   queue.writeDesign("space / project", "iid", "design.md", "# doc v2");
   assert.equal(queue.readDesign("space / project", "iid", "design.md"), "# doc v2");
-  assert.deepEqual(queue.listDesign("space / project", "iid").sort(), ["class.puml", "design.md"]);
+  assert.deepEqual(queue.listDesign("space / project", "iid"), ["class.puml"]);
   const segment = encodeURIComponent("space / project");
   assert.equal(existsSync(join(dir, "projects", segment, "design", "iid", "class.puml")), true);
 });

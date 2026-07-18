@@ -8,7 +8,7 @@ import test from "node:test";
 // E2E do WORKFLOW PRINCIPAL INTEIRO pela superfície real do usuário-IA: o binário `issues`
 // como processo (execFileSync). Caminha Planning -> Design (x2, um com mudança de arquitetura
 // e um atalho) -> Implement (x4) -> QA -> Deploy, passando por TODOS os gates de ponta a ponta.
-// N=2 clusters (2 Design), M=2 (4 Implement no total) — cobre os dois ramos do "Changed?".
+// N=2 Features (2 Design), M=2 (4 Implement no total) — cobre os dois ramos do "Changed?".
 const bin = resolve("bin/issues");
 const run = (args: string[], vars: NodeJS.ProcessEnv): string => execFileSync(bin, args, { env: vars, encoding: "utf8" });
 const attempt = (args: string[], vars: NodeJS.ProcessEnv) => spawnSync(bin, args, { env: vars, encoding: "utf8" });
@@ -47,12 +47,6 @@ const lastLine = (text: string): string => text.trim().split("\n").at(-1) ?? "";
 const FEATURE_LOGIN = "Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel";
 const FEATURE_CADASTRO = "Feature: Cadastro\n  Como um usuário\n  Eu quero poder me cadastrar\n  Para que eu tenha conta\n\n  Scenario: ok\n    Given o formulário\n    When submeto\n    Then a conta existe";
 const REQUIREMENTS = JSON.stringify({ features: [FEATURE_LOGIN, FEATURE_CADASTRO] });
-// 2 clusters; cada Feature em exatamente 1 cluster. O NOME do cluster viaja no título da filha Design.
-const PRD = JSON.stringify({
-  visao: "Acesso ao sistema", requisitos_funcionais: ["Entrar", "Cadastrar"],
-  requisitos_nao_funcionais: ["Rápido"],
-  clusters: [{ name: "Autenticacao", features: ["Login"] }, { name: "Registro", features: ["Cadastro"] }],
-});
 const PLAN = JSON.stringify({ objetivo: "o", passos: ["p"], arquivos: ["a"], criterio_pronto: "c" });
 // PlantUML válido por kind, cobrindo os 4 níveis (design_gate KIND_LEVEL): component→high_level,
 // package→package, class→class, state→interface_data_model.
@@ -82,22 +76,21 @@ function decompose(vars: NodeJS.ProcessEnv, parent: string, children: object[]):
 test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> QA -> Deploy, todos os gates", () => {
   const vars = freshEnv();
 
-  // === PLANNING: requisitos Gherkin + PRD (2 clusters) + fan-out 1->2 Design ===================
+  // === PLANNING: RequirementArtifact com 2 Features + fan-out 1->2 Design ========================
   const planning = create(vars, "Planning", "Planning raiz");
   claim(vars, planning);
   run(["requirements", "set", "--id", planning, "--file", fixture("req.json", REQUIREMENTS)], vars);
-  run(["prd", "set", "--id", planning, "--file", fixture("prd.json", PRD)], vars);
 
-  // Gate negativo: com requisitos+PRD mas SEM as filhas Design, o Planning não fecha.
+  // Gate negativo: com Requirements mas SEM as filhas Design, o Planning não fecha.
   const noChildren = attempt(["status", "--id", planning, "--agent", "pi", "--status", "CLOSED", "--comment", "fim", "--reason", "concluido"], vars);
   assert.equal(noChildren.status, 1);
-  assert.match(noChildren.stderr, /não fecha sem decompor o cluster/);
+  assert.match(noChildren.stderr, /não fecha sem decompor a Feature/);
 
   const [designArch, designShortcut] = decompose(vars, planning, [
-    { title: "Design Autenticacao", type: "Feat", action: "Design", problem: "desenhar auth" },
-    { title: "Design Registro", type: "Feat", action: "Design", problem: "desenhar registro" },
+    { title: "Design Login", type: "Feat", action: "Design", problem: "desenhar auth" },
+    { title: "Design Cadastro", type: "Feat", action: "Design", problem: "desenhar registro" },
   ]);
-  // Com as 2 filhas Design (uma por cluster), o Planning fecha AFK.
+  // Com as 2 filhas Design (uma por Feature), o Planning fecha AFK.
   assert.equal(closeAgent(vars, planning).status, "CLOSED");
 
   // === DESIGN A (Autenticacao): architecture_changed=true — exige 4 níveis UML + aceite humano ==

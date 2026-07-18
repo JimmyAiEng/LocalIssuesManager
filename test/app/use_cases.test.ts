@@ -398,9 +398,9 @@ test("setArtifact grava o .md da Issue; artefato na criação idem; view injeta"
   const dir = root();
   const issue = createIssue({ ...body, title: "art", artifact: "# na criação" }, dir);
   const queue = new Queue(dir);
-  assert.equal(queue.artifacts.readText("app", { issueId: issue.id, type: "doc" }), "# na criação");
+  assert.equal(queue.artifacts.readText("app", { issueId: issue.id, type: "document" }), "# na criação");
   setArtifact({ issueId: issue.id, content: "# issue doc" }, dir);
-  assert.equal(queue.artifacts.readText("app", { issueId: issue.id, type: "doc" }), "# issue doc");
+  assert.equal(queue.artifacts.readText("app", { issueId: issue.id, type: "document" }), "# issue doc");
   assert.equal(getIssue(issue.id, dir).artifact, "# issue doc");
   assert.equal(getIssue(createIssue({ ...body, title: "sem art" }, dir).id, dir).artifact, null);
 });

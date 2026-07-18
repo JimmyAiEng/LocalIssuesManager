@@ -1,4 +1,4 @@
-import type { AttachmentData } from "./attachment_entity.js";
+import type { MediaArtifactData } from "./artifacts/media_artifact.js";
 import { DomainError } from "./domain_error.js";
 
 export const AGENT_IDS = ["cursor", "claude-code", "codex", "pi"] as const;
@@ -100,7 +100,7 @@ export type Thread = {
   status: IssueStatus;
   closed_reason: ClosedReason | null;
   decided_by?: Actor; // presente só na decisão humana (decide): audita quem aprovou o Code Review final
-  attachments?: AttachmentData[]; // ausente em threads antigas e em transições sem anexo
+  attachments?: MediaArtifactData[]; // ausente em threads antigas e em transições sem anexo
   role?: Role; // papel especializado do workflow (auditoria); ausente em threads sem papel declarado
 };
 

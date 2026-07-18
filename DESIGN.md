@@ -22,8 +22,8 @@ Filesystem / Git / PlantUML / project checks
 ```
 
 - `Issue` protege identidade, transições, Owner, Thread, tags e relações.
-- `Artifact` valida os dados intrínsecos de cada Artifact Type.
-- `Workflow` é selecionado pela `Action` e não é persistido.
+- `domain/artifacts/` define o padrão de Artifact e a validação intrínseca de cada Artifact Type.
+- `domain/gates/` seleciona um Gate por `Action`; Gates não são persistidos.
 - `GatePolicy` combina validade da entrega e necessidade de decisão humana.
 - `app/services/workflows` coleta evidências e orquestra a conclusão por Action.
 - `Queue` persiste Issues e projetos. `ArtifactStore` concentra a persistência de Artifacts.
@@ -58,31 +58,32 @@ A Issue não executa PlantUML, Git, checks, consultas à linhagem ou regras espe
 Artifact Types:
 
 ```text
-doc | requirements | prd | design | plan | media
+media | document | requirement | uml | implementation-plan
 ```
 
 Regras intrínsecas:
 
-- `doc` e documentos breves: até 300 palavras;
-- `requirements`: Features Gherkin válidas;
-- `prd`: estrutura e referências válidas contra Requirements;
-- `design`: documentos breves e diagramas validados pelo adapter PlantUML;
-- `plan`: estrutura de Small Plan válida;
-- `media`: imagem/vídeo suportado, até 25 MiB.
+- `DocumentArtifact`: Markdown breve, até 300 palavras;
+- `RequirementArtifact`: PRD/Requirements como conjunto de Features Gherkin válidas;
+- `UmlArtifact`: kind e sintaxe UML compatíveis com o resultado do adapter PlantUML;
+- `ImplementationPlanArtifact`: estrutura de Small Plan válida;
+- `MediaArtifact`: imagem/vídeo suportado, até 25 MiB.
+
+Cada tipo vive em `src/domain/artifacts/*_artifact.ts` e expõe sua validação interna. `artifact.ts` mantém a identidade e o dispatcher comum; `artifact_store.ts` preserva o layout físico.
 
 `Attachment` permanece como façade compatível para o contrato persistido da Thread e para `/api/attachments`, mas é internamente um Artifact `media`.
 
-### Workflow e GatePolicy
+### Gates e GatePolicy
 
-`workflowFor(action)` seleciona:
+`gateFor(action)` seleciona um Gate com o mesmo contrato declarativo: requisitos de Artifacts, execução de código e aprovação humana.
 
-| Action | Workflow | Entrega principal |
-|---|---|---|
-| Planning | Requirement Engineering | Requirements + PRD + filhas Design |
-| Design | Design | Plan; pacote UML quando arquitetura muda; filhas Implement |
-| Implement | Unit of Work | Worktree + TDD configurado + checks do Projeto |
-| QA | Quality Review | Artifact `doc` de validação |
-| Deploy | Merge/PR Analysis | PR + análise; decisão humana obrigatória |
+| Action | Artifacts | Execução de código | Aprovação humana |
+|---|---|---|---|
+| Planning | RequirementArtifact | Não | Condicional às tags |
+| Design | ImplementationPlanArtifact; Document + UML quando arquitetura muda | PlantUML quando arquitetura muda | Quando arquitetura muda ou pelas tags |
+| Implement | Nenhum | TDD/checks quando configurados no Projeto | Condicional às tags |
+| QA | Artifact `doc` de validação | Não | Condicional às tags |
+| Deploy | Nenhum | Análise externa do PR | Sempre |
 
 `GateAssessment` possui três resultados:
 
@@ -109,7 +110,7 @@ src/app/services/workflows/
 Cada módulo conhece somente a orquestração da sua Action. Dependências externas permanecem na aplicação:
 
 - PlantUML: `plantuml_check.ts`;
-- Git/TDD: `implement_gate.ts`;
+- Git/TDD: `implement_execution.ts`;
 - checks do projeto: `project_use_cases.ts`;
 - filesystem: `Queue` e `ArtifactStore` concretos.
 
@@ -125,7 +126,6 @@ projects/<project>/
   open|claimed|awaiting|closed/<issue-id>.json
   artifacts/<issue-id>.md
   requirements/<issue-id>.json
-  prd/<issue-id>.json
   design/<issue-id>/{design.md,plan.json,<kind>.puml}
   attachments/<artifact-id>.<ext>
 ```

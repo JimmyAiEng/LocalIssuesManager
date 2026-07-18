@@ -8,7 +8,7 @@ import { decomposeIssue } from "../../src/app/decomposition_use_cases.js";
 import { createIssue, decideIssue, getIssue, nextIssue, statusIssue } from "../../src/app/issue_use_cases.js";
 import { setPlan } from "../../src/app/plan_use_cases.js";
 import { createProject } from "../../src/app/project_use_cases.js";
-import { DesignGateError } from "../../src/domain/design_gate.js";
+import { DesignGateError } from "../../src/domain/gates/design_gate.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
 const VALID_CLASS = "@startuml\nclass A\n@enduml";
@@ -64,7 +64,7 @@ test("setDesignDoc grava design/<issueId>/design.md", () => {
   const dir = root();
   const issueId = designIssue(dir);
   setDesignDoc({ issueId, file: file(dir, "d.md", "# Design") }, dir);
-  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "design", name: "design.md" }), "# Design");
+  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "document", name: "design.md" }), "# Design");
 });
 
 test("setDesignDoc rejeita Issue inexistente, non-Design e CLOSED", async () => {
@@ -88,7 +88,7 @@ test("setDesignDoc com doc vazio lança empty_doc e nada é gravado; doc grande 
     (error: unknown) => error instanceof DesignGateError && error.errors[0].code === "empty_doc");
   const big = file(dir, "grande.md", Array(301).fill("x").join(" "));
   assert.throws(() => setDesignDoc({ issueId, file: big }, dir), /limite 300/);
-  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "design", name: "design.md" }), null);
+  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "document", name: "design.md" }), null);
 });
 
 test("addDesignDiagram com PlantUML inválido reporta line/message e nada é gravado", async () => {
@@ -98,7 +98,7 @@ test("addDesignDiagram com PlantUML inválido reporta line/message e nada é gra
     addDesignDiagram({ issueId, kind: "class", file: file(dir, "bad.puml", INVALID) }, dir),
     (error: unknown) => error instanceof DesignGateError && error.errors[0].code === "plantuml_invalid"
       && error.errors[0].line === 2 && error.errors[0].path === "class.puml");
-  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "design", name: "class.puml" }), null);
+  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "uml", name: "class.puml" }), null);
 });
 
 test("addDesignDiagram com kind incompatível lança kind_mismatch citando kind e diagramType", async () => {
@@ -108,7 +108,7 @@ test("addDesignDiagram com kind incompatível lança kind_mismatch citando kind 
     addDesignDiagram({ issueId, kind: "state", file: file(dir, "c.puml", VALID_CLASS) }, dir),
     (error: unknown) => error instanceof DesignGateError && error.errors[0].code === "kind_mismatch"
       && /state/.test(error.errors[0].message) && /ClassDiagram/.test(error.errors[0].message));
-  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "design", name: "state.puml" }), null);
+  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "uml", name: "state.puml" }), null);
 });
 
 test("addDesignDiagram com kind inválido lança invalid_kind", async () => {
@@ -123,10 +123,10 @@ test("addDesignDiagram grava <kind>.puml e regravar substitui", async () => {
   const dir = root();
   const issueId = designIssue(dir);
   await addDesignDiagram({ issueId, kind: "class", file: file(dir, "a.puml", VALID_CLASS) }, dir);
-  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "design", name: "class.puml" }), VALID_CLASS);
+  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "uml", name: "class.puml" }), VALID_CLASS);
   const updated = "@startuml\nclass B\n@enduml";
   await addDesignDiagram({ issueId, kind: "class", file: file(dir, "b.puml", updated) }, dir);
-  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "design", name: "class.puml" }), updated);
+  assert.equal(new Queue(dir).artifacts.readText("app", { issueId, type: "uml", name: "class.puml" }), updated);
 });
 
 test("getDesignPackage com mudança de arquitetura e 4 níveis devolve ready true", async () => {
@@ -184,7 +184,7 @@ test("getDesignPackage é somente leitura, funciona com Issue CLOSED e re-checa 
   decideIssue({ id: issueId, human: true, status: "CLOSED", comment: "aceito", closed_reason: "concluido" }, dir);
   assert.equal((await getDesignPackage({ issueId }, dir)).validation.ready, true);
 
-  new Queue(dir).artifacts.writeText("app", { issueId, type: "design", name: "class.puml" }, INVALID); // corrompido fora do use case
+  new Queue(dir).artifacts.writeText("app", { issueId, type: "uml", name: "class.puml" }, INVALID); // corrompido fora do use case
   const validation = (await getDesignPackage({ issueId }, dir)).validation;
   assert.equal(validation.ready, false);
   assert.deepEqual(validation.errors.map((error) => error.code), ["plantuml_invalid", "missing_level"]);

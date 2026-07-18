@@ -1,4 +1,5 @@
-import { DomainError } from "./domain_error.js";
+import { DomainError } from "../domain_error.js";
+import type { ArtifactDefinition } from "./artifact.js";
 
 // Artefato de plano de implementação: JSON validável por código (estrutura), sem I/O.
 // Objetivo, passos ordenados, arquivos afetados e critério de pronto — o mínimo para
@@ -10,23 +11,21 @@ export type ImplementationPlan = {
   criterio_pronto: string;
 };
 
-// Valida o artefato bruto e devolve-o normalizado, acumulando TODAS as violações
-// (análogo ao gate de Design): plano fraco denuncia todos os buracos de uma vez.
-export function validatePlan(raw: unknown): ImplementationPlan {
+export const ImplementationPlanArtifact = {
+  type: "implementation-plan" as const,
+  validate(rawText: string): ImplementationPlan {
+    let parsed: unknown;
+    try { parsed = JSON.parse(rawText); }
+    catch { throw new DomainError("Plano deve ser um arquivo JSON válido"); }
+    return validateParsed(parsed);
+  },
+  validateParsed,
+} satisfies ArtifactDefinition;
+
+function validateParsed(raw: unknown): ImplementationPlan {
   const errors = collectErrors(raw);
   if (errors.length > 0) throw new DomainError(errors.join("; "));
   return raw as ImplementationPlan;
-}
-
-// Conveniência para a camada app: parseia o texto JSON (só JSON é aceito) e valida.
-export function parseAndValidatePlan(rawText: string): ImplementationPlan {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    throw new DomainError("Plano deve ser um arquivo JSON válido");
-  }
-  return validatePlan(parsed);
 }
 
 function collectErrors(raw: unknown): string[] {

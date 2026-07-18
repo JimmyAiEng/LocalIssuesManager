@@ -1,9 +1,20 @@
-import { DomainError } from "./domain_error.js";
+import { UML_KINDS, UmlArtifact, type UmlKind, type UmlSyntaxCheck } from "../artifacts/uml_artifact.js";
+import { DomainError } from "../domain_error.js";
+import type { GateDefinition } from "./gate.js";
+
+export const DESIGN_GATE: GateDefinition = {
+  action: "Design",
+  name: "Design",
+  artifacts: { mode: "required", types: ["implementation-plan"],
+    conditional: { types: ["document", "uml"], condition: "architecture_changed=true" } },
+  codeExecution: { mode: "conditional", description: "validação PlantUML", condition: "architecture_changed=true" },
+  humanApproval: { mode: "conditional", condition: "architecture_changed=true ou tags de autonomia" },
+};
 
 // Regras puras do gate de Design (sem I/O): kinds aceitos, heurística
 // kind↔diagramType (decisão D3 da spec) e avaliação da entrega.
-export const DESIGN_KINDS = ["class", "component", "package", "activity", "state", "deployment"] as const;
-export type DesignKind = (typeof DESIGN_KINDS)[number];
+export const DESIGN_KINDS = UML_KINDS;
+export type DesignKind = UmlKind;
 
 // Os 4 níveis de arquitetura que o workflow exige quando a arquitetura muda (top-down).
 export const DESIGN_LEVELS = ["high_level", "package", "class", "interface_data_model"] as const;
@@ -26,12 +37,7 @@ const LEVEL_LABEL: Record<DesignLevel, string> = {
 };
 
 // Shape relevante do retorno de engine.checkSyntax (@plantuml/mcp-js).
-export type SyntaxCheck = {
-  valid: boolean;
-  diagramType?: string;
-  errorLineNumber?: number;
-  errorMessage?: string;
-};
+export type SyntaxCheck = UmlSyntaxCheck;
 
 export type DesignErrorCode =
   | "invalid_kind"
@@ -64,20 +70,9 @@ export function parseDesignKind(raw: string): DesignKind {
   return raw as DesignKind;
 }
 
-// D3 — verificado empiricamente: o engine não distingue component/package/deployment
-// (todos DescriptionDiagram) e reporta activity como ActivityDiagram3.
-const KIND_ACCEPTS: Record<DesignKind, (diagramType: string) => boolean> = {
-  class: (type) => type === "ClassDiagram",
-  state: (type) => type === "StateDiagram",
-  activity: (type) => type.startsWith("ActivityDiagram"),
-  component: (type) => type === "DescriptionDiagram",
-  package: (type) => type === "DescriptionDiagram",
-  deployment: (type) => type === "DescriptionDiagram",
-};
-
 // diagramType ausente no retorno do engine → aceita (heurística documentada da spec).
 export function kindAccepts(kind: DesignKind, diagramType?: string): boolean {
-  return diagramType === undefined || KIND_ACCEPTS[kind](diagramType);
+  return UmlArtifact.accepts(kind, diagramType);
 }
 
 export function requireNonEmptyDoc(content: string): void {

@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ArtifactStore } from "./artifact_store.js";
-import type { AttachmentData, MediaType } from "./attachment_entity.js";
+import { ArtifactStore } from "./artifacts/artifact_store.js";
+import type { TextArtifactType } from "./artifacts/artifact.js";
+import type { MediaArtifactData, MediaType } from "./artifacts/media_artifact.js";
 import { ConflictError, NotFoundError } from "./domain_error.js";
 import { Issue, type IssueData } from "./issue_entity.js";
 import { defaultRoot } from "./root.js";
@@ -80,31 +81,27 @@ export class Queue {
 
   // Compatibility façade: novos callers usam `queue.artifacts`; estes aliases preservam API local.
   writeArtifact(project: string, issueId: string, content: string): void {
-    this.artifacts.writeText(project, { issueId, type: "doc" }, content);
+    this.artifacts.writeText(project, { issueId, type: "document" }, content);
   }
   readArtifact(project: string, issueId: string): string | null {
-    return this.artifacts.readText(project, { issueId, type: "doc" });
+    return this.artifacts.readText(project, { issueId, type: "document" });
   }
   writeDesign(project: string, issueId: string, name: string, content: string): void {
-    this.artifacts.writeText(project, { issueId, type: name === "plan.json" ? "plan" : "design", name }, content);
+    this.artifacts.writeText(project, { issueId, type: designArtifactType(name), name }, content);
   }
   readDesign(project: string, issueId: string, name: string): string | null {
-    return this.artifacts.readText(project, { issueId, type: name === "plan.json" ? "plan" : "design", name });
+    return this.artifacts.readText(project, { issueId, type: designArtifactType(name), name });
   }
-  listDesign(project: string, issueId: string): string[] { return this.artifacts.list(project, issueId, "design"); }
+  listDesign(project: string, issueId: string): string[] { return this.artifacts.list(project, issueId, "uml"); }
   writeRequirements(project: string, issueId: string, content: string): void {
-    this.artifacts.writeText(project, { issueId, type: "requirements" }, content);
+    this.artifacts.writeText(project, { issueId, type: "requirement" }, content);
   }
   readRequirements(project: string, issueId: string): string | null {
-    return this.artifacts.readText(project, { issueId, type: "requirements" });
+    return this.artifacts.readText(project, { issueId, type: "requirement" });
   }
-  writePrd(project: string, issueId: string, content: string): void {
-    this.artifacts.writeText(project, { issueId, type: "prd" }, content);
-  }
-  readPrd(project: string, issueId: string): string | null {
-    return this.artifacts.readText(project, { issueId, type: "prd" });
-  }
-  writeAttachment(project: string, attachment: AttachmentData, bytes: Buffer): void {
+  writePrd(project: string, issueId: string, content: string): void { this.writeRequirements(project, issueId, content); }
+  readPrd(project: string, issueId: string): string | null { return this.readRequirements(project, issueId); }
+  writeAttachment(project: string, attachment: MediaArtifactData, bytes: Buffer): void {
     this.artifacts.writeMedia(project, attachment, bytes);
   }
   findAttachment(id: string): { path: string; mediaType: MediaType } | null { return this.artifacts.findMedia(id); }
@@ -185,6 +182,11 @@ export class Queue {
   #path(project: string, status: IssueStatus, id: string): string {
     return join(this.#root, "projects", projectSegment(project), FOLDERS[status], `${id}.json`);
   }
+}
+
+function designArtifactType(name: string): TextArtifactType {
+  if (name === "plan.json") return "implementation-plan";
+  return name.endsWith(".puml") ? "uml" : "document";
 }
 
 export function projectSegment(project: string): string {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { type Commit, checkFailureMessage, matchesTestPath, tddViolation } from "../../src/app/implement_gate.js";
+import { type Commit, checkFailureMessage, matchesTestPath, tddViolation } from "../../src/app/implement_execution.js";
 
 const TEST_PATHS = ["test/", "**/*.test.ts"];
 const commit = (sha: string, subject: string, files: string[]): Commit => ({ sha, subject, files });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assessGate } from "../../src/domain/gate_policy.js";
+import { assessGate } from "../../src/domain/gates/gate_policy.js";
 
 test("GatePolicy aprova entrega AFK válida", () => {
   assert.deepEqual(assessGate({ risk: "BAIXO", complexity: "BAIXA" }), { outcome: "approved" });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Attachment } from "../../src/domain/attachment_entity.js";
+import { MediaArtifact } from "../../src/domain/artifacts/media_artifact.js";
 import { Issue } from "../../src/domain/issue_entity.js";
 import { ACTION_TYPES, type ActionType, type IssueType } from "../../src/domain/value_objects.js";
 import type { IssueView, RelatedView } from "../../src/app/issue_use_cases.js";
@@ -84,12 +84,12 @@ test("Issue Implement filha recebe o plano do Design pai no prompt", () => {
     /Plano de implementação/);
 });
 
-test("Issue Design filha recebe só as Features do seu cluster no prompt (não o PRD inteiro)", () => {
-  const cluster = ["Feature: Login\n  Scenario: ok", "Feature: Logout\n  Scenario: ok"];
-  const text = composePrompt(makeView("Design", { cluster }));
-  assert.match(text, /## Cluster \(Features desta Issue Design\)/);
+test("Issue Design filha recebe sua Feature no prompt", () => {
+  const features = ["Feature: Login\n  Scenario: ok", "Feature: Logout\n  Scenario: ok"];
+  const text = composePrompt(makeView("Design", { features }));
+  assert.match(text, /## Feature desta Issue Design/);
   assert.match(text, /Feature: Login[\s\S]*Feature: Logout/);
-  assert.doesNotMatch(composePrompt(makeView("Design")), /## Cluster/);
+  assert.doesNotMatch(composePrompt(makeView("Design")), /## Feature/);
 });
 
 test("a cadeia de ancestrais aparece no prompt, do mais próximo ao mais distante", () => {
@@ -105,7 +105,7 @@ test("a cadeia de ancestrais aparece no prompt, do mais próximo ao mais distant
 
 test("anexos ficam localizáveis ao agente: caminho em disco + URL; sem anexo, sem linha", () => {
   assert.doesNotMatch(composePrompt(makeView()), /Anexos/);
-  const att = Attachment.create({ filename: "erro.png", mediaType: "image/png", size: 10 });
+  const att = MediaArtifact.create({ filename: "erro.png", mediaType: "image/png", size: 10 });
   const issue = Issue.create({ title: "T", project: "de mo", type: "Feat", action: "Implement",
     problem: "p", acceptance_criteria: "c", attachments: [att.toJSON()] }, "human");
   const text = composePrompt({ ...issue.toJSON(), artifact: null, related: [], ancestors: [] });

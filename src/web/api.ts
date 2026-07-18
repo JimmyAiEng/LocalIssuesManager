@@ -7,7 +7,7 @@ import {
 } from "../app/issue_use_cases.js";
 import { renderSvg, sourceHash } from "../app/plantuml_check.js";
 import { getRequirements } from "../app/requirements_use_cases.js";
-import { DESIGN_KINDS, DesignGateError } from "../domain/design_gate.js";
+import { DESIGN_KINDS, DesignGateError } from "../domain/gates/design_gate.js";
 import { ConflictError, DomainError, NotFoundError } from "../domain/domain_error.js";
 import { Queue } from "../domain/queue_repository.js";
 
@@ -128,7 +128,7 @@ async function serveDiagram(request: IncomingMessage, response: ServerResponse, 
   if (!(DESIGN_KINDS as readonly string[]).includes(kind)) return respond(response, 404, { error: "Not found" });
   const queue = new Queue(root);
   const issue = queue.loadRequired(issueId); // inexistente → 404 de domínio
-  const source = queue.artifacts.readText(issue.project, { issueId: issue.id, type: "design", name: `${kind}.puml` });
+  const source = queue.artifacts.readText(issue.project, { issueId: issue.id, type: "uml", name: `${kind}.puml` });
   if (source === null) return respond(response, 404, { error: `Diagrama ${kind}.puml não entregue na Issue ${issue.id}` });
   const etag = `"${sourceHash(source)}"`;
   if (request.headers["if-none-match"] === etag) {

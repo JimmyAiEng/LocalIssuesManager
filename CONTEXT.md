@@ -6,20 +6,23 @@ Modelo Issue-only (ADR 0005): não existem Tickets.
 ## Language
 
 **Issue**:
-Unidade de trabalho de uma sessão, persistida com título, projeto, TAG (tipo), Action, problema e status; pequena, com uma entrega única e governada pelo Workflow da sua Action.
+Unidade de trabalho de uma sessão, persistida com título, projeto, TAG (tipo), Action, problema e status; pequena, com uma entrega única e governada pelo Gate da sua Action.
 Trabalho maior vira novas Issues relacionadas.
 _Avoid_: task, card, item, Ticket
 
 **Action**:
 Tipo imutável da entrega esperada da Issue: `Planning` | `Design` | `Implement` | `QA` | `Deploy`.
-Seleciona o Workflow que governa a Issue.
+Seleciona o Workflow e o Gate que governam a Issue.
 _Avoid_: phase (como campo), stage, ticket type
 
 **Workflow**:
-Processo do SDLC que governa a Issue, selecionado pela Action: define os Artifact Types exigidos e a GatePolicy da conclusão, segundo as regras de `docs/AIDevelopmentWorkfow.drawio`.
-Não é persistido — a instância (jornada) é a linhagem de Issues até o problema original ser resolvido.
+Processo do SDLC executado para entregar a Action. Não é persistido — a instância (jornada) é a linhagem de Issues até o problema original ser resolvido.
 Nomes: Requirement Engineering (Planning), Design (Design), Unit of Work (Implement), Quality Review (QA) e Merge/PR Analysis (Deploy).
 _Avoid_: workflow persistido, pipeline, fase (como entidade), process instance
+
+**Gate**:
+Contrato de conclusão selecionado pela Action. Declara, no mesmo padrão, requisitos de Artifacts, execução de código e aprovação humana (`none`, `required` ou `conditional`).
+_Avoid_: regra de gate espalhada, gate com I/O
 
 **Relates (linhagem)**:
 Ligação opcional entre Issues (`relates`); quem reivindica uma Issue recebe os Artifacts das relacionadas no prompt. É o veículo de herança de contexto entre sessões (ex.: design congelado → implementação).
@@ -27,11 +30,11 @@ _Avoid_: dependency, blocker, parent/child
 
 **Artifact**:
 Todo item persistido junto à Issue e utilizável pelo trabalho, tipado por um Artifact Type.
-O Workflow define quais tipos a conclusão exige; quem reivindica herda os Artifacts da linhagem.
+O Gate define quais tipos a conclusão exige; quem reivindica herda os Artifacts da linhagem.
 _Avoid_: Artefato (só o `.md`), attachment/anexo (como conceito separado), documento
 
 **Artifact Type**:
-Tipo do Artifact, cada um com as suas regras: `doc` (Markdown de contexto, ≤300 palavras), `prd`, `requirements` (Gherkin), `design` (design.md + diagramas PlantUML), `plan` e `media` (imagem/vídeo, ≤25MB).
+Tipo do Artifact: `DocumentArtifact` (Markdown, ≤300 palavras), `RequirementArtifact` (PRD/Requirements como conjunto de Features Gherkin), `UmlArtifact`, `ImplementationPlanArtifact` e `MediaArtifact` (imagem/vídeo, ≤25MB).
 _Avoid_: kind, mediaType (como conceito)
 
 **Evidência**:
@@ -71,7 +74,7 @@ Regra de roteamento da GatePolicy, derivada das tags da Issue: `human_need=HITL`
 _Avoid_: human_presence (extinto), permission level
 
 **GatePolicy**:
-Política do Workflow avaliada quando a IA conclui a Issue: valida a entrega exigida e autoriza o desfecho — aprovada permite `CLOSED` ou escalonamento voluntário para `AWAITING`, decisão humana obrigatória permite somente `AWAITING`, reprovada bloqueia a conclusão.
+Política do Gate avaliada quando a IA conclui a Issue: valida a entrega exigida e autoriza o desfecho — aprovada permite `CLOSED` ou escalonamento voluntário para `AWAITING`, decisão humana obrigatória permite somente `AWAITING`, reprovada bloqueia a conclusão.
 _Avoid_: Validation, Gate de conclusão, G1–G4 (gates humanos do modelo antigo), approval step
 
 **Limite de brevidade**:

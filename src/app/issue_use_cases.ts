@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
-import { mediaTypeForExt } from "../domain/attachment_entity.js";
-import { validateArtifactContent } from "../domain/artifact.js";
+import { mediaTypeForExt } from "../domain/artifacts/media_artifact.js";
+import { DocumentArtifact } from "../domain/artifacts/document_artifact.js";
 import { DomainError } from "../domain/domain_error.js";
-import type { ImplementationPlan } from "../domain/implementation_plan.js";
+import type { ImplementationPlan } from "../domain/artifacts/implementation_plan_artifact.js";
 import { Issue, type IssueData, type Phase } from "../domain/issue_entity.js";
 import { Queue } from "../domain/queue_repository.js";
 import {
@@ -13,7 +13,7 @@ import {
 import { type IncomingAttachment, persistableAttachments } from "./attachments.js";
 import { readPlanForView } from "./plan_use_cases.js";
 import { requireProject } from "./project_use_cases.js";
-import { clusterForDesignChild } from "./requirements_use_cases.js";
+import { featureForDesignChild } from "./requirements_use_cases.js";
 import { completeIssue, validateWorkflowDelivery } from "./services/workflows/index.js";
 
 export type CreateInput = {
@@ -38,7 +38,7 @@ export function createIssue(input: CreateInput, root?: string): Issue {
   if (Object.values(tags).some((value) => value !== undefined)) issue.tag(tags, actor); // reusa applyTags (valida enums)
   for (const { entity, bytes } of created) queue.artifacts.writeMedia(issue.project, entity, bytes);
   queue.save(issue);
-  if (input.artifact) queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "doc" }, input.artifact);
+  if (input.artifact) queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "document" }, input.artifact);
   return issue;
 }
 
@@ -52,7 +52,7 @@ export function claimIssue(input: { id: string; now?: Date }, root?: string): Is
 }
 
 export type RelatedView = { id: string; title: string; status: string; action: ActionType; artifact: string | null; kind: RelationKind; plan?: ImplementationPlan | null };
-export type IssueView = IssueData & { artifact: string | null; related: RelatedView[]; ancestors: RelatedView[]; cluster?: string[] | null; plan?: ImplementationPlan | null };
+export type IssueView = IssueData & { artifact: string | null; related: RelatedView[]; ancestors: RelatedView[]; features?: string[] | null; plan?: ImplementationPlan | null };
 
 export function getIssue(id: string, root?: string): IssueView {
   const queue = new Queue(root);
@@ -62,8 +62,8 @@ export function getIssue(id: string, root?: string): IssueView {
 // Injeta o Artefato .md da Issue, a view das relacionadas (com os artefatos delas) e a cadeia
 // de ancestrais (subindo os parent): quem reivindica recebe a linhagem sem buscar cada Issue.
 export function issueView(queue: Queue, issue: Issue): IssueView {
-  return { ...issue.toJSON(), artifact: queue.artifacts.readText(issue.project, { issueId: issue.id, type: "doc" }),
-    related: issue.relates.flatMap((r) => relatedView(queue, r.id, r.kind)), cluster: clusterForDesignChild(queue, issue),
+  return { ...issue.toJSON(), artifact: queue.artifacts.readText(issue.project, { issueId: issue.id, type: "document" }),
+    related: issue.relates.flatMap((r) => relatedView(queue, r.id, r.kind)), features: featureForDesignChild(queue, issue),
     ancestors: ancestorChain(queue, issue), plan: readPlanForView(queue, issue.project, issue.id) }; // plan = Small Plan da própria Issue
 }
 
@@ -71,7 +71,7 @@ function relatedView(queue: Queue, id: string, kind: RelationKind): RelatedView[
   const related = queue.load(id); // relacionada purgada → omitida da view
   if (!related) return [];
   return [{ id: related.id, title: related.title, status: related.status, action: related.action,
-    artifact: queue.artifacts.readText(related.project, { issueId: related.id, type: "doc" }), kind,
+    artifact: queue.artifacts.readText(related.project, { issueId: related.id, type: "document" }), kind,
     plan: readPlanForView(queue, related.project, related.id) }]; // plano do Design pai viaja ao filho Implement
 }
 
@@ -224,8 +224,8 @@ export function setArtifact(input: { issueId: string; content: string }, root?: 
   const queue = new Queue(root);
   const issue = queue.loadRequired(input.issueId);
   if (issue.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
-  validateArtifactContent("doc", input.content);
-  queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "doc" }, input.content);
+  DocumentArtifact.validate(input.content);
+  queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "document" }, input.content);
 }
 
 export type CommentInput = {

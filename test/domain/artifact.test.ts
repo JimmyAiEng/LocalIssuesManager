@@ -1,47 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Artifact, ARTIFACT_TYPES, MAX_MEDIA_SIZE, validateArtifactContent } from "../../src/domain/artifact.js";
-import { DomainError } from "../../src/domain/domain_error.js";
-import type { Requirements } from "../../src/domain/requirements.js";
+import { ARTIFACT_TYPES } from "../../src/domain/artifacts/artifact.js";
+import { DocumentArtifact } from "../../src/domain/artifacts/document_artifact.js";
+import { MediaArtifact, MAX_MEDIA_SIZE } from "../../src/domain/artifacts/media_artifact.js";
+import { RequirementArtifact } from "../../src/domain/artifacts/requirement_artifact.js";
+import { UmlArtifact } from "../../src/domain/artifacts/uml_artifact.js";
 
 const feature = "Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu use\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo";
 
-test("Artifact Types são o vocabulário unificado", () => {
-  assert.deepEqual(ARTIFACT_TYPES, ["doc", "prd", "requirements", "design", "plan", "media"]);
+test("Artifact Types usam os nomes reais do domínio", () => {
+  assert.deepEqual(ARTIFACT_TYPES,
+    ["media", "document", "requirement", "uml", "implementation-plan"]);
 });
 
-test("Artifact media deriva metadata e aplica 25 MiB", () => {
-  const artifact = Artifact.media({ issueId: "i", filename: "a.png", mediaType: "image/png", size: MAX_MEDIA_SIZE });
+test("MediaArtifact deriva metadata e aplica 25 MiB", () => {
+  const artifact = MediaArtifact.create({ issueId: "i", filename: "a.png",
+    mediaType: "image/png", size: MAX_MEDIA_SIZE });
   assert.equal(artifact.type, "media");
   assert.equal(artifact.kind, "image");
-  assert.throws(() => Artifact.media({ issueId: "i", filename: "a.png", mediaType: "image/png", size: MAX_MEDIA_SIZE + 1 }), /25MB/);
+  assert.throws(() => MediaArtifact.create({ issueId: "i", filename: "a.png",
+    mediaType: "image/png", size: MAX_MEDIA_SIZE + 1 }), /25MB/);
 });
 
-test("validador por tipo aplica brevidade e formatos estruturados", () => {
+test("DocumentArtifact aplica limite e cria metadata", () => {
   const long = Array(301).fill("x").join(" ");
-  assert.throws(() => validateArtifactContent("doc", long), /limite 300/);
-  assert.throws(() => validateArtifactContent("design", long), /limite 300/);
-  assert.doesNotThrow(() => validateArtifactContent("requirements", JSON.stringify({ features: [feature] })));
-  assert.throws(() => validateArtifactContent("plan", "{}"), /objetivo/);
+  assert.throws(() => DocumentArtifact.validate(long), /limite 300/);
+  const artifact = DocumentArtifact.create({ issueId: "i", name: "qa.md", size: 3 },
+    new Date("2026-01-01"));
+  assert.equal(artifact.type, "document");
+  assert.equal(artifact.created_at, "2026-01-01T00:00:00.000Z");
 });
 
- test("Artifact textual cria metadata e serializa snapshot desacoplado", () => {
-  const artifact = Artifact.text({ issueId: "i", type: "doc", name: "a.md", size: 3 }, new Date("2026-01-01"));
-  const snapshot = artifact.toJSON();
-  assert.equal(snapshot.created_at, "2026-01-01T00:00:00.000Z");
-  snapshot.name = "outro.md";
-  assert.equal(artifact.name, "a.md");
+test("RequirementArtifact representa o PRD como conjunto de Features", () => {
+  assert.deepEqual(RequirementArtifact.validate(JSON.stringify({ features: [feature] })),
+    { features: [feature] });
 });
 
-test("PRD exige Requirements e valida referências de Feature", () => {
-  const prd = { visao: "v", requisitos_funcionais: ["f"], requisitos_nao_funcionais: ["n"],
-    clusters: [{ name: "c", features: ["Login"] }] };
-  assert.throws(() => validateArtifactContent("prd", JSON.stringify(prd)), /exige requisitos/);
-  const requirements: Requirements = { features: [feature] };
-  assert.doesNotThrow(() => validateArtifactContent("prd", JSON.stringify(prd), { requirements }));
-});
-
-test("Artifact rejeita metadata e mediaType inválidos", () => {
-  assert.throws(() => Artifact.text({ issueId: "", type: "doc", name: "a.md", size: 1 }), DomainError);
-  assert.throws(() => Artifact.media({ issueId: "i", filename: "a", mediaType: "x", size: 1 }), /Unsupported/);
+test("UmlArtifact valida kind, sintaxe e tipo detectado", () => {
+  assert.equal(UmlArtifact.parseKind("class"), "class");
+  assert.doesNotThrow(() => UmlArtifact.validate("class", { valid: true, diagramType: "ClassDiagram" }));
+  assert.throws(() => UmlArtifact.validate("class", { valid: false, errorMessage: "quebrado" }), /quebrado/);
+  assert.throws(() => UmlArtifact.validate("class", { valid: true, diagramType: "StateDiagram" }), /não corresponde/);
 });

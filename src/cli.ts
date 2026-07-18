@@ -101,7 +101,7 @@ function runPrd(raw: string[]): void {
 
 function prd(sub: string | undefined, options: Options): Result {
   if (sub === "set") return setPrd({ issueId: value(options, "id"), file: value(options, "file") });
-  throw new Error("Usage: issues prd set --id <issueId> --file <prd.json>");
+  throw new Error("Usage: issues prd set --id <issueId> --file <requirements.json> (alias de requirements set)");
 }
 
 function runPlan(raw: string[]): void {

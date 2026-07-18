@@ -34,18 +34,19 @@ class Artifact {
 }
 
 enum ArtifactType {
-  doc
-  requirements
-  prd
-  design
-  plan
   media
+  document
+  requirement
+  uml
+  implementation-plan
 }
 
-class Workflow {
+class GateDefinition {
   +action : ActionType
   +name : string
-  +requiredArtifacts : ArtifactType[]
+  +artifacts : Requirement
+  +codeExecution : Requirement
+  +humanApproval : Requirement
 }
 
 class GatePolicy {
@@ -72,9 +73,9 @@ class ArtifactStore <<concrete>> {
 }
 
 Issue "1" o-- "many" Artifact : owner lógico
-Issue ..> Workflow : action seleciona
-Workflow --> ArtifactType : exige
-Workflow --> GatePolicy : governa conclusão
+Issue ..> GateDefinition : action seleciona
+GateDefinition --> ArtifactType : exige
+GateDefinition --> GatePolicy : governa conclusão
 GatePolicy ..> GateAssessment
 Artifact --> ArtifactType
 Queue --> Issue : persiste

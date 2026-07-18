@@ -1,5 +1,5 @@
-import { extForMediaType } from "../domain/attachment_entity.js";
-import type { ImplementationPlan } from "../domain/implementation_plan.js";
+import { extForMediaType } from "../domain/artifacts/media_artifact.js";
+import type { ImplementationPlan } from "../domain/artifacts/implementation_plan_artifact.js";
 import { projectSegment } from "../domain/queue_repository.js";
 import type { Tags, Thread } from "../domain/value_objects.js";
 import type { IssueView, RelatedView } from "./issue_use_cases.js";
@@ -13,7 +13,7 @@ export function composePrompt(issue: IssueView): string {
   ];
   if (issue.artifact) sections.push(`## Artefato da Issue\n${issue.artifact}`);
   if (issue.plan) sections.push(`## Small Plan desta Issue\n${planBody(issue.plan)}`);
-  if (issue.cluster?.length) sections.push(clusterSection(issue.cluster));
+  if (issue.features?.length) sections.push(featureSection(issue.features));
   if (issue.ancestors.length) sections.push(ancestorSection(issue.ancestors));
   if (issue.related.length) sections.push(relatedSection(issue.related));
   sections.push("Ao encerrar esta Issue, reivindique a próxima: `issues next --prompt --project <projeto> --agent <agente>`.");
@@ -36,10 +36,10 @@ function issueInfo(issue: IssueView): string {
   return lines.join("\n");
 }
 
-// A Issue Design filha recebe só as Features do seu cluster (não o PRD inteiro): as Features
-// Gherkin resolvidas viajam no prompt para a filha desenhar exatamente o recorte dela.
-function clusterSection(features: string[]): string {
-  return `## Cluster (Features desta Issue Design)\n${features.join("\n\n")}`;
+// A Issue Design filha recebe a Feature correspondente do RequirementArtifact.
+// O Gherkin viaja no prompt para a filha desenhar exatamente o seu recorte.
+function featureSection(features: string[]): string {
+  return `## Feature desta Issue Design\n${features.join("\n\n")}`;
 }
 
 // A cadeia de ancestrais (do mais próximo ao mais distante): a Issue atual é a ponta de uma

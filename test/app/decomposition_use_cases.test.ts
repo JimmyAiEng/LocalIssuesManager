@@ -7,7 +7,7 @@ import { decomposeIssue } from "../../src/app/decomposition_use_cases.js";
 import { createIssue, getIssue } from "../../src/app/issue_use_cases.js";
 import { composePrompt } from "../../src/app/prompt_composition.js";
 import { createProject } from "../../src/app/project_use_cases.js";
-import { setPrd, setRequirements } from "../../src/app/requirements_use_cases.js";
+import { setRequirements } from "../../src/app/requirements_use_cases.js";
 import { DomainError } from "../../src/domain/domain_error.js";
 
 const root = () => {
@@ -24,13 +24,10 @@ const write = (dir: string, name: string, content: unknown): string => {
 const FEATURE = "Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel";
 const PLAN = { objetivo: "o", passos: ["p"], arquivos: ["a"], criterio_pronto: "c" };
 
-// Planning com requisitos + PRD de 2 clusters (Login, Logout), pronta para decompor em Design.
-function planningWithPrd(dir: string): string {
+// Planning com duas Features, pronta para decompor em Design.
+function planningWithRequirements(dir: string): string {
   const issue = createIssue({ title: "plan", project: "app", type: "Feat", action: "Planning", problem: "p", actor: "human" }, dir);
   setRequirements({ issueId: issue.id, file: write(dir, "req.json", { features: [FEATURE, FEATURE.replace(/Login/g, "Logout")] }) }, dir);
-  setPrd({ issueId: issue.id, file: write(dir, "prd.json", {
-    visao: "v", requisitos_funcionais: ["Entrar"], requisitos_nao_funcionais: ["Rápido"],
-    clusters: [{ name: "Login", features: ["Login"] }, { name: "Logout", features: ["Logout"] }] }) }, dir);
   return issue.id;
 }
 
@@ -40,9 +37,9 @@ const designIssue = (dir: string): string =>
 const decompose = (dir: string, issueId: string, spec: unknown) =>
   decomposeIssue({ issueId, file: write(dir, `d-${Math.random()}.json`, spec), actor: "pi" }, dir);
 
-test("decompõe Planning em filhas Design com linhagem parent/child recíproca e cluster resolvido", () => {
+test("decompõe Planning em filhas Design com linhagem parent/child recíproca e Feature resolvida", () => {
   const dir = root();
-  const parent = planningWithPrd(dir);
+  const parent = planningWithRequirements(dir);
   const result = decompose(dir, parent, { children: [
     { title: "Design Login", type: "Feat", action: "Design", problem: "p" },
     { title: "Design Logout", type: "Feat", action: "Design", problem: "p" }] });
@@ -51,7 +48,7 @@ test("decompõe Planning em filhas Design com linhagem parent/child recíproca e
   const child = getIssue(result.children[0], dir);
   assert.deepEqual(child.relates, [{ id: parent, kind: "parent" }]); // filha aponta o pai
   assert.equal(child.action, "Design");
-  assert.ok(child.cluster?.some((f) => f.includes("Login"))); // cluster resolvido pelo título
+  assert.ok(child.features?.some((f) => f.includes("Login"))); // Feature resolvida pelo título
   const parentView = getIssue(parent, dir);
   assert.deepEqual(parentView.relates.map((r) => r.kind), ["child", "child"]); // recíproca no pai
 });
@@ -91,14 +88,14 @@ test("só Planning (→Design) e Design (→Implement) decompõem", () => {
     (e: unknown) => e instanceof DomainError && /não decompõe/.test(e.message));
 });
 
-test("Planning exige PRD persistido; filha Design com título fora dos clusters é rejeitada", () => {
+test("Planning exige Requirements; filha Design com título fora das Features é rejeitada", () => {
   const dir = root();
   const semPrd = createIssue({ title: "p", project: "app", type: "Feat", action: "Planning", problem: "p", actor: "human" }, dir);
   assert.throws(() => decompose(dir, semPrd.id, { children: [{ title: "Design Login", type: "Feat", action: "Design", problem: "p" }] }),
-    (e: unknown) => e instanceof DomainError && /exige requisitos e PRD/.test(e.message));
-  const parent = planningWithPrd(dir);
+    (e: unknown) => e instanceof DomainError && /exige Requirements/.test(e.message));
+  const parent = planningWithRequirements(dir);
   assert.throws(() => decompose(dir, parent, { children: [{ title: "Design Cadastro", type: "Feat", action: "Design", problem: "p" }] }),
-    (e: unknown) => e instanceof DomainError && /não casa nenhum cluster/.test(e.message));
+    (e: unknown) => e instanceof DomainError && /não casa nenhuma Feature/.test(e.message));
   assert.throws(() => decompose(dir, parent, { children: [{ title: "Design Login", type: "Feat", action: "Implement", problem: "p" }] }),
     (e: unknown) => e instanceof DomainError && /deve ter action=Design/.test(e.message));
 });

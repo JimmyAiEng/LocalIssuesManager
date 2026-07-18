@@ -1,6 +1,6 @@
 import { escapeHtml } from "./view_model.js";
 
-// Espelha a gramática validada pelo domínio (src/domain/requirements.ts):
+// Espelha a gramática validada pelo domínio (src/domain/artifacts/requirement_artifact.ts):
 // Feature: <nome> → user story (3 linhas Como/Eu quero/Para que) → Scenarios com steps Given/When/Then/And.
 export function parseFeature(text) {
   const lines = String(text ?? "").split("\n").map((line) => line.trim()).filter(Boolean);

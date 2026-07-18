@@ -22,10 +22,14 @@ package "Aplicação" {
 
 package "Domínio" {
   [Issue] as ISSUE
-  [Artifact + validators] as ARTIFACT
-  [Workflow definitions] as WORKFLOW
-  [GatePolicy] as POLICY
-  [Requirements / PRD / Plan] as SPECS
+  package "artifacts/" {
+    [Artifact pattern] as ARTIFACT
+    [Type validators] as SPECS
+  }
+  package "gates/" {
+    [Action Gate definitions] as GATES
+    [GatePolicy] as POLICY
+  }
   [Queue] as QUEUE
   [ArtifactStore] as STORE
 }
@@ -43,7 +47,7 @@ COMPLETE --> DESIGN
 COMPLETE --> IMPLEMENT
 COMPLETE --> QA
 COMPLETE --> DEPLOY
-COMPLETE --> WORKFLOW
+COMPLETE --> GATES
 COMPLETE --> POLICY
 DESIGN --> EFFECTS
 IMPLEMENT --> EFFECTS
@@ -57,7 +61,7 @@ QUEUE --> FS
 STORE --> FS
 
 note bottom of COMPLETE
-  Orquestra por Action; não persiste Workflow
+  Orquestra por Action; não persiste Gates
   nem duplica regras de transição da Issue.
 end note
 @enduml

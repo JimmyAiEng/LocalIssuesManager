@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Attachment } from "../../src/domain/attachment_entity.js";
+import { MediaArtifact } from "../../src/domain/artifacts/media_artifact.js";
 import { DomainError } from "../../src/domain/domain_error.js";
 import { Issue } from "../../src/domain/issue_entity.js";
 
@@ -155,7 +155,7 @@ test("reset só age em CLAIMED", () => {
 
 test("comment anexa entrada à thread sem mudar status nem exigir dono", () => {
   const issue = claimed();
-  const attachment = Attachment.create({ filename: "prova.png", mediaType: "image/png", size: 10 }).toJSON();
+  const attachment = MediaArtifact.create({ filename: "prova.png", mediaType: "image/png", size: 10 }).toJSON();
   const revision = issue.revision;
   issue.comment("codex", "vejam a evidência", [attachment], new Date("2026-05-01T00:00:00Z"));
   assert.equal(issue.status, "CLAIMED");
@@ -166,7 +166,7 @@ test("comment anexa entrada à thread sem mudar status nem exigir dono", () => {
 
 test("comment aceita só anexo, exige conteúdo e respeita o limite de palavras", () => {
   const issue = claimed();
-  const attachment = Attachment.create({ filename: "v.mp4", mediaType: "video/mp4", size: 10 }).toJSON();
+  const attachment = MediaArtifact.create({ filename: "v.mp4", mediaType: "video/mp4", size: 10 }).toJSON();
   issue.comment("pi", "", [attachment]);
   assert.equal(issue.thread.at(-1)?.attachments?.length, 1);
   assert.throws(() => issue.comment("pi", "   ", []), /comment or attachment is required/);
@@ -278,7 +278,7 @@ test("worktree: set/clear com guarda CLOSED apenas no set", () => {
 });
 
 test("decide e submit registram anexos na thread", () => {
-  const attachment = Attachment.create({ filename: "prova.png", mediaType: "image/png", size: 5 }).toJSON();
+  const attachment = MediaArtifact.create({ filename: "prova.png", mediaType: "image/png", size: 5 }).toJSON();
   const issue = claimed();
   issue.submit("pi", "evidência", new Date(), [attachment]);
   assert.equal(issue.thread.at(-1)?.attachments?.length, 1);

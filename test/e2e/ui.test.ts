@@ -316,7 +316,7 @@ test("UI-09a: fechar Issue exige confirmação explícita antes de efetivar (irr
   withUI((root) => { createIssue(root, { title: "Fechar OPEN", project: "web", type: "Fix" }); },
     async (page, url, root) => {
       const id = readdirSync(join(root, "projects", "web", "open"))[0].replace(".json", "");
-      new Queue(root).artifacts.writeText("web", { issueId: id, type: "doc" }, "# QA concluído");
+      new Queue(root).artifacts.writeText("web", { issueId: id, type: "document" }, "# QA concluído");
       await page.goto(`${url}/issues/${id}`);
       await page.getByRole("button", { name: "Fechar Issue" }).click(); // abre painel
       await page.selectOption('select[name="closed_reason"]', "concluido");
@@ -505,7 +505,7 @@ test("UI-12c: diagrama inválido mostra o erro do gate em vez de imagem quebrada
     cli(["design", "doc", "--issue", id, "--file", doc], root);
     cli(["design", "changed", "--issue", id, "--value", "true"], root); // mudança de arquitetura: o gate valida os .puml
     // Direto no repositório: `issues design add` valida e recusaria este fonte.
-    new Queue(root).artifacts.writeText("api", { issueId: id, type: "design", name: "class.puml" }, "@startuml\nisto !! quebrado\n@enduml");
+    new Queue(root).artifacts.writeText("api", { issueId: id, type: "uml", name: "class.puml" }, "@startuml\nisto !! quebrado\n@enduml");
     seeded.id = id;
   }, async (page, url) => {
     await page.goto(`${url}/issues/${seeded.id}`);

@@ -31,6 +31,23 @@ test("DocumentArtifact aplica limite e cria metadata", () => {
   assert.equal(artifact.created_at, "2026-01-01T00:00:00.000Z");
 });
 
+// O exemplo embutido na mensagem de erro é a única documentação garantida quando a skill da fase
+// não foi carregada (foi assim que um modelo pequeno entrou em loop). Se ele apodrecer, ensina
+// errado — então o teste extrai o exemplo da própria mensagem e exige que ele valide.
+test("erro de forma do Requirements carrega um exemplo que de fato valida", () => {
+  const erroDe = (raw: string): string => {
+    try { RequirementArtifact.validate(raw); } catch (error) { return (error as Error).message; }
+    throw new Error(`deveria ter rejeitado: ${raw}`);
+  };
+  const mensagem = erroDe('{"features":[{"name":"x"}]}');
+  assert.match(mensagem, /deve ser texto Gherkin \(string\), não objeto/);
+  const exemplo = mensagem.slice(mensagem.indexOf('{"features"'));
+  assert.equal(RequirementArtifact.validate(exemplo).features.length, 1); // o exemplo passa no validador
+  for (const invalido of ["{quebrado", '["array"]', '{"features":"texto"}']) {
+    assert.match(erroDe(invalido), /Formato esperado — exemplo:/);
+  }
+});
+
 test("RequirementArtifact representa os Requirements como conjunto de Features", () => {
   assert.deepEqual(RequirementArtifact.validate(JSON.stringify({ features: [feature] })),
     { features: [feature] });

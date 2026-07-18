@@ -115,5 +115,8 @@ Detalhes de sintaxe: `issues --help`.
 
 1. Você está na camada 0 (este arquivo) — carregue-o em todo claim.
 2. Leia a skill da action da Issue reivindicada (tabela acima).
+   Ela é um **arquivo ao lado deste**: `../<action>-phase/SKILL.md` (ex.: `../planning-phase/SKILL.md`).
+   **Leia o arquivo.** Não é subagente, não é comando, não é slash command — se o seu harness recusar com "unknown agent", você tentou a coisa errada.
+   Sem ela você não sabe o formato dos arquivos que a fase grava, e vai errar em loop.
 3. A skill da action diz o que a fase entrega e como concluí-la; o **como** executar é decisão do agente.
 4. **Não** carregue skills de outras actions neste claim.

@@ -11,6 +11,12 @@ export type RequirementSet = { features: string[] };
 const STEP_KEYWORDS = ["Given", "When", "Then", "And"] as const;
 const STORY_PREFIXES = ["Como um", "Eu quero poder", "Para que eu"] as const;
 
+// Erro de forma sem exemplo prende modelo pequeno em loop: ele não adivinha o Gherkin que este
+// validador aceita, e a skill que documenta o formato pode nem ter sido carregada. A mensagem
+// carrega o exemplo — é a única documentação garantida em qualquer harness.
+const FEATURE_EXEMPLO = "Feature: Login\nComo um usuário\nEu quero poder entrar\nPara que eu acesse\n\nScenario: ok\nGiven a tela\nWhen entro\nThen vejo o painel";
+const FORMATO = `Formato esperado — exemplo: {"features": [${JSON.stringify(FEATURE_EXEMPLO)}]}`;
+
 const isStep = (line: string): boolean =>
   STEP_KEYWORDS.some((kw) => line === kw || line.startsWith(`${kw} `));
 
@@ -21,7 +27,7 @@ export const RequirementArtifact = {
   validate(rawText: string): RequirementSet {
     let parsed: unknown;
     try { parsed = JSON.parse(rawText); }
-    catch { throw new DomainError("Requirements deve ser um arquivo JSON válido"); }
+    catch { throw new DomainError(`Requirements deve ser um arquivo JSON válido. ${FORMATO}`); }
     return validateParsed(parsed);
   },
   validateParsed,
@@ -38,7 +44,7 @@ function validateParsed(raw: unknown): RequirementSet {
 
 function validateGherkinFeature(feature: unknown, index: number): void {
   if (typeof feature !== "string") {
-    throw new DomainError(`Feature ${index + 1}: deve ser texto Gherkin (string)`);
+    throw new DomainError(`Feature ${index + 1}: deve ser texto Gherkin (string), não objeto. ${FORMATO}`);
   }
   assertBrief(feature, `Feature ${index + 1}`);
   validateFeature(feature, index);
@@ -47,11 +53,11 @@ function validateGherkinFeature(feature: unknown, index: number): void {
 // Estrutura e cardinalidade: 1 a 5 Features — escopo grande denuncia Issue grande.
 function featureList(raw: unknown): unknown[] {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    throw new DomainError("Requirements deve ser um objeto JSON com o campo 'features'");
+    throw new DomainError(`Requirements deve ser um objeto JSON com o campo 'features'. ${FORMATO}`);
   }
   const features = (raw as { features?: unknown }).features;
   if (!Array.isArray(features)) {
-    throw new DomainError("Requirements.features deve ser um array de Features Gherkin");
+    throw new DomainError(`Requirements.features deve ser um array de Features Gherkin. ${FORMATO}`);
   }
   if (features.length === 0) {
     throw new DomainError("Requirements deve conter ao menos uma Feature");

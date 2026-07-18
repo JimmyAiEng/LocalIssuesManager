@@ -71,4 +71,4 @@ Skills extras do consumidor (camada 2) podem viver ao lado em `.agents/skills/<s
 1. Abrir o projeto no harness e confirmar `AGENTS.md` no contexto.
 2. Confirmar skills do pack na UI do harness (Cursor: Customize → Skills; Pi: `/skill:sdlc-workflow` ou listagem no startup).
 3. `issues list --pretty` responde (CLI no PATH via `npx` ou install global).
-4. `issues next --agent <ia>` e ver a skill `*-phase` do tipo do Ticket ser lida.
+4. `issues next --agent <ia>` e ver a skill `*-phase` da Action da Issue ser lida.

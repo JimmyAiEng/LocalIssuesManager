@@ -8,7 +8,8 @@ import { validateDesign } from "./design.js";
 import { validateImplement } from "./implement.js";
 import { validatePlanning } from "./planning.js";
 import { validateQa } from "./qa.js";
-import type { CompletionStatus } from "./types.js";
+
+type CompletionStatus = "AWAITING" | "CLOSED";
 
 export async function completeIssue(queue: Queue, issue: Issue, status: CompletionStatus,
   comment: string): Promise<void> {
@@ -52,5 +53,3 @@ function rejectHumanRequired(issue: Issue): never {
   }
   throw new DomainError("Issue exige decisão humana (HITL, risco ALTO ou complexidade ALTA): envie a evidência com status AWAITING e deixe o humano decidir no web");
 }
-
-export type { CompletionStatus } from "./types.js";

@@ -233,13 +233,13 @@ test("e2e: artifact grava .md da Issue e create --artifact-file grava no id novo
   const queue = new Queue(vars.ISSUES_ROOT);
 
   const created = JSON.parse(run(createArgs.concat("--artifact-file", md), vars));
-  assert.equal(queue.readArtifact("demo", created.id), "# artefato");
+  assert.equal(queue.artifacts.readText("demo", { issueId: created.id, type: "doc" }), "# artefato");
 
   const updated = join(dir, "up.md");
   writeFileSync(updated, "# issue atualizado");
   const ok = JSON.parse(run(["artifact", "--id", created.id, "--file", updated], vars));
   assert.deepEqual(ok, { ok: true, id: created.id });
-  assert.equal(queue.readArtifact("demo", created.id), "# issue atualizado");
+  assert.equal(queue.artifacts.readText("demo", { issueId: created.id, type: "doc" }), "# issue atualizado");
   assert.equal(JSON.parse(run(["get", "--id", created.id], vars)).artifact, "# issue atualizado");
 });
 

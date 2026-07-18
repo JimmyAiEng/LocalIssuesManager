@@ -7,15 +7,15 @@
   /* neutros com viés teal (D5) */
   --bg: #0e1416; --surface: #16211f; --surface-2: #1b2a28; --border: #2a3b3a;
   --ink: #f2f7f6; --dim: #aebfbd; --faint: #7d908d;
-  --accent: #3fd0c9; --accent-ink: #06110f;
-  /* status (inalterados; +ON-GOING) */
-  --st-open: #65b6ff; --st-claimed: #b59cff; --st-ongoing: #56cbb0; --st-awaiting: #f2bd57; --st-closed: #82c99b;
+  --accent: #3fd0c9;
+  /* status */
+  --st-open: #65b6ff; --st-claimed: #b59cff; --st-awaiting: #f2bd57; --st-closed: #82c99b;
   /* feedback */
   --danger: #df7180; --danger-ink: #ff9aa8;
   --ok-bg: #12352a; --ok-border: #2f8f63;
   --radius: 10px; --radius-sm: 7px; --pill: 999px;
-  /* escala de espaçamento 12/24 */
-  --sp-1: .5rem; --sp-2: .75rem; --sp-3: 1.2rem; --sp-4: 1.75rem;
+  /* escala de espaçamento */
+  --sp-1: .5rem; --sp-2: .75rem; --sp-3: 1.2rem;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-family: var(--font); background: var(--bg); color: var(--ink); line-height: 1.55;
@@ -68,7 +68,6 @@ a { color: var(--accent); }
 }
 .badge::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
 .status-OPEN { --st: var(--st-open); } .status-CLAIMED { --st: var(--st-claimed); }
-.status-ON-GOING { --st: var(--st-ongoing); }
 .status-AWAITING { --st: var(--st-awaiting); } .status-CLOSED { --st: var(--st-closed); }
 
 /* ---------- Tags (complexidade / humano / risco) ---------- */
@@ -86,7 +85,7 @@ a { color: var(--accent); }
 .tag-complexity { --tg: var(--st-claimed); } .tag-human_need { --tg: var(--st-open); } .tag-risk { --tg: var(--danger); }
 
 /* ---------- Quadro (tratamento Q1) ---------- */
-.board { display: grid; grid-template-columns: repeat(5, minmax(210px, 1fr)); gap: var(--sp-2); align-items: start; }
+.board { display: grid; grid-template-columns: repeat(4, minmax(210px, 1fr)); gap: var(--sp-2); align-items: start; }
 .column { min-height: 20rem; padding: var(--sp-2); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .column h2 { margin: 0 0 var(--sp-1); font-size: 1rem; display: flex; align-items: center; justify-content: space-between; color: var(--col, var(--ink)); }
 .column h2 small {
@@ -97,7 +96,6 @@ a { color: var(--accent); }
 }
 .column > p { margin: 0 0 var(--sp-2); color: var(--dim); font-size: .8rem; }
 .status-OPEN.column { --col: var(--st-open); } .status-CLAIMED.column { --col: var(--st-claimed); }
-.status-ON-GOING.column { --col: var(--st-ongoing); }
 .status-AWAITING.column { --col: var(--st-awaiting); } .status-CLOSED.column { --col: var(--st-closed); }
 
 /* card com faixa de status à esquerda (Q1) */
@@ -111,7 +109,6 @@ a { color: var(--accent); }
 .card span, .card time { color: var(--dim); font-size: .82rem; }
 .card .owner { color: var(--accent); font-family: var(--mono); font-size: .76rem; }
 .card.status-OPEN { --cst: var(--st-open); } .card.status-CLAIMED { --cst: var(--st-claimed); }
-.card.status-ON-GOING { --cst: var(--st-ongoing); }
 .card.status-AWAITING { --cst: var(--st-awaiting); } .card.status-CLOSED { --cst: var(--st-closed); }
 .card .pill-count {
   font-family: var(--mono); font-size: .72rem; color: var(--dim);
@@ -179,28 +176,6 @@ code { overflow-wrap: anywhere; font-family: var(--mono); font-size: .9em; }
 .feedback-error, .feedback-conflict { background: #3a1d24; border: 1px solid var(--danger); }
 [aria-invalid="true"] { border-color: var(--danger); }
 
-/* ---------- Tickets (agregado da Issue) ---------- */
-.tickets { display: grid; gap: var(--sp-2); }
-.ticket {
-  border: 1px solid var(--border); border-left: 4px solid var(--cst, var(--border));
-  border-radius: var(--radius-sm); background: var(--surface-2); padding: var(--sp-2) var(--sp-3);
-  display: grid; gap: var(--sp-1);
-}
-.ticket.status-OPEN { --cst: var(--st-open); } .ticket.status-CLAIMED { --cst: var(--st-claimed); }
-.ticket.status-AWAITING { --cst: var(--st-awaiting); } .ticket.status-CLOSED { --cst: var(--st-closed); }
-.ticket-head { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; }
-.ticket-type {
-  font-family: var(--mono); font-size: .72rem; font-weight: 700; letter-spacing: .05em;
-  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  border-radius: var(--pill); padding: .12rem .55rem;
-}
-.ticket h3 { margin: 0; font-size: 1rem; font-weight: 600; }
-.ticket-task { margin: 0; color: var(--dim); font-size: .9rem; }
-.ticket-refs { margin: 0; color: var(--faint); font-size: .82rem; }
-.ticket-thread summary { cursor: pointer; color: var(--dim); font-size: .82rem; }
-.ticket-thread[open] summary { margin-bottom: var(--sp-1); }
-.ticket-thread .thread { max-width: 100%; }
-.new-ticket { justify-self: start; margin-top: var(--sp-1); }
 .new-comment { justify-self: start; margin-top: var(--sp-1); }
 .attachments { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
 .attachment { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: var(--bg); }
@@ -224,16 +199,6 @@ code { overflow-wrap: anywhere; font-family: var(--mono); font-size: .9em; }
 .decisions-inbox a { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; text-decoration: none; color: var(--ink); padding: .35rem .5rem; border-radius: var(--radius-sm); }
 .decisions-inbox a:hover { background: var(--surface-2); }
 .decisions-inbox .dim { color: var(--dim); font-size: .82rem; }
-
-/* ---------- Mini-stepper de fases no card (P·D·I·Q·D) ---------- */
-.stepper { display: flex; gap: .3rem; margin-top: .2rem; }
-.step {
-  width: 1.35rem; height: 1.35rem; display: inline-flex; align-items: center; justify-content: center;
-  font-family: var(--mono); font-size: .68rem; font-weight: 700; border-radius: 50%;
-  border: 1px solid var(--border); color: var(--faint); background: var(--surface);
-}
-.step--done { color: var(--st-closed); border-color: color-mix(in srgb, var(--st-closed) 50%, transparent); background: color-mix(in srgb, var(--st-closed) 16%, transparent); }
-.step--active { color: var(--st-ongoing); border-color: var(--st-ongoing); background: color-mix(in srgb, var(--st-ongoing) 20%, transparent); }
 
 /* ---------- Badges/chips/aging do card ---------- */
 .card-foot { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
@@ -306,22 +271,6 @@ details.box[open] > summary { margin-bottom: var(--sp-2); }
   color: var(--dim); background: transparent; border-color: var(--border);
 }
 
-/* ---------- Stepper de fases no detalhe (maior que o do card) ---------- */
-.detail-stepper { list-style: none; display: flex; flex-wrap: wrap; gap: var(--sp-1); margin: 0; padding: 0; }
-.dstep {
-  display: flex; align-items: center; gap: .45rem; padding: .3rem .7rem .3rem .4rem;
-  border: 1px solid var(--border); border-radius: var(--pill); color: var(--faint); background: var(--surface);
-}
-.dstep-dot {
-  width: 1.5rem; height: 1.5rem; display: inline-flex; align-items: center; justify-content: center;
-  font-family: var(--mono); font-size: .74rem; font-weight: 700; border-radius: 50%;
-  border: 1px solid currentColor;
-}
-.dstep-label { font-size: .82rem; }
-.dstep--done { color: var(--st-closed); border-color: color-mix(in srgb, var(--st-closed) 45%, transparent); background: color-mix(in srgb, var(--st-closed) 12%, transparent); }
-.dstep--active { color: var(--st-ongoing); border-color: var(--st-ongoing); background: color-mix(in srgb, var(--st-ongoing) 16%, transparent); }
-.dstep--gate { color: var(--st-awaiting); border-color: var(--st-awaiting); background: color-mix(in srgb, var(--st-awaiting) 16%, transparent); }
-
 /* ---------- Confirmação de fechamento irreversível ---------- */
 .confirm-close {
   border: 1px solid var(--danger); border-radius: var(--radius);
@@ -334,22 +283,8 @@ button.danger {
 }
 button.danger:hover { border-color: var(--danger-ink); background: color-mix(in srgb, var(--danger) 28%, transparent); }
 
-/* ---------- Aviso não-bloqueante do form / gate de qualificação ---------- */
+/* ---------- Aviso não-bloqueante do form ---------- */
 .warn { color: var(--st-awaiting); font-size: .88rem; margin: 0; }
-.ticket-gate--blocked { display: grid; gap: var(--sp-1); }
-
-/* ---------- Dependências do Ticket ---------- */
-.ticket-deps { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
-.ticket-deps .deps-label { color: var(--faint); font-size: .82rem; }
-.deps { list-style: none; display: flex; flex-wrap: wrap; gap: .35rem; margin: 0; padding: 0; }
-.deps li {
-  font-family: var(--mono); font-size: .72rem; color: var(--dim);
-  border: 1px solid var(--border); border-radius: var(--pill); padding: .05rem .5rem;
-}
-.deps li.dep--unmet {
-  color: var(--st-awaiting); border-color: color-mix(in srgb, var(--st-awaiting) 45%, transparent);
-  background: color-mix(in srgb, var(--st-awaiting) 12%, transparent);
-}
 
 /* ---------- Thread colapsada ---------- */
 .thread-more button { color: var(--accent); font-size: .85rem; background: transparent; }

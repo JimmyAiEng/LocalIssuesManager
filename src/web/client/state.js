@@ -11,7 +11,7 @@ export const state = {
 };
 
 export function emptyFilters() { return { title: "", project: "", type: "", owner: "" }; }
-export function loadFilters() { return { ...emptyFilters(), ...JSON.parse(sessionStorage.getItem("issues.filters") ?? "{}") }; }
+function loadFilters() { return { ...emptyFilters(), ...JSON.parse(sessionStorage.getItem("issues.filters") ?? "{}") }; }
 export function saveFilters() { sessionStorage.setItem("issues.filters", JSON.stringify(state.filters)); }
 export function emptyDraft() { return { title: "", project: "", type: "", action: "", problem: "", acceptance_criteria: "", comment: "", closed_reason: "", complexity: "", human_need: "", risk: "" }; }
 export function emptyCommentDraft() { return { comment: "" }; }

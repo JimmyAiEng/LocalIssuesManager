@@ -23,7 +23,7 @@
     "check": "npm run typecheck && npm run lint && npm run test:coverage && npm run check:fitness",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint src test",
-    "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').cpSync('src/web/client','dist/src/web/client',{recursive:true})\"",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"require('node:fs').cpSync('src/web/client','dist/src/web/client',{recursive:true})\"",
     "prepare": "npm run build",
     "check:fitness": "node --import tsx --test test/architecture/fitness.test.ts",
     "diagrams": "node --import tsx docs/diagrams/render.ts",

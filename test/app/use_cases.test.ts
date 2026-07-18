@@ -363,7 +363,7 @@ test("devolução para OPEN carrega imagem: reset e decide-open", async () => {
   const resetEntry = afterReset.thread.at(-1)!;
   assert.equal(resetEntry.status, "OPEN");
   assert.equal(resetEntry.attachments?.[0].kind, "image");
-  assert.ok(new Queue(dir).findAttachment(resetEntry.attachments![0].id));
+  assert.ok(new Queue(dir).artifacts.findMedia(resetEntry.attachments![0].id));
 
   nextIssue({ agent: "pi", project: "app" }, dir);
   await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "evidência" }, dir);
@@ -398,9 +398,9 @@ test("setArtifact grava o .md da Issue; artefato na criação idem; view injeta"
   const dir = root();
   const issue = createIssue({ ...body, title: "art", artifact: "# na criação" }, dir);
   const queue = new Queue(dir);
-  assert.equal(queue.readArtifact("app", issue.id), "# na criação");
+  assert.equal(queue.artifacts.readText("app", { issueId: issue.id, type: "doc" }), "# na criação");
   setArtifact({ issueId: issue.id, content: "# issue doc" }, dir);
-  assert.equal(queue.readArtifact("app", issue.id), "# issue doc");
+  assert.equal(queue.artifacts.readText("app", { issueId: issue.id, type: "doc" }), "# issue doc");
   assert.equal(getIssue(issue.id, dir).artifact, "# issue doc");
   assert.equal(getIssue(createIssue({ ...body, title: "sem art" }, dir).id, dir).artifact, null);
 });
@@ -422,7 +422,7 @@ test("createIssue com anexo: grava bytes e põe metadados na entrada 'Issue crea
   assert.equal(first.comment, "Issue created");
   assert.equal(first.attachments?.length, 1);
   assert.equal(first.attachments?.[0].kind, "image");
-  const found = new Queue(dir).findAttachment(first.attachments![0].id);
+  const found = new Queue(dir).artifacts.findMedia(first.attachments![0].id);
   assert.equal(found?.mediaType, "image/png");
   const plain = createIssue({ ...body, title: "sem img" }, dir);
   assert.equal(plain.thread[0].attachments, undefined);

@@ -85,16 +85,16 @@ function textInput(name, label, value, suggestions = []) {
   return `<label>${label}<input name="${name}" value="${escapeHtml(value)}"${list} aria-invalid="${Boolean(state.errors[name])}">${fieldError(name)}</label>${datalist}`;
 }
 
-export function selectInput(name, label, values, selected, emptyLabel = "Selecione") {
+function selectInput(name, label, values, selected, emptyLabel = "Selecione") {
   const optionsHtml = `<option value="">${emptyLabel}</option>${values.map((value) => `<option ${value === selected ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}`;
   return `<label>${label}<select name="${name}" aria-invalid="${Boolean(state.errors[name])}">${optionsHtml}</select>${fieldError(name)}</label>`;
 }
 
-export function areaInput(name, label, value) {
+function areaInput(name, label, value) {
   return `<label>${label}<textarea name="${name}" rows="4" aria-invalid="${Boolean(state.errors[name])}">${escapeHtml(value)}</textarea>${fieldError(name)}</label>`;
 }
 
-export function fieldError(name) {
+function fieldError(name) {
   return state.errors[name] ? `<span class="field-error">${escapeHtml(state.errors[name])}</span>` : "";
 }
 
@@ -116,11 +116,11 @@ export function root() { return document.querySelector("#app"); }
 
 // Atributos de um <details> cuja expansão persiste no state: a chave identifica o <details>
 // entre renders (handleToggle grava por ela) e `forced` deixa quem já força a abertura seguir forçando.
-export function detailsAttrs(key, forced = false) {
+function detailsAttrs(key, forced = false) {
   return ` data-details-id="${key}"${forced || state.expanded.has(key) ? " open" : ""}`;
 }
 
-export const tagLabels = { complexity: "Complexidade", human_need: "Humano", risk: "Risco" };
+const tagLabels = { complexity: "Complexidade", human_need: "Humano", risk: "Risco" };
 export function tagsMarkup(tags) {
   const entries = Object.entries(tags ?? {});
   if (!entries.length) return "";

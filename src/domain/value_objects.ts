@@ -33,7 +33,6 @@ export const TAG_VALUES = {
 export type TagCategory = keyof typeof TAG_VALUES;
 export type Tags = { [K in TagCategory]?: (typeof TAG_VALUES)[K][number] };
 export type TagUpdates = Partial<Record<TagCategory, string>>;
-export type HumanNeed = (typeof TAG_VALUES)["human_need"][number];
 
 // Todo texto escrito (problema, artefato, comentário, evidência) é limitado: conteúdo
 // grande denuncia Issue grande demais — o remédio é decompor, não escrever mais.

@@ -169,7 +169,7 @@ function failMutation(error) {
   renderDetail();
 }
 
-export async function reloadIssues() {
+async function reloadIssues() {
   state.issues = await api("/api/issues");
   state.refreshedAt = new Date();
 }

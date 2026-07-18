@@ -20,7 +20,7 @@ Uma **Issue** é a unidade de trabalho de uma sessão: pequena, com uma entrega 
 - **action** diz a entrega esperada: `Planning` · `Design` · `Implement` · `QA` · `Deploy`.
 - Status: `OPEN → CLAIMED → (AWAITING →) CLOSED`.
 - Trabalho maior vira **novas Issues relacionadas** (`--relates`), nunca uma Issue gorda.
-- Não há validação de sequência entre actions: você pode criar uma Issue `Implement` sem `Design` anterior — use o bom senso do fluxo (`docs/AIDevelopmentWorkfow.drawio`).
+- Não há validação de sequência entre actions: você pode criar uma Issue `Implement` sem `Design` anterior — siga o roteamento e os gates descritos nesta skill.
 
 ## Linhagem (relates)
 

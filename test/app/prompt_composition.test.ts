@@ -85,11 +85,11 @@ test("Issue Implement filha recebe o plano do Design pai no prompt", () => {
     /Plano de implementação/);
 });
 
-test("Issue Design recebe a sua Feature no prompt", () => {
-  const features = ["Feature: Login\n  Scenario: ok"];
+test("Issue Design recebe as Features do seu grupo no prompt", () => {
+  const features = ["Feature: Login\n  Scenario: ok", "Feature: Logout\n  Scenario: ok"];
   const text = composePrompt(makeView("Design", { features }));
-  assert.match(text, /## Feature desta Issue Design/);
-  assert.match(text, /Feature: Login/);
+  assert.match(text, /## Features desta Issue/);
+  assert.match(text, /Feature: Login[\s\S]*Feature: Logout/);
   assert.doesNotMatch(composePrompt(makeView("Design")), /## Feature/);
 });
 

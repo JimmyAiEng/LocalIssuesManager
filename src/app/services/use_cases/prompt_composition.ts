@@ -35,10 +35,10 @@ function issueInfo(issue: IssueView): string {
   return lines.join("\n");
 }
 
-// A Issue Design filha recebe a Feature correspondente do RequirementArtifact.
+// A Issue Design recebe o grupo de Features que ela cobre (o seu RequirementArtifact).
 // O Gherkin viaja no prompt para a filha desenhar exatamente o seu recorte.
 function featureSection(features: string[]): string {
-  return `## Feature desta Issue Design\n${features.join("\n\n")}`;
+  return `## Features desta Issue\n${features.join("\n\n")}`;
 }
 
 // A cadeia de ancestrais (do mais próximo ao mais distante): a Issue atual é a ponta de uma

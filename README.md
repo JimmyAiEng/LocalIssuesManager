@@ -118,7 +118,7 @@ A IA só conclui (`AWAITING`/`CLOSED`) se a entrega da action existir:
 
 | Action | Gate |
 |--------|------|
-| `Planning` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features + **uma filha `Design` por Feature** (`issues decompose`), com o nome da Feature no título da filha |
+| `Planning` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features + as filhas `Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` os nomes que cobre): toda Feature em exatamente uma filha |
 | `Design` | Decisão de arquitetura (`issues design changed`) + plano válido (`issues plan set`) + **≥1 filha `Implement`** (`issues decompose`). Com `architecture_changed=true`: também `design.md` + os 4 níveis em PlantUML válido, e só fecha por decisão humana |
 | `Implement` | Worktree criada (`issues worktree add`) + checks do projeto passando na worktree (+ ordem TDD, se `--test-paths`) |
 | `QA` | Artefato .md da validação requisito×comportamento (`issues artifact`) |

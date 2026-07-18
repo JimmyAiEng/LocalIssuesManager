@@ -31,7 +31,7 @@ Ao decompor trabalho, crie as novas Issues já relacionadas à origem.
 
 | action | Skill | Entrega obrigatória (gate de conclusão) |
 |---|---|---|
-| `Planning` | `planning-phase` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features **+** **uma filha `action=Design` por Feature** (`issues decompose`), com o nome da Feature no título da filha: sem a decomposição completa, o gate aponta a Feature descoberta e não fecha |
+| `Planning` | `planning-phase` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features **+** as filhas `action=Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` o grupo que cobre): toda Feature em exatamente uma filha — se sobrar Feature descoberta ou repetida, o gate aponta e não fecha |
 | `Design` | `design-phase` | Decisão de arquitetura (`issues design changed --value true\|false`) + plano válido (`issues plan set`) **+** **≥1 filha `Implement`** (`issues decompose`, uma por Small Plan). Se `true`: `design.md` + os 4 níveis (High Level, Package, Class, Interface/DataModel) em PlantUML válido e **nunca fecha AFK** (só `AWAITING`, aceite humano). Se `false`: dispensa diagramas e revisão humana |
 | `Implement` | `implement-phase` | Worktree usada + check do projeto passando (roda sozinho no fechamento). Com `--test-paths` configurado, exige também a ordem TDD no histórico da worktree: um commit só-de-testes antes do primeiro commit de produção (cita o commit infrator) |
 | `QA` | `qa-phase` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
@@ -96,7 +96,7 @@ issues get --id <id> [REQUIREMENTS|DESIGN|PLAN] | issues list [--status --projec
 issues comment --id <id> --comment <t> [--attach <arquivo>] [--role <papel>]
 issues tag --id <id> [--complexity …] [--risk …] [--human-need …] (--agent <ia>|--human)
 issues relate --id <id> --relates <a,b> [--kind parent|child|see-also]   # linhagem entre Issues (default see-also)
-issues decompose --id <id> --into <arquivo.json> (--agent <ia>|--human)  # fan-out: cria as filhas (Design por Feature / Implement por Small Plan)
+issues decompose --id <id> --into <arquivo.json> (--agent <ia>|--human)  # fan-out: cria as filhas (Design por grupo de Features / Implement por Small Plan)
 issues artifact --id <id> --file <a.md>              # grava/substitui o Artefato .md (≤300 palavras; o nome do arquivo é irrelevante)
 issues status --id <id> --agent <ia> --status AWAITING|CLOSED --comment <evidência> [--reason <r>] [--role <papel>]
 issues worktree add|remove --id <id>                 # worktree git no repo do projeto

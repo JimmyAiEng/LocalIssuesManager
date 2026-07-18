@@ -8,7 +8,7 @@ description: >-
 
 Seu objetivo é congelar a spec da solução e deixá-la herdável pelas Issues seguintes.
 
-Os requisitos desta Issue chegam no prompt sob `## Feature desta Issue Design`: é a Feature Gherkin que ela desenha.
+Os requisitos desta Issue chegam no prompt sob `## Features desta Issue`: são as Features Gherkin do grupo que ela cobre — **uma ou várias**, agrupadas por conceito de domínio no Planning.
 A spec tem que cobrir **todas** elas; nenhuma outra Issue vai desenhá-las.
 
 ## Heurísticas

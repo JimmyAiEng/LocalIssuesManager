@@ -37,29 +37,60 @@ const designIssue = (dir: string): string =>
 const decompose = (dir: string, issueId: string, spec: unknown) =>
   decomposeIssue({ issueId, file: write(dir, `d-${Math.random()}.json`, spec), actor: "pi" }, dir);
 
-test("decompõe Planning em filhas Design com linhagem parent/child recíproca", () => {
+test("decompõe Planning em filhas Design com linhagem parent/child recíproca e Features declaradas", () => {
   const dir = root();
   const parent = planningWithRequirements(dir);
   const result = decompose(dir, parent, { children: [
-    { title: "Design Login", type: "Feat", action: "Design", problem: "p" },
-    { title: "Design Logout", type: "Feat", action: "Design", problem: "p" }] });
+    { title: "Design A", type: "Feat", action: "Design", problem: "p", features: ["Login"] },
+    { title: "Design B", type: "Feat", action: "Design", problem: "p", features: ["Logout"] }] });
   assert.equal(result.mode, "concurrent");
   assert.equal(result.children.length, 2);
   const child = getIssue(result.children[0], dir);
   assert.deepEqual(child.relates, [{ id: parent, kind: "parent" }]); // filha aponta o pai
   assert.equal(child.action, "Design");
-  assert.deepEqual(child.features, [FEATURE]); // a Feature casada pelo nome no título
-  assert.match(composePrompt(child), /## Feature desta Issue Design/);
+  assert.deepEqual(child.features, [FEATURE]); // Gherkin completo da Feature declarada, título livre
   const parentView = getIssue(parent, dir);
   assert.deepEqual(parentView.relates.map((r) => r.kind), ["child", "child"]); // recíproca no pai
 });
 
-test("decompose recusa filha Design cujo título não casa nenhuma Feature", () => {
+test("agrupamento N:1: uma filha Design cobre duas Features e recebe as duas no prompt", () => {
+  const dir = root();
+  const parent = planningWithRequirements(dir);
+  const [only] = decompose(dir, parent, { children: [
+    { title: "Design do domínio de sessão", type: "Feat", action: "Design", problem: "p",
+      features: ["Login", "Logout"] }] }).children;
+  const child = getIssue(only, dir);
+  assert.equal(child.features?.length, 2);
+  const prompt = composePrompt(child);
+  assert.match(prompt, /## Features desta Issue/);
+  assert.match(prompt, /Feature: Login/);
+  assert.match(prompt, /Feature: Logout/);
+});
+
+test("decompose recusa Feature inexistente, features ausente/vazio e Feature já coberta", () => {
   const dir = root();
   const parent = planningWithRequirements(dir);
   assert.throws(() => decompose(dir, parent, { children: [
-    { title: "Design de Cadastro", type: "Feat", action: "Design", problem: "p" }] }),
-    (e: unknown) => e instanceof DomainError && /não casa nenhuma Feature/.test(e.message) && /Login, Logout/.test(e.message));
+    { title: "x", type: "Feat", action: "Design", problem: "p", features: ["Cadastro"] }] }),
+    (e: unknown) => e instanceof DomainError && /não existe nos requisitos/.test(e.message) && /disponíveis: Login, Logout/.test(e.message));
+  for (const features of [undefined, [], [" "], ["Login", 1]]) {
+    assert.throws(() => decompose(dir, parent, { children: [
+      { title: "x", type: "Feat", action: "Design", problem: "p", features }] }), /exige "features"/);
+  }
+  assert.throws(() => decompose(dir, parent, { children: [
+    { title: "a", type: "Feat", action: "Design", problem: "p", features: ["Login"] },
+    { title: "b", type: "Feat", action: "Design", problem: "p", features: ["Login"] }] }), /já coberta por outra filha Design/);
+});
+
+test("decompose em duas chamadas: a segunda recusa Feature já coberta pela primeira", () => {
+  const dir = root();
+  const parent = planningWithRequirements(dir);
+  decompose(dir, parent, { children: [{ title: "a", type: "Feat", action: "Design", problem: "p", features: ["Login"] }] });
+  assert.throws(() => decompose(dir, parent, { children: [
+    { title: "b", type: "Feat", action: "Design", problem: "p", features: ["Login"] }] }), /já coberta por outra filha Design/);
+  const second = decompose(dir, parent, { children: [
+    { title: "b", type: "Feat", action: "Design", problem: "p", features: ["Logout"] }] });
+  assert.equal(second.children.length, 1); // a Feature restante ainda decompõe
 });
 
 test("decompõe Design em filhas Implement carregando o Small Plan (persistido e no prompt)", () => {

@@ -3,7 +3,7 @@ import { RequirementArtifact, type RequirementSet } from "../../../domain/artifa
 import { NotFoundError } from "../../../domain/domain_error.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import { Queue } from "../../../domain/queue_repository.js";
-import { requirePlanningIssue, requireValidRequirements } from "../workflows/planning.js";
+import { requirePlanningIssue } from "../workflows/planning.js";
 
 export function setRequirements(input: { issueId: string; file: string }, root?: string): RequirementSet {
   const queue = new Queue(root);
@@ -23,18 +23,10 @@ export function getRequirements(input: { issueId: string }, root?: string): Requ
   return RequirementArtifact.validate(raw);
 }
 
-// A filha Design recebe somente a Feature correspondente ao nome presente em seu título.
-export function featureForDesignChild(queue: Queue, issue: Issue): string[] | null {
+// A Issue Design possui o seu recorte de Requirements (gravado pelo decompose): o grupo de
+// Features que ela desenha viaja no prompt sem depender de casar nome com título.
+export function designFeatures(queue: Queue, issue: Issue): string[] | null {
   if (issue.action !== "Design") return null;
-  const parentId = issue.relates.find((relation) => relation.kind === "parent")?.id;
-  const parent = parentId ? queue.load(parentId) : null;
-  if (parent?.action !== "Planning") return null;
-  try {
-    const requirements = requireValidRequirements(queue, parent.project, parent.id);
-    const index = RequirementArtifact.featureNames(requirements)
-      .findIndex((name) => issue.title.includes(name));
-    return index === -1 ? null : [requirements.features[index]!];
-  } catch {
-    return null;
-  }
+  const raw = queue.artifacts.readText(issue.project, { issueId: issue.id, type: "requirement" });
+  return raw === null ? null : RequirementArtifact.validate(raw).features;
 }

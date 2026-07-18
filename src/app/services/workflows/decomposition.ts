@@ -3,13 +3,15 @@ import { ImplementationPlanArtifact } from "../../../domain/artifacts/implementa
 import { RequirementArtifact, type RequirementSet } from "../../../domain/artifacts/requirement_artifact.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import type { Queue } from "../../../domain/queue_repository.js";
+import { designChildCoverage } from "./planning.js";
 
 // Formato do arquivo --into: descreve as filhas do fan-out. mode concurrent (default) = filhas
 // independentes; sequential = cada filha encadeada see-also à anterior (a fila serve por ordem
-// de criação, então a ordem do arquivo já é a ordem de execução). Small Plan por filha em `plan`.
+// de criação, então a ordem do arquivo já é a ordem de execução). Small Plan por filha em `plan`;
+// grupo de Features da filha Design em `features`.
 export type DecomposeChild = {
   title: string; type: string; action: string; problem: string;
-  acceptance_criteria?: string; plan?: unknown;
+  acceptance_criteria?: string; plan?: unknown; features?: string[];
 };
 export type Decomposition = { mode?: string; children: DecomposeChild[] };
 
@@ -22,14 +24,37 @@ export function validateChildren(queue: Queue, parent: Issue, children: Decompos
   throw new DomainError(`Issue ${parent.id} (action=${parent.action}) não decompõe: só Planning (→Design) e Design (→Implement)`);
 }
 
-// Cada filha Design corresponde a uma Feature do RequirementArtifact pelo nome no título.
+// Cada filha Design declara em `features` o grupo de Features que cobre: requisito é linguagem do
+// usuário e design é linguagem da solução, então a relação é N:1. O título é livre — o que vale é a
+// declaração. Partição: uma Feature nunca cai em duas filhas, nem nesta chamada nem nas anteriores.
 function validateDesignChildren(queue: Queue, parent: Issue, children: DecomposeChild[]): void {
-  const requirements = requireParentRequirements(queue, parent);
-  const names = RequirementArtifact.featureNames(requirements);
+  const names = RequirementArtifact.featureNames(requireParentRequirements(queue, parent));
+  const taken = new Set(designChildCoverage(queue, parent).keys());
   for (const child of children) {
     if (child.action !== "Design") throw new DomainError(`Filha de Planning deve ter action=Design (recebido "${child.action}" em "${child.title}")`);
-    if (!names.some((name) => child.title.includes(name))) throw new DomainError(`Título da filha Design "${child.title}" não casa nenhuma Feature (${names.join(", ")}): inclua o nome da Feature no título`);
+    for (const name of declaredFeatures(child)) {
+      if (!names.includes(name)) throw new DomainError(`Feature "${name}" declarada em "${child.title}" não existe nos requisitos da Issue ${parent.id} (disponíveis: ${names.join(", ")})`);
+      if (taken.has(name)) throw new DomainError(`Feature "${name}" já coberta por outra filha Design: cada Feature pertence a exatamente um grupo`);
+      taken.add(name);
+    }
   }
+}
+
+function declaredFeatures(child: DecomposeChild): string[] {
+  const features = child.features;
+  if (!Array.isArray(features) || features.length === 0
+    || features.some((name) => typeof name !== "string" || !name.trim())) {
+    throw new DomainError(`Filha Design "${child.title}" exige "features": os nomes das Features do pai que ela cobre`);
+  }
+  return features;
+}
+
+// O Gherkin das Features declaradas: o decompose grava esse recorte como o RequirementArtifact da
+// filha, que passa a possuir os seus requisitos em vez de casar nome com título depois.
+export function featureTexts(queue: Queue, parent: Issue, declared: string[]): string[] {
+  const requirements = requireParentRequirements(queue, parent);
+  const names = RequirementArtifact.featureNames(requirements);
+  return declared.map((name) => requirements.features[names.indexOf(name)]!);
 }
 
 function validateImplementChildren(children: DecomposeChild[]): void {

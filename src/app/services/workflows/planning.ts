@@ -4,10 +4,11 @@ import type { Issue } from "../../../domain/issue_entity.js";
 import type { Queue } from "../../../domain/queue_repository.js";
 import type { ActionType } from "../../../domain/value_objects.js";
 
-// Gate de conclusão de uma Issue Planning: requisitos válidos persistidos e uma filha Design por Feature.
+// Gate de conclusão de uma Issue Planning: requisitos válidos persistidos e as filhas Design
+// particionando as Features — toda Feature coberta por exatamente uma filha.
 export function validatePlanning(queue: Queue, issue: Issue): void {
   const requirements = requireValidRequirements(queue, issue.project, issue.id);
-  requireDesignChildPerFeature(queue, issue, requirements);
+  requireFeaturePartition(queue, issue, requirements);
 }
 
 export function requireValidRequirements(queue: Queue, project: string,
@@ -28,14 +29,33 @@ export function requirePlanningIssue(issue: Issue): void {
   }
 }
 
-function requireDesignChildPerFeature(queue: Queue, issue: Issue,
+function requireFeaturePartition(queue: Queue, issue: Issue,
   requirements: RequirementSet): void {
-  const children = childIssues(queue, issue, "Design");
+  const coverage = designChildCoverage(queue, issue);
   for (const feature of RequirementArtifact.featureNames(requirements)) {
-    if (!children.some((child) => child.title.includes(feature))) {
-      throw new DomainError(`Issue Planning não fecha sem decompor a Feature "${feature}": crie a filha Design com 'issues decompose --id ${issue.id} --into <arquivo.json>'`);
+    const owners = coverage.get(feature) ?? [];
+    if (owners.length === 0) {
+      throw new DomainError(`Issue Planning não fecha sem decompor a Feature "${feature}": crie a filha Design que a cobre com 'issues decompose --id ${issue.id} --into <arquivo.json>' declarando-a em "features"`);
+    }
+    if (owners.length > 1) {
+      throw new DomainError(`Feature "${feature}" coberta por mais de uma filha Design (${owners.map((child) => `${child.title} (${child.id})`).join(", ")}): cada Feature pertence a exatamente um grupo`);
     }
   }
+}
+
+// Features cobertas por filha Design → o RequirementArtifact da própria filha, gravado pelo
+// decompose, é a declaração do seu grupo. Filha criada fora do decompose não cobre nada, e a
+// Feature aparece como descoberta no gate acima.
+export function designChildCoverage(queue: Queue, issue: Issue): Map<string, Issue[]> {
+  const coverage = new Map<string, Issue[]>();
+  for (const child of childIssues(queue, issue, "Design")) {
+    const raw = queue.artifacts.readText(child.project, { issueId: child.id, type: "requirement" });
+    if (raw === null) continue;
+    for (const name of RequirementArtifact.featureNames(RequirementArtifact.validate(raw))) {
+      coverage.set(name, [...(coverage.get(name) ?? []), child]);
+    }
+  }
+  return coverage;
 }
 
 function childIssues(queue: Queue, issue: Issue, action: ActionType): Issue[] {

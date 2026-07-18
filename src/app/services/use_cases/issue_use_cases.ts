@@ -13,7 +13,7 @@ import {
 import { type IncomingAttachment, persistableAttachments } from "../attachments.js";
 import { readPlanForView } from "./plan_use_cases.js";
 import { requireProject } from "./project_use_cases.js";
-import { featureForDesignChild } from "./requirements_use_cases.js";
+import { designFeatures } from "./requirements_use_cases.js";
 import { closeByHuman, deliverByAgent } from "../workflows/index.js";
 
 export type CreateInput = {
@@ -63,7 +63,7 @@ export function getIssue(id: string, root?: string): IssueView {
 // de ancestrais (subindo os parent): quem reivindica recebe a linhagem sem buscar cada Issue.
 export function issueView(queue: Queue, issue: Issue): IssueView {
   return { ...issue.toJSON(), artifact: queue.artifacts.readText(issue.project, { issueId: issue.id, type: "document" }),
-    related: issue.relates.flatMap((r) => relatedView(queue, r.id, r.kind)), features: featureForDesignChild(queue, issue),
+    related: issue.relates.flatMap((r) => relatedView(queue, r.id, r.kind)), features: designFeatures(queue, issue),
     ancestors: ancestorChain(queue, issue), plan: readPlanForView(queue, issue.project, issue.id) }; // plan = Small Plan da própria Issue
 }
 

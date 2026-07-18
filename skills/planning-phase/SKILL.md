@@ -29,7 +29,8 @@ O validador é rígido — copie este formato:
 {
   "features": [
     "Feature: Login com e-mail\nComo um usuário cadastrado\nEu quero poder entrar com e-mail e senha\nPara que eu acesse minha conta\n\nScenario: Credenciais válidas\nGiven que eu tenho uma conta ativa\nWhen eu envio e-mail e senha corretos\nThen eu vejo a minha área logada\n\nScenario: Senha errada\nGiven que eu tenho uma conta ativa\nWhen eu envio a senha errada\nThen eu vejo a mensagem de credenciais inválidas\nAnd eu continuo na tela de login",
-    "Feature: Recuperação de senha\nComo um usuário cadastrado\nEu quero poder redefinir minha senha\nPara que eu volte a acessar a conta quando esquecer\n\nScenario: Link enviado\nGiven que eu informo um e-mail cadastrado\nWhen eu peço a redefinição\nThen eu recebo um e-mail com o link de redefinição"
+    "Feature: Recuperação de senha\nComo um usuário cadastrado\nEu quero poder redefinir minha senha\nPara que eu volte a acessar a conta quando esquecer\n\nScenario: Link enviado\nGiven que eu informo um e-mail cadastrado\nWhen eu peço a redefinição\nThen eu recebo um e-mail com o link de redefinição",
+    "Feature: Busca no catálogo\nComo um usuário logado\nEu quero poder buscar itens pelo nome\nPara que eu encontre o que preciso sem navegar página a página\n\nScenario: Termo com resultados\nGiven que existem itens cadastrados\nWhen eu busco por um termo presente no nome\nThen eu vejo os itens correspondentes"
   ]
 }
 ```
@@ -42,41 +43,58 @@ Regras que o validador cobra em **cada** Feature, nesta ordem exata:
 
 Linhas em branco são ignoradas; cada Feature tem no máximo 300 palavras.
 
-## Entrega 2 — uma Issue Design por Feature
-
-O gate exige **uma filha `action=Design` por Feature** antes de fechar.
-O casamento é pelo **nome da Feature contido no título da filha**: o nome é o que vem depois de `Feature:` no cabeçalho.
+## Entrega 2 — uma Issue Design por grupo de Features
 
 ```bash
 issues decompose --id <id> --into ./decompose.json --agent <ia>
 ```
+
+Cada filha declara em `features` os nomes das Features que ela cobre — o **grupo é a própria filha Design**.
+Nas três Features da Entrega 1, login e recuperação de senha são o mesmo conceito (autenticação) e viram **um** grupo; a busca é outro conceito e vira **outro**:
 
 ```json
 {
   "mode": "concurrent",
   "children": [
     {
-      "title": "Design: Login com e-mail",
+      "title": "Design: Autenticação",
       "type": "Feat",
       "action": "Design",
-      "problem": "Desenhar a autenticação por e-mail e senha.",
-      "acceptance_criteria": "Plano de implementação aprovado para a Feature."
+      "problem": "Desenhar a autenticação: entrada por e-mail e senha e redefinição por link.",
+      "acceptance_criteria": "Spec congelada cobrindo as Features do grupo.",
+      "features": ["Login com e-mail", "Recuperação de senha"]
     },
     {
-      "title": "Design: Recuperação de senha",
+      "title": "Design: Busca",
       "type": "Feat",
       "action": "Design",
-      "problem": "Desenhar o fluxo de redefinição de senha por link.",
-      "acceptance_criteria": "Plano de implementação aprovado para a Feature."
+      "problem": "Desenhar a busca de itens do catálogo por nome.",
+      "acceptance_criteria": "Spec congelada cobrindo as Features do grupo.",
+      "features": ["Busca no catálogo"]
     }
   ]
 }
 ```
 
-`title`, `type`, `action` e `problem` são obrigatórios; `acceptance_criteria` é opcional.
-`action` de toda filha tem que ser `Design`.
+Regras que o validador cobra:
+1. `title`, `type`, `action` e `problem` são obrigatórios; `acceptance_criteria` é opcional.
+2. `action` de toda filha tem que ser `Design`.
+3. `features` é obrigatório: array não vazio com os nomes das Features do pai, **exatamente** como escritos depois de `Feature:` no `req.json` — não abrevie, não reescreva.
+4. Nome que não existe nos requisitos é recusado, e o erro lista os nomes disponíveis.
+5. A mesma Feature em duas filhas é recusada, inclusive entre chamadas: você pode chamar `decompose` outra vez para os grupos que faltam, mas nunca repetir Feature já coberta.
+6. O gate de fechamento cobra a **partição**: toda Feature do pai coberta por exatamente uma filha Design, nenhuma solta, nenhuma repetida.
+
+O `title` é **livre** — nomeie o conceito do grupo (`Design: Autenticação`), não a Feature.
+O `decompose` grava o Gherkin do grupo como os requisitos da própria filha, e ela o recebe no prompt sob `## Features desta Issue`.
+Filha Design criada por fora (`issues create`) não cobre Feature nenhuma: as Features dela continuam descobertas no gate.
 `mode`: `concurrent` (default, filhas independentes) ou `sequential` (encadeadas para execução em ordem).
 `decompose` já grava a linhagem parent/child recíproca — não chame `relate` depois.
+
+**Como agrupar**:
+- Junte as Features que compartilham o **mesmo conceito de domínio** ou que tocariam os **mesmos módulos/arquivos**.
+- **Na dúvida, agrupe**: duas Issues Design desenhando o mesmo conceito produzem specs conflitantes, e esse é o erro caro.
+Uma Design um pouco larga é barata, porque ela mesma se fatia em vários Implement depois.
+- Cada Feature pertence a exatamente um grupo.
 
 ## Entrega 3 — o Artefato do alinhamento
 
@@ -112,5 +130,5 @@ issues status --id <id> --agent <ia> --status CLOSED \
 ```
 
 Use `--status AWAITING` (sem `--reason`) se a Issue é HITL, `risk=ALTO` ou `complexity=ALTA`.
-Sem requisitos válidos **e** uma filha Design por Feature, o comando falha apontando a Feature descoberta — entregue as duas antes.
+Sem requisitos válidos **e** toda Feature coberta por exatamente uma filha Design, o comando falha apontando a Feature descoberta ou repetida — entregue as duas antes.
 Concluída a Issue, **encerre a sessão**: não busque outra Issue.

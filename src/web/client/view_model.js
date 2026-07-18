@@ -117,6 +117,14 @@ export function validateCreate(values) {
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
+export function validateProject(values) {
+  const errors = {};
+  for (const field of ["name", "repo"]) {
+    if (!String(values[field] ?? "").trim()) errors[field] = "Campo obrigatório";
+  }
+  return { ok: Object.keys(errors).length === 0, errors };
+}
+
 export function validateClose(values) {
   return validateCommentAndReason(values, { requireComment: false, requireReason: true });
 }

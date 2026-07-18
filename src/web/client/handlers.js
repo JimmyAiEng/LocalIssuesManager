@@ -1,16 +1,16 @@
 import { clearActionState, emptyCommentDraft, emptyDraft, emptyFilters, saveFilters, state } from "./state.js";
 import { api } from "./http.js";
-import { renderBoard, renderError, renderLoading, renderNewIssue, root } from "./view.js";
+import { renderBoard, renderError, renderLoading, renderNewIssue, renderNewProject, root } from "./view.js";
 import { renderDetail } from "./detail_view.js";
 import {
   claimIssue, fetchDesign, fetchRequirements, performClose, readForm, refreshIssue,
-  submitAction, submitComment, submitCreate, submitTags,
+  submitAction, submitComment, submitCreate, submitCreateProject, submitTags,
 } from "./mutations.js";
 
 export async function refresh() {
   renderLoading();
   try {
-    state.issues = await api("/api/issues");
+    [state.issues, state.projects] = await Promise.all([api("/api/issues"), api("/api/projects")]);
     state.refreshedAt = new Date();
     renderRoute();
   } catch (error) { renderError(error); }
@@ -19,6 +19,7 @@ export async function refresh() {
 export function renderRoute() {
   const path = location.pathname;
   if (path === "/issues/new") return renderNewIssue();
+  if (path === "/projects/new") return renderNewProject();
   if (path.startsWith("/issues/")) return loadDetail(decodeURIComponent(path.slice(8)));
   renderBoard();
 }
@@ -74,7 +75,7 @@ export function handleClick(event) {
     return renderDetail();
   }
   if ("cancelComment" in target.dataset) { state.commentPanel = null; state.errors = {}; return renderDetail(); }
-  if (target.dataset.issueId || "back" in target.dataset || target.getAttribute("href") === "/issues/new") {
+  if (target.dataset.issueId || "back" in target.dataset || ["/issues/new", "/projects/new"].includes(target.getAttribute("href"))) {
     if ("back" in target.dataset || target.getAttribute("href") === "/") {
       state.draft = emptyDraft();
       clearActionState();
@@ -100,7 +101,7 @@ export function handleInput(event) {
   }
   if (!event.target.name || event.target.type === "file") return;
   const form = event.target.closest("form");
-  const target = form?.id === "comment-form" ? state.commentDraft : state.draft;
+  const target = draftFor(form);
   target[event.target.name] = event.target.value;
 }
 
@@ -109,9 +110,17 @@ export async function handleSubmit(event) {
   const form = event.target;
   if (form.id === "comment-form") return submitComment(form);
   if (form.dataset.tagScope) return submitTags(form);
+  if (form.id === "project-form") return submitCreateProject(form);
   readForm(form, state.draft);
   if (form.id === "create-form") return submitCreate(form);
   if (form.id === "action-form") return submitAction(form);
+}
+
+// Cada formulário escreve no seu próprio draft: senão o rascunho da Issue recebe campos de projeto.
+function draftFor(form) {
+  if (form?.id === "comment-form") return state.commentDraft;
+  if (form?.id === "project-form") return state.projectDraft;
+  return state.draft;
 }
 
 function navigate(event, path) {

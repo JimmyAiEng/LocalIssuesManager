@@ -21,7 +21,7 @@ function boardControls(decisions) {
   const updated = state.refreshedAt ? state.refreshedAt.toLocaleTimeString() : "ainda não atualizado";
   const decisionsBtn = decisions.length
     ? `<button type="button" id="toggle-decisions" class="decisions-badge" aria-expanded="${state.decisionsOpen}">⚠ ${decisions.length} ${decisions.length === 1 ? "decisão" : "decisões"}</button>` : "";
-  return `<header class="toolbar"><h1>Issues</h1><a class="button" href="/issues/new">+ Nova Issue</a>${decisionsBtn}<label>Buscar título <input id="title" value="${escapeHtml(state.filters.title)}"></label><label>Projeto <select id="project">${projects}</select></label><label>Tipo <select id="type">${types}</select></label><label>Owner <select id="owner">${owners}</select></label><button type="button" id="clear" ${hasFilters() ? "" : "disabled"}>Limpar filtros</button><button type="button" id="refresh">Atualizar quadro</button><output aria-live="polite">Atualizado às ${updated}</output></header>`;
+  return `<header class="toolbar"><h1>Issues</h1><a class="button" href="/issues/new">+ Nova Issue</a><a class="button" href="/projects/new">+ Novo Projeto</a>${decisionsBtn}<label>Buscar título <input id="title" value="${escapeHtml(state.filters.title)}"></label><label>Projeto <select id="project">${projects}</select></label><label>Tipo <select id="type">${types}</select></label><label>Owner <select id="owner">${owners}</select></label><button type="button" id="clear" ${hasFilters() ? "" : "disabled"}>Limpar filtros</button><button type="button" id="refresh">Atualizar quadro</button><output aria-live="polite">Atualizado às ${updated}</output></header>`;
 }
 
 function decisionsPanel(decisions) {
@@ -58,7 +58,7 @@ function cardTags(issue) {
 export function renderNewIssue() {
   document.title = "Nova Issue · Issues";
   const draft = state.draft;
-  const projects = options(state.issues, "project");
+  const projects = state.projects.map((project) => project.name);
   root().innerHTML = `<main class="form-page"><a class="button" href="/" data-back>← Voltar ao quadro</a><h1>Nova Issue</h1>${feedback()}<form id="create-form" class="form" novalidate>${summaryError()}
     ${textInput("title", "Título", draft.title)}
     ${textInput("project", "Projeto", draft.project, projects)}
@@ -71,6 +71,18 @@ export function renderNewIssue() {
     ${selectInput("risk", `${tagLabels.risk} (opcional)`, TAG_VALUES.risk, draft.risk)}
     ${attachmentField()}
     <div class="form-actions"><button ${state.busy ? "disabled" : ""}>Salvar Issue</button><a class="button" href="/" data-back>Cancelar</a></div>
+  </form></main>`;
+}
+
+export function renderNewProject() {
+  document.title = "Novo Projeto · Issues";
+  const draft = state.projectDraft;
+  root().innerHTML = `<main class="form-page"><a class="button" href="/" data-back>← Voltar ao quadro</a><h1>Novo Projeto</h1>${feedback()}<form id="project-form" class="form" novalidate>${summaryError()}
+    ${textInput("name", "Nome", draft.name)}
+    ${textInput("repo", "Repositório (caminho local do git)", draft.repo)}
+    ${textInput("check", "Check do Implement (opcional, ex.: npm run check)", draft.check)}
+    <p class="dim">Imagem de container e checks por etapa continuam no CLI: <code>issues project create --help</code>.</p>
+    <div class="form-actions"><button ${state.busy ? "disabled" : ""}>Salvar Projeto</button><a class="button" href="/" data-back>Cancelar</a></div>
   </form></main>`;
 }
 

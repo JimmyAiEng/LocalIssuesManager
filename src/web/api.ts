@@ -5,6 +5,7 @@ import {
   addComment, claimIssue as claimIssueCase, createIssue, decideIssue, getIssue, type IncomingAttachment,
   listIssues, resetClaim, statusIssue, updateTags,
 } from "../app/services/use_cases/issue_use_cases.js";
+import { createProject, listProjects } from "../app/services/use_cases/project_use_cases.js";
 import { renderSvg, sourceHash } from "../app/services/uml-validation/plantuml_check.js";
 import { getRequirements } from "../app/services/use_cases/requirements_use_cases.js";
 import { DESIGN_KINDS, DesignGateError } from "../domain/gates/design_gate.js";
@@ -34,6 +35,7 @@ async function dispatch(request: IncomingMessage, response: ServerResponse, root
   if (request.method === "GET" && url.pathname.startsWith("/api/attachments/")) {
     return serveAttachment(response, decodeURIComponent(url.pathname.slice("/api/attachments/".length)), root);
   }
+  if (url.pathname === "/api/projects") return projectAction(request, response, root);
   const route = routeParts(url.pathname);
   if (request.method === "GET") return getAction(request, response, url, route, root);
   const body = await readBody(request);
@@ -66,6 +68,18 @@ function issueAction(response: ServerResponse, route: string[], body: Body, root
   if (route[1] === "comment") return comment(response, route[0], body, root);
   if (route[1] === "tags") return tag(response, route[0], body, root);
   respond(response, 404, { error: "Not found" });
+}
+
+// Projetos: sem isso o painel não se sustenta sozinho — Issue só nasce em projeto registrado, e
+// registrar era exclusivo do CLI. Só nome e repo (exigidos pelo domínio) mais o check do Implement;
+// container e checks por etapa continuam no CLI, onde já existem.
+async function projectAction(request: IncomingMessage, response: ServerResponse, root?: string): Promise<void> {
+  if (request.method === "GET") return respond(response, 200, listProjects(root));
+  if (request.method !== "POST") return respond(response, 404, { error: "Not found" });
+  const body = await readBody(request);
+  const project = createProject({ name: text(body, "name"), repo: text(body, "repo"),
+    check: optionalText(body, "check") }, root);
+  respond(response, 201, project);
 }
 
 function list(response: ServerResponse, url: URL, root?: string): void {

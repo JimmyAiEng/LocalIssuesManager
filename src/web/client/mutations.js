@@ -1,10 +1,10 @@
 import {
   classifyMutationError, humanActions,
-  validateClose, validateCreate, validateDecide, validateReset,
+  validateClose, validateCreate, validateDecide, validateProject, validateReset,
 } from "./view_model.js";
-import { clearActionState, emptyDraft, state } from "./state.js";
+import { clearActionState, emptyDraft, emptyProjectDraft, state } from "./state.js";
 import { api } from "./http.js";
-import { renderError, renderNewIssue } from "./view.js";
+import { renderError, renderNewIssue, renderNewProject } from "./view.js";
 import { renderDetail } from "./detail_view.js";
 
 export function readForm(form, target) {
@@ -12,6 +12,32 @@ export function readForm(form, target) {
   // lê à parte. Copiá-lo gravaria "[object File]" no draft — e o POST serializa o draft inteiro,
   // o que a API rejeita com "Invalid attachments". Mesma exclusão do handler de input.
   for (const [key, value] of new FormData(form).entries()) if (typeof value === "string") target[key] = value;
+}
+
+export async function submitCreateProject(form) {
+  readForm(form, state.projectDraft);
+  const result = validateProject(state.projectDraft);
+  state.errors = result.errors;
+  if (!result.ok) return renderNewProject();
+  state.busy = true;
+  renderNewProject();
+  try {
+    const draft = state.projectDraft;
+    const payload = { name: draft.name, repo: draft.repo };
+    if (draft.check.trim()) payload.check = draft.check;
+    await api("/api/projects", { method: "POST", body: payload });
+    state.projects = await api("/api/projects");
+    state.projectDraft = emptyProjectDraft();
+    state.errors = {};
+    state.busy = false;
+    state.feedback = { kind: "success", message: `Projeto ${payload.name} registrado` };
+    history.pushState({}, "", "/issues/new"); // o próximo passo é criar a Issue no projeto novo
+    renderNewIssue();
+  } catch (error) {
+    state.busy = false;
+    state.feedback = { kind: "error", message: error.message };
+    renderNewProject();
+  }
 }
 
 export async function submitCreate(form) {

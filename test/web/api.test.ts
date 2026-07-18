@@ -27,6 +27,27 @@ test("API cria, lista por tipo, lê e fecha pela camada app", async () => withWe
   assert.equal(closed.body.status, "CLOSED");
 }));
 
+test("API registra projeto e o lista — o painel deixa de depender do CLI para começar", async () => withWeb(async (url, root) => {
+  assert.deepEqual(await projectNames(url), ["web"]);
+  const created = await request(url, "POST", "/api/projects", { name: "novo", repo: root, check: "npm test" });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.name, "novo");
+  assert.equal(created.body.check, "npm test");
+  assert.deepEqual((await projectNames(url)).sort(), ["novo", "web"]);
+  // e a Issue passa a nascer nele: era exatamente o que travava quem só usa o web
+  assert.equal((await request(url, "POST", "/api/issues", { ...input, project: "novo" })).status, 201);
+}));
+
+test("API rejeita projeto sem nome/repo e com repo inexistente", async () => withWeb(async (url) => {
+  assert.equal((await request(url, "POST", "/api/projects", { repo: "/tmp" })).status, 400);
+  const semRepo = await request(url, "POST", "/api/projects", { name: "x" });
+  assert.equal(semRepo.status, 400);
+  const inexistente = await request(url, "POST", "/api/projects", { name: "x", repo: "/nao/existe/mesmo" });
+  assert.equal(inexistente.status, 400);
+  assert.match(inexistente.body.error as string, /Repositório não encontrado/);
+  assert.equal((await request(url, "PUT", "/api/projects", { name: "x" })).status, 404);
+}));
+
 test("API create exige projeto registrado e action válida", async () => withWeb(async (url) => {
   const noProject = await request(url, "POST", "/api/issues", { ...input, project: "ghost" });
   assert.equal(noProject.status, 400);
@@ -234,6 +255,12 @@ async function withWeb(run: (url: string, root: string) => Promise<void>): Promi
   createProject({ name: "web", repo: root }, root);
   const web = await startWebServer(0, root);
   try { await run(web.url, root); } finally { await close(web); }
+}
+
+// O helper request tipa o corpo como objeto; /api/projects devolve lista.
+async function projectNames(url: string): Promise<string[]> {
+  const response = await fetch(`${url}/api/projects`);
+  return ((await response.json()) as { name: string }[]).map((project) => project.name);
 }
 
 async function request(url: string, method: string, path: string, body?: object): Promise<{ status: number; body: Record<string, unknown> }> {

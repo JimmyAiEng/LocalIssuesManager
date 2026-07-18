@@ -246,6 +246,38 @@ test("UI-06: formulário de nova Issue bloqueia submit inválido e, quando váli
   }));
 
 // =====================================================================================
+// Item 6b — Bootstrap: base zerada só se resolvia pelo CLI (Issue exige projeto registrado)
+// =====================================================================================
+test("UI-06b: base sem projeto nenhum registra o projeto pelo web e cria a Issue nele", async () =>
+  withUI(() => { /* nada semeado: é o primeiro uso do painel */ }, async (page, url) => {
+    await page.goto(url);
+    await page.getByRole("link", { name: "+ Novo Projeto" }).click();
+    await page.getByRole("heading", { name: "Novo Projeto" }).waitFor();
+    await page.getByRole("button", { name: "Salvar Projeto" }).click(); // submit sem campos obrigatórios
+    await page.locator(".error-summary").waitFor();
+    assert.equal(await page.locator(".field-error").count(), 2); // nome e repo
+    assert.match(page.url(), /\/projects\/new$/); // não navegou
+
+    await page.fill('input[name="name"]', "recem-criado");
+    await page.fill('input[name="repo"]', process.cwd()); // repo precisa existir em disco
+    await page.getByRole("button", { name: "Salvar Projeto" }).click();
+
+    await page.getByRole("heading", { name: "Nova Issue" }).waitFor(); // segue direto para a Issue
+    assert.match(await page.locator(".feedback-success").innerText(), /Projeto recem-criado registrado/);
+    // o projeto novo já é sugerido no campo, sem existir Issue alguma para derivá-lo
+    assert.equal(await page.locator('#project-list option[value="recem-criado"]').count(), 1);
+
+    await page.fill('input[name="title"]', "Primeira Issue do projeto");
+    await page.fill('input[name="project"]', "recem-criado");
+    await page.selectOption('select[name="type"]', "Feat");
+    await page.selectOption('select[name="action"]', "Planning");
+    await page.fill('textarea[name="problem"]', "começar o projeto");
+    await page.getByRole("button", { name: "Salvar Issue" }).click();
+    await page.getByRole("heading", { name: "Primeira Issue do projeto" }).waitFor();
+    assert.match(page.url(), /\/issues\/[0-9a-f-]{36}$/);
+  }));
+
+// =====================================================================================
 // Item 7 — Conflito de save -> 409: preserva rascunho e oferece Atualizar (mock via page.route)
 // =====================================================================================
 test("UI-07: 409 no save preserva o rascunho e oferece Atualizar (mock via page.route)", async () =>

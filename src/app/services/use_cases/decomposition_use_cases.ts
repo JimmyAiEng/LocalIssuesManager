@@ -3,7 +3,7 @@ import { ImplementationPlanArtifact } from "../../../domain/artifacts/implementa
 import { RequirementArtifact } from "../../../domain/artifacts/requirement_artifact.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import { Queue } from "../../../domain/queue_repository.js";
-import { type DecomposeChild, featureTexts, parseDecomposition, validateChildren } from "../workflows/decomposition.js";
+import { type DecomposeChild, featuresDeclaradas, parseDecomposition, validateChildren } from "../workflows/decomposition.js";
 import { createIssue, relateIssues } from "./issue_use_cases.js";
 
 export type { DecomposeChild, Decomposition } from "../workflows/decomposition.js";
@@ -39,7 +39,7 @@ function writeChildArtifacts(queue: Queue, parent: Issue, child: Issue, spec: De
     JSON.stringify(ImplementationPlanArtifact.validateParsed(spec.plan)));
   if (spec.features) queue.artifacts.writeText(parent.project,
     { issueId: child.id, type: "requirement" },
-    JSON.stringify(RequirementArtifact.validateParsed({ features: featureTexts(queue, parent, spec.features) })));
+    RequirementArtifact.toJsonl({ features: featuresDeclaradas(queue, parent, spec.features) }));
 }
 
 function createChildIssue(parent: Issue, child: DecomposeChild, actor: string, root?: string): Issue {

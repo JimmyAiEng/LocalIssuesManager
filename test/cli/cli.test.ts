@@ -329,10 +329,9 @@ test("in-process: main() cobre project/worktree/requirements/relate fora do exec
 
     const reqIssue = JSON.parse((await captureMain(["create", "--title", "req", "--project", "demo",
       "--type", "Feat", "--action", "Planning", "--problem", "p", "--agent", "pi"])).stdout);
-    const reqFile = join(mkdtempSync(join(tmpdir(), "issues-inproc-req-")), "req.json");
-    writeFileSync(reqFile, JSON.stringify({
-      features: ["Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel"],
-    }));
+    const reqFile = join(mkdtempSync(join(tmpdir(), "issues-inproc-req-")), "req.jsonl");
+    writeFileSync(reqFile, JSON.stringify({ feature: "Login", como: "usuário", quero: "entrar",
+      para: "acesse o painel", scenarios: [{ nome: "ok", steps: ["Given a tela", "When entro", "Then vejo o painel"] }] }));
     const saved = await captureMain(["requirements", "set", "--id", reqIssue.id, "--file", reqFile]);
     assert.equal(JSON.parse(saved.stdout).features.length, 1); // runRequirements() -> requirements("set")
     const reqs = await captureMain(["get", "--id", reqIssue.id, "--target", "REQUIREMENTS"]);

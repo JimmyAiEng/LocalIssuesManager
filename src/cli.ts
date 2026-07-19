@@ -91,7 +91,7 @@ function runRequirements(raw: string[]): void {
 
 function requirements(sub: string | undefined, options: Options): Result {
   if (sub === "set") return setRequirements({ issueId: value(options, "id"), file: value(options, "file") });
-  throw new Error("Usage: issues requirements set --id <issueId> --file <req.json>");
+  throw new Error("Usage: issues requirements set --id <issueId> --file <req.jsonl>");
 }
 
 function runPlan(raw: string[]): void {

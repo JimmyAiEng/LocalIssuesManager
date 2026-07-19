@@ -8,7 +8,9 @@ import { createIssue, getIssue } from "../../src/app/services/use_cases/issue_us
 import { composePrompt } from "../../src/app/services/use_cases/prompt_composition.js";
 import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { setRequirements } from "../../src/app/services/use_cases/requirements_use_cases.js";
+import { RequirementArtifact } from "../../src/domain/artifacts/requirement_artifact.js";
 import { DomainError } from "../../src/domain/domain_error.js";
+import { Queue } from "../../src/domain/queue_repository.js";
 
 const root = () => {
   const dir = mkdtempSync(join(tmpdir(), "issues-decomp-"));
@@ -21,13 +23,17 @@ const write = (dir: string, name: string, content: unknown): string => {
   return path;
 };
 
-const FEATURE = "Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel";
+// Requisitos em JSONL: uma Feature estruturada por linha.
+const FEATURE = { feature: "Login", como: "um usuário", quero: "entrar", para: "acessar o painel",
+  scenarios: [{ nome: "ok", steps: ["Given a tela", "When entro", "Then vejo o painel"] }] };
+const LOGOUT = { ...FEATURE, feature: "Logout" };
+const jsonl = (...features: object[]): string => features.map((feature) => JSON.stringify(feature)).join("\n");
 const PLAN = { objetivo: "o", passos: ["p"], arquivos: ["a"], criterio_pronto: "c" };
 
 // Planning com duas Features, pronta para decompor em Design.
 function planningWithRequirements(dir: string): string {
   const issue = createIssue({ title: "plan", project: "app", type: "Feat", action: "Planning", problem: "p", actor: "human" }, dir);
-  setRequirements({ issueId: issue.id, file: write(dir, "req.json", { features: [FEATURE, FEATURE.replace(/Login/g, "Logout")] }) }, dir);
+  setRequirements({ issueId: issue.id, file: write(dir, "req.jsonl", jsonl(FEATURE, LOGOUT)) }, dir);
   return issue.id;
 }
 
@@ -48,7 +54,10 @@ test("decompõe Planning em filhas Design com linhagem parent/child recíproca e
   const child = getIssue(result.children[0], dir);
   assert.deepEqual(child.relates, [{ id: parent, kind: "parent" }]); // filha aponta o pai
   assert.equal(child.action, "Design");
-  assert.deepEqual(child.features, [FEATURE]); // Gherkin completo da Feature declarada, título livre
+  assert.deepEqual(child.features, [FEATURE]); // a Feature declarada, inteira; título livre
+  // O recorte gravado na filha é JSONL — mesmo formato do pai, lido pelo mesmo parser.
+  assert.equal(new Queue(dir).readRequirements("app", result.children[0]),
+    RequirementArtifact.toJsonl({ features: [FEATURE] }));
   const parentView = getIssue(parent, dir);
   assert.deepEqual(parentView.relates.map((r) => r.kind), ["child", "child"]); // recíproca no pai
 });
@@ -63,7 +72,8 @@ test("agrupamento N:1: uma filha Design cobre duas Features e recebe as duas no 
   assert.equal(child.features?.length, 2);
   const prompt = composePrompt(child);
   assert.match(prompt, /## Features desta Issue/);
-  assert.match(prompt, /Feature: Login/);
+  // O artefato é JSONL, mas quem lê o prompt é um agente: chega renderizado em Gherkin.
+  assert.match(prompt, /Feature: Login\nComo um usuário\nEu quero poder entrar\nPara que eu possa acessar o painel/);
   assert.match(prompt, /Feature: Logout/);
 });
 

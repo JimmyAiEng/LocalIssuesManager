@@ -468,8 +468,8 @@ test("UI-11c: mudança só nos Requisitos (Issue idêntica) atravessa o guard e 
       await page.goto(`${url}/issues/${seeded.id}`);
       await page.locator(".detail").waitFor();
 
-      const file = join(root, "req.json");
-      writeFileSync(file, JSON.stringify({ features: [gherkinFeature] }));
+      const file = join(root, "req.jsonl");
+      writeFileSync(file, requirementLine);
       cli(["requirements", "set", "--id", seeded.id, "--file", file], root);
       await page.locator("#refresh-issue").click();
       await page.locator("details.requirements").waitFor(); // o aviso vira o painel estruturado
@@ -573,14 +573,12 @@ test("UI-12d: Design com architecture_changed=false não avisa 'Spec sem diagram
   });
 });
 
-const gherkinFeature = [
-  "Feature: Requisitos persistidos",
-  "  Como um admin",
-  "  Eu quero poder ver requisitos",
-  "  Para que eu confirme o escopo",
-  "",
-  "  Scenario: Requisito visível",
-  "    Given a Issue tem requisitos",
-  "    When abro o detalhe",
-  "    Then vejo a Feature",
-].join("\n");
+// Uma Feature estruturada por linha (JSONL): é o que `requirements set` aceita.
+const requirementLine = JSON.stringify({
+  feature: "Requisitos persistidos",
+  como: "admin",
+  quero: "ver requisitos",
+  para: "confirme o escopo",
+  scenarios: [{ nome: "Requisito visível",
+    steps: ["Given a Issue tem requisitos", "When abro o detalhe", "Then vejo a Feature"] }],
+});

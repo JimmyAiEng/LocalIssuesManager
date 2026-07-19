@@ -34,7 +34,7 @@ O Gate define quais tipos a conclusão exige; quem reivindica herda os Artifacts
 _Avoid_: Artefato (só o `.md`), attachment/anexo (como conceito separado), documento
 
 **Artifact Type**:
-Tipo do Artifact: `DocumentArtifact` (Markdown, ≤300 palavras), `RequirementArtifact` (PRD/Requirements como conjunto de Features Gherkin), `UmlArtifact`, `ImplementationPlanArtifact` e `MediaArtifact` (imagem/vídeo, ≤25MB).
+Tipo do Artifact: `DocumentArtifact` (Markdown, ≤300 palavras), `RequirementArtifact` (PRD/Requirements como conjunto de Features estruturadas, JSONL), `UmlArtifact`, `ImplementationPlanArtifact` e `MediaArtifact` (imagem/vídeo, ≤25MB).
 _Avoid_: kind, mediaType (como conceito)
 
 **Evidência**:

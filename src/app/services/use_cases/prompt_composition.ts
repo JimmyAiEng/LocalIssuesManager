@@ -1,5 +1,6 @@
 import { extForMediaType } from "../../../domain/artifacts/media_artifact.js";
 import type { ImplementationPlan } from "../../../domain/artifacts/implementation_plan_artifact.js";
+import { type Feature, toGherkin } from "../../../domain/artifacts/requirement_artifact.js";
 import { projectSegment } from "../../../domain/queue_repository.js";
 import type { Tags, Thread } from "../../../domain/value_objects.js";
 import { actionContract } from "./action_contracts.js";
@@ -38,10 +39,10 @@ function issueInfo(issue: IssueView): string {
   return lines.join("\n");
 }
 
-// A Issue Design recebe o grupo de Features que ela cobre (o seu RequirementArtifact).
-// O Gherkin viaja no prompt para a filha desenhar exatamente o seu recorte.
-function featureSection(features: string[]): string {
-  return `## Features desta Issue\n${features.join("\n\n")}`;
+// A Issue Design recebe o grupo de Features que ela cobre (o seu RequirementArtifact). O artefato é
+// JSONL, mas quem lê o prompt é um agente: renderiza em Gherkin para desenhar o seu recorte.
+function featureSection(features: Feature[]): string {
+  return `## Features desta Issue\n${features.map(toGherkin).join("\n\n")}`;
 }
 
 // A cadeia de ancestrais (do mais próximo ao mais distante): a Issue atual é a ponta de uma

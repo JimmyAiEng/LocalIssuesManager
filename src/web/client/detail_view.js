@@ -79,7 +79,7 @@ function requirementsSection(issue) {
   const markup = requirementsMarkup(state.requirements);
   if (markup) return `<details class="box requirements" open><summary>Requisitos</summary>${markup}</details>`;
   if (issue.action !== "Planning" || issue.status === "OPEN" || issue.status === "CLOSED") return "";
-  return `<section class="box requirements"><h2>Requisitos</h2><p class="warn" role="alert">Nenhum requisito persistido — a Issue Planning deve entregar Features Gherkin via <code>issues requirements set</code>.</p></section>`;
+  return `<section class="box requirements"><h2>Requisitos</h2><p class="warn" role="alert">Nenhum requisito persistido — a Issue Planning deve entregar as Features via <code>issues requirements set</code>.</p></section>`;
 }
 
 // Diagramas via <img>: a rota devolve image/svg+xml e <img> não executa script no SVG —

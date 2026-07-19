@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { RequirementArtifact, type RequirementSet } from "../../../domain/artifacts/requirement_artifact.js";
+import { type Feature, RequirementArtifact, type RequirementSet } from "../../../domain/artifacts/requirement_artifact.js";
 import { NotFoundError } from "../../../domain/domain_error.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import { Queue } from "../../../domain/queue_repository.js";
@@ -11,7 +11,7 @@ export function setRequirements(input: { issueId: string; file: string }, root?:
   requirePlanningIssue(issue);
   const requirements = RequirementArtifact.validate(readFileSync(input.file, "utf8"));
   queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "requirement" },
-    JSON.stringify(requirements));
+    RequirementArtifact.toJsonl(requirements));
   return requirements;
 }
 
@@ -25,7 +25,7 @@ export function getRequirements(input: { issueId: string }, root?: string): Requ
 
 // A Issue Design possui o seu recorte de Requirements (gravado pelo decompose): o grupo de
 // Features que ela desenha viaja no prompt sem depender de casar nome com título.
-export function designFeatures(queue: Queue, issue: Issue): string[] | null {
+export function designFeatures(queue: Queue, issue: Issue): Feature[] | null {
   if (issue.action !== "Design") return null;
   const raw = queue.artifacts.readText(issue.project, { issueId: issue.id, type: "requirement" });
   return raw === null ? null : RequirementArtifact.validate(raw).features;

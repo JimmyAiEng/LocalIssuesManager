@@ -1,6 +1,6 @@
 # Action `Planning`
 
-Alinhar problema, requisitos e domínio, e entregar requisitos Gherkin válidos.
+Alinhar problema, requisitos e domínio, e entregar requisitos estruturados válidos.
 
 Estude o problema da Issue, o repositório do projeto e me entreviste ativamente sobre cada aspecto até termos um entendimento comum do que deve ser feito.
 Busque identificar os requisitos funcionais e não funcionais, e resolva as dúvidas por meio de grupos de 3 perguntas.
@@ -13,30 +13,30 @@ As decisões de requisitos funcionais, contudo, são do humano.
 - Foque nos requisitos funcionais, descritos em termos do usuário/domínio, não da solução.
 - **Como** planejar (pesquisa, glossário, ADRs, etc.) é decisão do agente.
 
-## Entrega 1 — requisitos Gherkin
+## Entrega 1 — requisitos em JSONL
 
 ```bash
-issues requirements set --id <id> --file ./req.json
+issues requirements set --id <id> --file ./req.jsonl
 ```
 
-Um JSON com o campo `features`: de 1 a 5 Features em Gherkin pt-BR, cada uma uma string.
-O validador é rígido — copie este formato:
+Um arquivo JSONL: **uma Feature completa por linha**, de 1 a 5 linhas.
+Os prefixos da user story são escritos pelo sistema, não por você: a renderização monta `Como <como>`, `Eu quero poder <quero>` e `Para que eu possa <para>`.
+Por isso os campos guardam a forma neutra — `como` traz o papel com artigo (`um usuário`, `uma administradora`), e `quero` e `para` trazem o verbo no infinitivo (`entrar`, `acessar minha conta`).
+Não conjugue e não repita o prefixo.
+Copie este formato:
 
-```json
-{
-  "features": [
-    "Feature: Login com e-mail\nComo um usuário cadastrado\nEu quero poder entrar com e-mail e senha\nPara que eu acesse minha conta\n\nScenario: Credenciais válidas\nGiven que eu tenho uma conta ativa\nWhen eu envio e-mail e senha corretos\nThen eu vejo a minha área logada\n\nScenario: Senha errada\nGiven que eu tenho uma conta ativa\nWhen eu envio a senha errada\nThen eu vejo a mensagem de credenciais inválidas\nAnd eu continuo na tela de login",
-    "Feature: Recuperação de senha\nComo um usuário cadastrado\nEu quero poder redefinir minha senha\nPara que eu volte a acessar a conta quando esquecer\n\nScenario: Link enviado\nGiven que eu informo um e-mail cadastrado\nWhen eu peço a redefinição\nThen eu recebo um e-mail com o link de redefinição",
-    "Feature: Busca no catálogo\nComo um usuário logado\nEu quero poder buscar itens pelo nome\nPara que eu encontre o que preciso sem navegar página a página\n\nScenario: Termo com resultados\nGiven que existem itens cadastrados\nWhen eu busco por um termo presente no nome\nThen eu vejo os itens correspondentes"
-  ]
-}
+```jsonl
+{"feature": "Login com e-mail", "como": "um usuário cadastrado", "quero": "entrar com e-mail e senha", "para": "acessar minha conta", "scenarios": [{"nome": "Credenciais válidas", "steps": ["Given que eu tenho uma conta ativa", "When eu envio e-mail e senha corretos", "Then eu vejo a minha área logada"]}, {"nome": "Senha errada", "steps": ["Given que eu tenho uma conta ativa", "When eu envio a senha errada", "Then eu vejo a mensagem de credenciais inválidas", "And eu continuo na tela de login"]}]}
+{"feature": "Recuperação de senha", "como": "um usuário cadastrado", "quero": "redefinir minha senha", "para": "voltar a acessar a conta quando esquecer", "scenarios": [{"nome": "Link enviado", "steps": ["Given que eu informo um e-mail cadastrado", "When eu peço a redefinição", "Then eu recebo um e-mail com o link de redefinição"]}]}
+{"feature": "Busca no catálogo", "como": "um usuário logado", "quero": "buscar itens pelo nome", "para": "encontrar o que preciso sem navegar página a página", "scenarios": [{"nome": "Termo com resultados", "steps": ["Given que existem itens cadastrados", "When eu busco por um termo presente no nome", "Then eu vejo os itens correspondentes"]}]}
 ```
 
-Regras que o validador cobra em **cada** Feature, nesta ordem exata:
-1. Primeira linha: `Feature: <nome>`.
-2. Três linhas de user story: `Como um …`, `Eu quero poder …`, `Para que eu …` — nesta ordem, cada uma com conteúdo.
-3. Depois, só `Scenario: <nome>` e steps começando com `Given`, `When`, `Then` ou `And`.
-4. Todo Scenario precisa de pelo menos um step; nenhum texto solto antes do primeiro Scenario.
+Regras que o validador cobra — o erro sempre cita o número da linha:
+1. De 1 a 5 linhas, cada uma um JSON completo numa única linha: não quebre uma Feature em várias linhas.
+2. `feature`, `como`, `quero` e `para` são obrigatórios e não podem ser vazios.
+3. `scenarios` é um array não vazio, e cada cenário tem `nome` e `steps` não vazio.
+4. Cada step é uma string que começa com `Given`, `When`, `Then` ou `And`, seguida do conteúdo.
+5. O valor de `feature` é único entre as linhas: é a chave que liga a Feature à filha Design que a cobre.
 
 Linhas em branco são ignoradas; cada Feature tem no máximo 300 palavras.
 
@@ -76,13 +76,13 @@ Nas três Features da Entrega 1, login e recuperação de senha são o mesmo con
 Regras que o validador cobra:
 1. `title`, `type`, `action` e `problem` são obrigatórios; `acceptance_criteria` é opcional.
 2. `action` de toda filha tem que ser `Design`.
-3. `features` é obrigatório: array não vazio com os nomes das Features do pai, **exatamente** como escritos depois de `Feature:` no `req.json` — não abrevie, não reescreva.
+3. `features` é obrigatório: array não vazio com os nomes das Features do pai, **exatamente** os valores do campo `feature` de cada linha do `req.jsonl` — não abrevie, não reescreva.
 4. Nome que não existe nos requisitos é recusado, e o erro lista os nomes disponíveis.
 5. A mesma Feature em duas filhas é recusada, inclusive entre chamadas: você pode chamar `decompose` outra vez para os grupos que faltam, mas nunca repetir Feature já coberta.
 6. O gate de fechamento cobra a **partição**: toda Feature do pai coberta por exatamente uma filha Design, nenhuma solta, nenhuma repetida.
 
 O `title` é **livre** — nomeie o conceito do grupo (`Design: Autenticação`), não a Feature.
-O `decompose` grava o Gherkin do grupo como os requisitos da própria filha, e ela o recebe no prompt sob `## Features desta Issue`.
+O `decompose` grava as Features do grupo como os requisitos da própria filha, e ela as recebe no prompt sob `## Features desta Issue`.
 Filha Design criada por fora (`issues create`) não cobre Feature nenhuma: as Features dela continuam descobertas no gate.
 `mode`: `concurrent` (default, filhas independentes) ou `sequential` (encadeadas para execução em ordem).
 `decompose` já grava a linhagem parent/child recíproca — não chame `relate` depois.

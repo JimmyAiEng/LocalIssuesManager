@@ -64,7 +64,7 @@ media | document | requirement | uml | implementation-plan
 Regras intrínsecas:
 
 - `DocumentArtifact`: Markdown breve, até 300 palavras;
-- `RequirementArtifact`: PRD/Requirements como conjunto de Features Gherkin válidas;
+- `RequirementArtifact`: PRD/Requirements como conjunto de Features estruturadas (JSONL, uma por linha);
 - `UmlArtifact`: kind e sintaxe UML compatíveis com o resultado do adapter PlantUML;
 - `ImplementationPlanArtifact`: estrutura de Small Plan válida;
 - `MediaArtifact`: imagem/vídeo suportado, até 25 MiB.

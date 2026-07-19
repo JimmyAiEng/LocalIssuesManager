@@ -6,7 +6,8 @@ import { MediaArtifact, MAX_MEDIA_SIZE } from "../../src/domain/artifacts/media_
 import { RequirementArtifact } from "../../src/domain/artifacts/requirement_artifact.js";
 import { UmlArtifact } from "../../src/domain/artifacts/uml_artifact.js";
 
-const feature = "Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu use\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo";
+const feature = { feature: "Login", como: "usuário", quero: "entrar", para: "use",
+  scenarios: [{ nome: "ok", steps: ["Given a tela", "When entro", "Then vejo"] }] };
 
 test("Artifact Types usam os nomes reais do domínio", () => {
   assert.deepEqual(ARTIFACT_TYPES,
@@ -39,18 +40,19 @@ test("erro de forma do Requirements carrega um exemplo que de fato valida", () =
     try { RequirementArtifact.validate(raw); } catch (error) { return (error as Error).message; }
     throw new Error(`deveria ter rejeitado: ${raw}`);
   };
-  const mensagem = erroDe('{"features":[{"name":"x"}]}');
-  assert.match(mensagem, /deve ser texto Gherkin \(string\), não objeto/);
-  const exemplo = mensagem.slice(mensagem.indexOf('{"features"'));
+  // O envelope antigo ({"features": [...]}) é a confusão provável de quem já viu o formato anterior:
+  // é justamente aí que a mensagem precisa ensinar a linha JSONL nova.
+  const mensagem = erroDe('{"features":["Feature: Login"]}');
+  assert.match(mensagem, /campo "feature" é obrigatório/);
+  const exemplo = mensagem.slice(mensagem.indexOf('{"feature"')); // o exemplo é uma linha JSONL
   assert.equal(RequirementArtifact.validate(exemplo).features.length, 1); // o exemplo passa no validador
-  for (const invalido of ["{quebrado", '["array"]', '{"features":"texto"}']) {
-    assert.match(erroDe(invalido), /Formato esperado — exemplo:/);
+  for (const invalido of ["{quebrado", '["array"]', '{"feature":"X"}']) {
+    assert.match(erroDe(invalido), /Formato esperado — um JSON por linha/);
   }
 });
 
-test("RequirementArtifact representa os Requirements como conjunto de Features", () => {
-  assert.deepEqual(RequirementArtifact.validate(JSON.stringify({ features: [feature] })),
-    { features: [feature] });
+test("RequirementArtifact representa os Requirements como conjunto de Features estruturadas", () => {
+  assert.deepEqual(RequirementArtifact.validate(JSON.stringify(feature)), { features: [feature] });
 });
 
 test("UmlArtifact valida kind, sintaxe e tipo detectado", () => {

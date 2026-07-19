@@ -21,7 +21,7 @@ lidos por caminho — não são skills, não dependem do mecanismo de discovery 
 sdlc-workflow/
 ├── SKILL.md              ← camada 0: mapa SDLC, comandos issues-local, roteamento
 └── phases/
-    ├── planning.md       ← action=Planning  → requisitos Gherkin (gate de conclusão)
+    ├── planning.md       ← action=Planning  → requisitos em JSONL (gate de conclusão)
     ├── design.md         ← action=Design    → design.md + diagramas PlantUML (gate de conclusão)
     ├── implement.md      ← action=Implement → worktree + check do projeto (gate de conclusão)
     ├── qa.md             ← action=QA        → validação do conjunto (evidência)

@@ -1,42 +1,28 @@
 import { escapeHtml } from "./view_model.js";
 
-// Espelha a gramática validada pelo domínio (src/domain/artifacts/requirement_artifact.ts):
-// Feature: <nome> → user story (3 linhas Como/Eu quero/Para que) → Scenarios com steps Given/When/Then/And.
-export function parseFeature(text) {
-  const lines = String(text ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
-  const name = (lines[0] ?? "").replace(/^Feature:\s*/, "");
-  const story = lines.slice(1, 4);
-  const scenarios = [];
-  for (const line of lines.slice(4)) {
-    const head = line.match(/^Scenario:\s*(.+)$/);
-    if (head) { scenarios.push({ name: head[1], steps: [] }); continue; }
-    scenarios.at(-1)?.steps.push(parseStep(line));
-  }
-  return { name, story, scenarios };
-}
-
-function parseStep(line) {
-  const match = line.match(/^(Given|When|Then|And)(?:\s+(.*))?$/);
-  return match ? { keyword: match[1], text: match[2] ?? "" } : { keyword: "", text: line };
-}
-
+// A API entrega o RequirementSet estruturado, então aqui só há renderização. Os prefixos pt-BR da
+// user story são escritos nesta camada porque no dado eles são campos (como/quero/para), não texto.
 export function requirementsMarkup(requirements) {
   const features = requirements?.features ?? [];
-  return features.map((feature) => featureMarkup(parseFeature(feature))).join("");
+  return features.map(featureMarkup).join("");
 }
 
 function featureMarkup(feature) {
-  const story = feature.story.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+  const story = [`Como ${feature.como}`, `Eu quero poder ${feature.quero}`, `Para que eu possa ${feature.para}`]
+    .map((line) => `<p>${escapeHtml(line)}</p>`).join("");
   const scenarios = feature.scenarios.map(scenarioMarkup).join("");
-  return `<article class="feature"><h3><span class="kw kw-feature">Feature</span>${escapeHtml(feature.name)}</h3><div class="story">${story}</div>${scenarios}</article>`;
+  return `<article class="feature"><h3><span class="kw kw-feature">Feature</span>${escapeHtml(feature.feature)}</h3><div class="story">${story}</div>${scenarios}</article>`;
 }
 
 function scenarioMarkup(scenario) {
   const steps = scenario.steps.map(stepMarkup).join("");
-  return `<section class="scenario"><h4><span class="kw kw-scenario">Scenario</span>${escapeHtml(scenario.name)}</h4><ol class="steps">${steps}</ol></section>`;
+  return `<section class="scenario"><h4><span class="kw kw-scenario">Scenario</span>${escapeHtml(scenario.nome)}</h4><ol class="steps">${steps}</ol></section>`;
 }
 
+// O step chega como string crua ("Given a tela"): é o único ponto que ainda separa keyword de texto,
+// e só para destacar a keyword visualmente.
 function stepMarkup(step) {
-  if (!step.keyword) return `<li><span class="step-text">${escapeHtml(step.text)}</span></li>`;
-  return `<li><span class="kw kw-${step.keyword.toLowerCase()}">${step.keyword}</span><span class="step-text">${escapeHtml(step.text)}</span></li>`;
+  const match = step.match(/^(Given|When|Then|And)\s+(.*)$/);
+  if (!match) return `<li><span class="step-text">${escapeHtml(step)}</span></li>`;
+  return `<li><span class="kw kw-${match[1].toLowerCase()}">${match[1]}</span><span class="step-text">${escapeHtml(match[2])}</span></li>`;
 }

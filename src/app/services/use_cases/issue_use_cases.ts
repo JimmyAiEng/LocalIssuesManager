@@ -9,7 +9,7 @@ import { Issue, type IssueData, type Phase } from "../../../domain/issue_entity.
 import { Queue } from "../../../domain/queue_repository.js";
 import {
   type ActionType, type Actor, assertBrief, inverseKind, parseActionType, parseActor, parseAgentId, parseClosedReason,
-  parseIssueStatus, parseIssueType, parseRelationKind, parseRole, type RelationKind, type Tags, type TagUpdates,
+  parseIssueStatus, parseIssueType, parseRelationKind, parseRole, type RelationKind, type Tags, type TagUpdates, type Thread,
 } from "../../../domain/value_objects.js";
 import { type IncomingAttachment, persistableAttachments } from "../attachments.js";
 import { readPlanForView } from "./plan_use_cases.js";
@@ -53,7 +53,7 @@ export function claimIssue(input: { id: string; now?: Date }, root?: string): Is
   return issue;
 }
 
-export type RelatedView = { id: string; title: string; status: string; action: ActionType; artifact: string | null; kind: RelationKind; plan?: ImplementationPlan | null };
+export type RelatedView = { id: string; title: string; status: string; action: ActionType; artifact: string | null; kind: RelationKind; plan?: ImplementationPlan | null; thread?: Thread[] };
 export type IssueView = IssueData & { artifact: string | null; related: RelatedView[]; ancestors: RelatedView[]; features?: Feature[] | null; plan?: ImplementationPlan | null };
 
 export function getIssue(id: string, root?: string): IssueView {
@@ -85,7 +85,8 @@ function relatedView(queue: Queue, id: string, kind: RelationKind): RelatedView[
   if (!related) return [];
   return [{ id: related.id, title: related.title, status: related.status, action: related.action,
     artifact: queue.artifacts.readText(related.project, { issueId: related.id, type: "document" }), kind,
-    plan: readPlanForView(queue, related.project, related.id) }]; // plano do Design pai viaja ao filho Implement
+    plan: readPlanForView(queue, related.project, related.id), // plano do Design pai viaja ao filho Implement
+    thread: related.thread }]; // thread da linhagem: o Review a lê como fonte da intenção original
 }
 
 // Cadeia de ancestrais: sobe pelo primeiro parent de cada nível (Planning→Design→Implement é linear); o guard de visitados corta ciclos.

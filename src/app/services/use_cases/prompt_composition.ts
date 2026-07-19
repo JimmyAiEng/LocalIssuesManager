@@ -19,6 +19,8 @@ export function composePrompt(issue: IssueView): string {
   if (issue.features?.length) sections.push(featureSection(issue.features));
   if (issue.ancestors.length) sections.push(ancestorSection(issue.ancestors));
   if (issue.related.length) sections.push(relatedSection(issue.related));
+  const lineageThreads = issue.action === "Review" ? reviewLineageThreads(issue.ancestors) : null;
+  if (lineageThreads) sections.push(lineageThreads);
   sections.push(actionContract(issue));
   return sections.join("\n\n");
 }
@@ -49,6 +51,33 @@ function featureSection(features: Feature[]): string {
 function ancestorSection(ancestors: RelatedView[]): string {
   const chain = ancestors.map((item) => `${item.title} (${item.action}, id ${item.id})`).join(" ← ");
   return `## Linhagem (ancestrais)\nEsta Issue descende de: ${chain}`;
+}
+
+// Só o claim de Review recebe as threads das Issues Planning/Design ancestrais: o Understand Intent
+// se apoia nelas porque o agente não vê o histórico das sessões de chat, e é lá que ficam os
+// comentários e as decisões. Thread longa é cortada por entrada, com o corte marcado (o agente
+// sabe que há mais contexto do que está lendo), nunca omitida em silêncio.
+const MAX_THREAD_ENTRY_WORDS = 60; // ponytail: corte por entrada; suba se decisões vierem truncadas demais
+
+function reviewLineageThreads(ancestors: RelatedView[]): string | null {
+  const lineage = ancestors.filter((item) => item.action === "Planning" || item.action === "Design");
+  if (!lineage.length) return null;
+  const blocks = lineage.map((item) => {
+    const head = `### ${item.title} (${item.action}, id ${item.id})`;
+    const entries = item.thread?.length ? item.thread.map(threadLine).join("\n") : "(sem thread)";
+    return `${head}\n${entries}`;
+  });
+  return `## Threads da linhagem (intenção original)\n${blocks.join("\n\n")}`;
+}
+
+function threadLine(entry: Thread): string {
+  return `- ${entry.actor} [${entry.status}]: ${truncateWords(entry.comment, MAX_THREAD_ENTRY_WORDS)}`;
+}
+
+function truncateWords(text: string, max: number): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= max) return text;
+  return `${words.slice(0, max).join(" ")} […corte: +${words.length - max} palavras]`;
 }
 
 // A linhagem: artefatos das Issues relacionadas viajam no prompt para a nova sessão

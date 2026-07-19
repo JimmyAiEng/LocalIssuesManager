@@ -164,6 +164,30 @@ test("a cadeia de ancestrais aparece no prompt, do mais próximo ao mais distant
   assert.doesNotMatch(composePrompt(makeView()), /## Linhagem/);
 });
 
+// O Understand Intent do Review se apoia nas threads das Issues Planning/Design ancestrais (não há
+// histórico de chat). Thread longa é cortada por entrada, com o corte marcado, nunca omitida.
+test("só o Review recebe as threads Planning/Design ancestrais, cortadas por entrada com marcação", () => {
+  const longComment = Array.from({ length: 80 }, (_, i) => `w${i}`).join(" ");
+  const ancestors: RelatedView[] = [
+    { id: "d1", title: "Design da fila", status: "CLOSED", action: "Design", artifact: null, kind: "parent",
+      thread: [{ actor: "claude-code", timestamp: "2026-07-19T00:00:00.000Z", comment: "decidiu manter o gate", status: "CLOSED", closed_reason: null }] },
+    { id: "p1", title: "Planejamento", status: "CLOSED", action: "Planning", artifact: null, kind: "parent",
+      thread: [{ actor: "human", timestamp: "2026-07-18T00:00:00.000Z", comment: longComment, status: "OPEN", closed_reason: null }] },
+  ];
+  const text = composePrompt(makeView("Review", { ancestors, owner: "claude-code" }));
+  assert.match(text, /## Threads da linhagem \(intenção original\)/);
+  assert.match(text, /### Design da fila \(Design, id d1\)/);
+  assert.match(text, /- claude-code \[CLOSED\]: decidiu manter o gate/);
+  // corte por entrada visível: o comentário longo é truncado com marcação de quanto sobrou
+  assert.match(text, /\[…corte: \+20 palavras\]/);
+  assert.ok(!text.includes("w79"), "palavras além do corte não aparecem");
+  assert.ok(text.includes("w59") && !text.includes("w60 "), "corta exatamente no orçamento de palavras");
+  // Só o Review: as demais actions não recebem as threads da linhagem.
+  assert.doesNotMatch(composePrompt(makeView("Implement", { ancestors })), /## Threads da linhagem/);
+  // Review sem ancestrais Planning/Design: sem a seção.
+  assert.doesNotMatch(composePrompt(makeView("Review", { owner: "claude-code" })), /## Threads da linhagem/);
+});
+
 test("anexos ficam localizáveis ao agente: caminho em disco + URL; sem anexo, sem linha", () => {
   assert.doesNotMatch(composePrompt(makeView()), /Anexos/);
   const att = MediaArtifact.create({ filename: "erro.png", mediaType: "image/png", size: 10 });

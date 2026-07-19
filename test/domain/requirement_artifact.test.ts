@@ -114,6 +114,26 @@ test("rejeita quando o último Scenario do texto não tem nenhum step (checagem 
   throwsDomain(() => RequirementArtifact.validateParsed({ features: [lastWithoutStep] }), /ao menos um step/);
 });
 
+test("erro de user story mostra a linha encontrada e a correção mecânica pronta", () => {
+  // A armadilha observada com modelo pequeno: "Eu quero criar" sem o "poder", em loop de retentativas.
+  throwsDomain(() => RequirementArtifact.validateParsed({ features: [feature({ quero: "Eu quero criar usuários" })] }),
+    /encontrado "Eu quero criar usuários" — corrija para "Eu quero poder criar usuários"/);
+  throwsDomain(() => RequirementArtifact.validateParsed({ features: [feature({ como: "Como administrador" })] }),
+    /corrija para "Como um administrador"/);
+});
+
+test("erro de user story distingue prefixo sem conteúdo e linha ausente", () => {
+  throwsDomain(() => RequirementArtifact.validateParsed({ features: [feature({ para: "Para que eu" })] }),
+    /complete o conteúdo após "Para que eu "/);
+  const truncated = ["Feature: X", "  Como um a", "  Eu quero poder b"].join("\n");
+  throwsDomain(() => RequirementArtifact.validateParsed({ features: [truncated] }), /linha ausente/);
+});
+
+test("erro de limite de Features aponta a rota de abandono, não um fechamento que o gate barraria", () => {
+  const six = Array.from({ length: 6 }, (_, i) => feature({ header: `Feature: F${i}` }));
+  throwsDomain(() => RequirementArtifact.validateParsed({ features: six }), /--reason obsoleto/);
+});
+
 test("parseAndValidateRequirements rejeita JSON malformado", () => {
   throwsDomain(() => RequirementArtifact.validate("{ features: [ }"), /JSON válido/);
 });

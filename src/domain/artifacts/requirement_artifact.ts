@@ -63,7 +63,7 @@ function featureList(raw: unknown): unknown[] {
     throw new DomainError("Requirements deve conter ao menos uma Feature");
   }
   if (features.length > MAX_FEATURES) {
-    throw new DomainError(`Requirements com ${features.length} Features (limite ${MAX_FEATURES}): escopo grande indica Issue grande demais — feche esta Issue e crie Issues menores relacionadas (--relates)`);
+    throw new DomainError(`Requirements com ${features.length} Features (limite ${MAX_FEATURES}): escopo grande indica Issue grande demais — crie Issues menores relacionadas (--relates <esta-issue>) e abandone esta com 'issues status … --status CLOSED --reason obsoleto' (o abandono não cobra requisitos)`);
   }
   return features;
 }
@@ -84,14 +84,34 @@ function validateFeature(text: string, index: number): void {
   validateScenarios(lines.slice(4), named);
 }
 
-// User story pt-BR: as três linhas na ordem exata, cada uma com conteúdo.
+// User story pt-BR: as três linhas na ordem exata, cada uma com conteúdo. O erro mostra a linha
+// encontrada e a correção já pronta — modelo pequeno não converte "prefixo esperado" em edição
+// sem ver o antes/depois (observado: 5 tentativas em loop sem repor o "poder" que ele removeu).
 function validateUserStory(lines: string[], named: string): void {
   STORY_PREFIXES.forEach((prefix, offset) => {
     const line = lines[1 + offset];
     if (!line?.startsWith(`${prefix} `) || line.slice(prefix.length).trim().length === 0) {
-      throw new DomainError(`${named}: user story deve conter "${prefix} ..." na ordem esperada`);
+      throw new DomainError(`${named}: a ${offset + 2}ª linha da user story deve ser "${prefix} <conteúdo>" — ${foundHint(prefix, line)}`);
     }
   });
+}
+
+function foundHint(prefix: string, line: string | undefined): string {
+  if (!line) return "linha ausente";
+  const fix = mechanicalFix(prefix, line);
+  return fix === prefix
+    ? `encontrado "${line}" — complete o conteúdo após "${prefix} "`
+    : `encontrado "${line}" — corrija para "${fix}"`;
+}
+
+// Correção mecânica: desconta do início da linha as palavras que já coincidem com o prefixo e
+// prepõe o prefixo completo — "Eu quero criar X" vira "Eu quero poder criar X".
+function mechanicalFix(prefix: string, line: string): string {
+  const want = prefix.split(" ");
+  const have = line.split(" ");
+  let overlap = 0;
+  while (overlap < want.length && have[overlap] === want[overlap]) overlap += 1;
+  return `${prefix} ${have.slice(overlap).join(" ")}`.trim();
 }
 
 // Após a user story: apenas cabeçalhos Scenario e steps Given/When/Then/And.

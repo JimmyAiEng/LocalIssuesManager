@@ -21,12 +21,39 @@ test("cabeçalho aponta a action e as seções vêm na ordem correta", () => {
   assert.deepEqual(positions, [...positions].sort((a, b) => a - b), "seções em ordem crescente");
 });
 
-test("prompt é mínimo: sem catálogo de comandos nem instruções de fase (ficam nas skills)", () => {
+test("prompt sem catálogo geral de comandos nem convite a encadear Issues", () => {
   const text = composePrompt(makeView());
   assert.doesNotMatch(text, /## Comandos/);
   assert.doesNotMatch(text, /## SDLC/);
-  // Nem convite para encadear Issues: quem decide se há próxima é o loop externo, não o prompt.
+  // Quem decide se há próxima Issue é o loop externo, não o prompt.
   assert.doesNotMatch(text, /issues next/);
+});
+
+test("contrato da action fecha o prompt com comandos prontos: id e agent reais substituídos", () => {
+  const view = makeView("Planning", { owner: "pi" });
+  const text = composePrompt(view);
+  assert.match(text, /## Entrega desta Issue \(action Planning\)/);
+  assert.ok(text.includes(`issues requirements set --id ${view.id} --file req.json`));
+  assert.ok(text.includes(`issues decompose --id ${view.id} --into decompose.json --agent pi`));
+  assert.ok(text.endsWith("--reason obsoleto.)"), "contrato (com a rota de abandono) é a última seção");
+  // Sem claim (owner null), o agent fica como placeholder explícito.
+  assert.match(composePrompt(makeView("Planning")), /--agent <ia> --status CLOSED/);
+});
+
+test("cada action recebe o seu contrato: entrega própria + rota de abandono (Deploy: só AWAITING)", () => {
+  const contains = (action: ActionType, fragment: string) =>
+    assert.ok(composePrompt(makeView(action)).includes(fragment), `${action}: ${fragment}`);
+  contains("Planning", '{"features": ["Feature: Login\\nComo um usuário\\nEu quero poder entrar');
+  contains("Design", "issues design changed --issue");
+  contains("Design", "issues plan set --id");
+  contains("Implement", "issues worktree add --id");
+  contains("QA", "APROVADO | APROVADO com ressalva | REPROVADO");
+  const deploy = composePrompt(makeView("Deploy"));
+  assert.match(deploy, /--status AWAITING --comment "PR: /);
+  assert.doesNotMatch(deploy, /--reason concluido/);
+  for (const action of ACTION_TYPES.filter((a) => a !== "Deploy")) {
+    assert.match(composePrompt(makeView(action)), /--reason obsoleto/, `${action} tem rota de abandono`);
+  }
 });
 
 test("cada ActionType aparece no cabeçalho e na seção Issue", () => {

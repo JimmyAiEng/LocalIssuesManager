@@ -2,10 +2,12 @@ import { extForMediaType } from "../../../domain/artifacts/media_artifact.js";
 import type { ImplementationPlan } from "../../../domain/artifacts/implementation_plan_artifact.js";
 import { projectSegment } from "../../../domain/queue_repository.js";
 import type { Tags, Thread } from "../../../domain/value_objects.js";
+import { actionContract } from "./action_contracts.js";
 import type { IssueView, RelatedView } from "./issue_use_cases.js";
 
-// Prompt mínimo: os padrões de workflow vivem nas skills (sdlc-workflow + skill da action).
-// Aqui entra só o que guia a busca de skills: a Issue reivindicada e a linhagem relacionada.
+// Prompt do claim: a Issue reivindicada, a linhagem relacionada e o contrato mecânico da action
+// (comandos + formatos, por último — modelo pequeno segue melhor a instrução mais recente). Os
+// padrões de workflow continuam nas skills; o contrato garante a jornada em harness sem elas.
 export function composePrompt(issue: IssueView): string {
   const sections = [
     `Você reivindicou uma Issue com action \`${issue.action}\`. Leia a skill \`sdlc-workflow\` antes de agir: ela explica o workflow e roteia a skill da action pelos dados abaixo.`,
@@ -16,6 +18,7 @@ export function composePrompt(issue: IssueView): string {
   if (issue.features?.length) sections.push(featureSection(issue.features));
   if (issue.ancestors.length) sections.push(ancestorSection(issue.ancestors));
   if (issue.related.length) sections.push(relatedSection(issue.related));
+  sections.push(actionContract(issue));
   return sections.join("\n\n");
 }
 

@@ -254,7 +254,7 @@ test("falha: requirements set com cada violação de Gherkin — CLI", () => {
     { json: JSON.stringify({ features: [] }), expected: /ao menos uma Feature/ },
     { json: JSON.stringify({ features: Array(6).fill(feature) }), expected: /limite 5/ },
     { json: JSON.stringify({ features: ["Scenario: x\n  Given a"] }), expected: /deve começar com o cabeçalho "Feature/ },
-    { json: JSON.stringify({ features: [`Feature: X\n  Eu quero poder b\n  Como um a\n  Para que eu c\n  Scenario: s\n  Given a`] }), expected: /user story deve conter/ },
+    { json: JSON.stringify({ features: [`Feature: X\n  Eu quero poder b\n  Como um a\n  Para que eu c\n  Scenario: s\n  Given a`] }), expected: /user story deve ser "Como um <conteúdo>"/ },
     { json: JSON.stringify({ features: [`Feature: X\n  ${story}\n  Scenario: s\n  Foobar`] }), expected: /step inválido/ },
     { json: JSON.stringify({ features: [`Feature: X\n  ${story}\n  Scenario: s`] }), expected: /todo Scenario deve ter ao menos um step/ },
   ];

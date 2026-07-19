@@ -16,7 +16,7 @@ export function requireValidRequirements(queue: Queue, project: string,
   const raw = queue.artifacts.readText(project, { issueId, type: "requirement" });
   if (raw === null) {
     throw new NotFoundError(
-      "Issue Planning não pode ser concluída sem requisitos: use 'issues requirements set --id <id> --file <req.json>'",
+      "Issue Planning não pode ser concluída sem requisitos: use 'issues requirements set --id <id> --file <req.json>'; se esta Issue foi substituída por Issues menores, abandone com --reason obsoleto (o abandono não cobra o gate)",
     );
   }
   return RequirementArtifact.validate(raw);

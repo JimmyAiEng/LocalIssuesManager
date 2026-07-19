@@ -99,12 +99,13 @@ Entrega inválida é rejeitada antes do roteamento. `human_need=HITL`, risco ALT
 
 ```text
 src/app/services/workflows/
-  index.ts       completeIssue (dispatcher)
-  planning.ts
-  design.ts
-  implement.ts
-  qa.ts
+  index.ts            completeIssue (dispatcher)
+  decomposition.ts
   deploy.ts
+  design.ts
+  planning.ts
+  review.ts
+  review_trigger.ts
 ```
 
 Cada módulo conhece somente a orquestração da sua Action. Dependências externas permanecem na aplicação:

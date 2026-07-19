@@ -1,9 +1,6 @@
----
-name: qa-phase
-description: >-
-  Action QA do workflow: validar o conjunto entregue (≠ review de Implement).
-  Use quando a Issue reivindicada tem action=QA.
----
+# Action `QA`
+
+Validar o conjunto entregue (≠ review de Implement).
 
 Você tem a responsabilidade de estressar e encontrar falhas no que foi entregue pelas Issues relacionadas.
 Com base na Issue e no código atual, teste rigorosamente:

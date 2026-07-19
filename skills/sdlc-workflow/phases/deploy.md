@@ -1,13 +1,6 @@
----
-name: deployment-phase
-description: >-
-  Action Deploy do workflow: preparar PR/entrega e pedir o go/no-go humano.
-  Use quando a Issue reivindicada tem action=Deploy.
----
+# Action `Deploy`
 
-# deployment-phase (camada 1)
-
-Acionada quando a Issue reivindicada tem **action=`Deploy`**.
+Preparar PR/entrega e pedir o go/no-go humano.
 
 ## Objetivo
 

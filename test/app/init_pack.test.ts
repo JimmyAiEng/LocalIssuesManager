@@ -16,7 +16,7 @@ test("init cria AGENTS.md com o ponteiro, skills e wiring de todos os harnesses"
   const agents = readFileSync(join(directory, "AGENTS.md"), "utf8");
   assert.equal(agents, `${POINTER}\n`);
   assert.ok(existsSync(join(directory, ".agents", "skills", "sdlc-workflow", "SKILL.md")));
-  assert.ok(existsSync(join(directory, ".agents", "skills", "planning-phase", "SKILL.md")));
+  assert.ok(existsSync(join(directory, ".agents", "skills", "sdlc-workflow", "phases", "planning.md")));
   assert.equal(existsSync(join(directory, ".agents", "skills", "README.md")), false);
   assert.equal(existsSync(join(directory, ".agents", "skills", "INSTALL.md")), false);
   assert.ok(existsSync(join(directory, ".claude", "skills", "sdlc-workflow", "SKILL.md")));

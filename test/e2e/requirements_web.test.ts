@@ -65,7 +65,7 @@ test("RF-12/CA-06: `issues init` cria AGENTS.md, .agents/skills e wiring do harn
   const agents = readFileSync(join(target, "AGENTS.md"), "utf8");
   assert.match(agents, /sdlc-workflow/); // Camada 0 aponta para a skill de entrada
   assert.ok(existsSync(join(target, ".agents", "skills", "sdlc-workflow", "SKILL.md")));
-  assert.ok(existsSync(join(target, ".agents", "skills", "planning-phase", "SKILL.md")));
+  assert.ok(existsSync(join(target, ".agents", "skills", "sdlc-workflow", "phases", "planning.md")));
   const link = join(target, ".pi", "skills");
   assert.ok(existsSync(join(link, "sdlc-workflow", "SKILL.md"))); // discovery do harness pi
   assert.ok(lstatSync(link).isSymbolicLink());

@@ -1,9 +1,6 @@
----
-name: planning-phase
-description: >-
-  Action Planning do workflow: alinhar problema, requisitos e domínio, e entregar
-  requisitos Gherkin válidos. Use quando a Issue reivindicada tem action=Planning.
----
+# Action `Planning`
+
+Alinhar problema, requisitos e domínio, e entregar requisitos Gherkin válidos.
 
 Estude o problema da Issue, o repositório do projeto e me entreviste ativamente sobre cada aspecto até termos um entendimento comum do que deve ser feito.
 Busque identificar os requisitos funcionais e não funcionais, e resolva as dúvidas por meio de grupos de 3 perguntas.

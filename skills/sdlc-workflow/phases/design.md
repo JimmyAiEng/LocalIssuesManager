@@ -1,10 +1,6 @@
----
-name: design-phase
-description: >-
-  Action Design do workflow: explorar desenho se preciso, congelar a spec com
-  diagramas PlantUML e preparar as Issues seguintes. Use quando a Issue
-  reivindicada tem action=Design.
----
+# Action `Design`
+
+Explorar desenho se preciso, congelar a spec com diagramas PlantUML e preparar as Issues seguintes.
 
 Seu objetivo é congelar a spec da solução e deixá-la herdável pelas Issues seguintes.
 

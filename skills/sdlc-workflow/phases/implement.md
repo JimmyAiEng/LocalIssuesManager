@@ -1,10 +1,6 @@
----
-name: implement-phase
-description: >-
-  Action Implement do workflow (Unit of Work): entregar fatia funcional via TDD
-  numa worktree, com o check do projeto passando. Use quando a Issue reivindicada
-  tem action=Implement.
----
+# Action `Implement` (Unit of Work)
+
+Entregar fatia funcional via TDD numa worktree, com o check do projeto passando.
 
 Seu objetivo é entregar uma fatia **funcional/integrável** conforme a spec (veja os artefatos das Issues relacionadas no prompt), com testes.
 

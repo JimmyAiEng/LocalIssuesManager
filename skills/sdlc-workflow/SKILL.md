@@ -8,7 +8,7 @@ description: >-
 
 # sdlc-workflow (camada 0)
 
-**Não** executa nenhuma fase — só orienta o processo e roteia a skill da action.
+**Não** executa nenhuma fase — só orienta o processo e roteia o guia da action.
 Válido em **qualquer projeto** que use este pack + o CLI `issues` do issues-local.
 
 ## Modelo: só Issues
@@ -29,13 +29,16 @@ Ao decompor trabalho, crie as novas Issues já relacionadas à origem.
 
 ## Roteamento por action
 
-| action | Skill | Entrega obrigatória (gate de conclusão) |
+Cada action tem um guia **dentro desta skill**, em `phases/`.
+Leia o arquivo da action reivindicada — ele traz os formatos exatos dos arquivos que a fase grava.
+
+| action | Leia o arquivo | Entrega obrigatória (gate de conclusão) |
 |---|---|---|
-| `Planning` | `planning-phase` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features **+** as filhas `action=Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` o grupo que cobre): toda Feature em exatamente uma filha — se sobrar Feature descoberta ou repetida, o gate aponta e não fecha |
-| `Design` | `design-phase` | Decisão de arquitetura (`issues design changed --value true\|false`) + plano válido (`issues plan set`) **+** **≥1 filha `Implement`** (`issues decompose`, uma por Small Plan). Se `true`: `design.md` + os 4 níveis (High Level, Package, Class, Interface/DataModel) em PlantUML válido e **nunca fecha AFK** (só `AWAITING`, aceite humano). Se `false`: dispensa diagramas e revisão humana |
-| `Implement` | `implement-phase` | Worktree usada + check do projeto passando (roda sozinho no fechamento). Com `--test-paths` configurado, exige também a ordem TDD no histórico da worktree: um commit só-de-testes antes do primeiro commit de produção (cita o commit infrator) |
-| `QA` | `qa-phase` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
-| `Deploy` | `deployment-phase` | Nunca fecha AFK: só `AWAITING` com link http(s) de PR + resultado da análise na thread; fecha só via `decide` humano |
+| `Planning` | `phases/planning.md` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features **+** as filhas `action=Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` o grupo que cobre): toda Feature em exatamente uma filha — se sobrar Feature descoberta ou repetida, o gate aponta e não fecha |
+| `Design` | `phases/design.md` | Decisão de arquitetura (`issues design changed --value true\|false`) + plano válido (`issues plan set`) **+** **≥1 filha `Implement`** (`issues decompose`, uma por Small Plan). Se `true`: `design.md` + os 4 níveis (High Level, Package, Class, Interface/DataModel) em PlantUML válido e **nunca fecha AFK** (só `AWAITING`, aceite humano). Se `false`: dispensa diagramas e revisão humana |
+| `Implement` | `phases/implement.md` | Worktree usada + check do projeto passando (roda sozinho no fechamento). Com `--test-paths` configurado, exige também a ordem TDD no histórico da worktree: um commit só-de-testes antes do primeiro commit de produção (cita o commit infrator) |
+| `QA` | `phases/qa.md` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
+| `Deploy` | `phases/deploy.md` | Nunca fecha AFK: só `AWAITING` com link http(s) de PR + resultado da análise na thread; fecha só via `decide` humano |
 
 ## Qualificação (no claim)
 
@@ -114,9 +117,9 @@ Detalhes de sintaxe: `issues --help`.
 ## Progressive disclosure (obrigatório)
 
 1. Você está na camada 0 (este arquivo) — carregue-o em todo claim.
-2. Leia a skill da action da Issue reivindicada (tabela acima).
-   Ela é um **arquivo ao lado deste**: `../<action>-phase/SKILL.md` (ex.: `../planning-phase/SKILL.md`).
-   **Leia o arquivo.** Não é subagente, não é comando, não é slash command — se o seu harness recusar com "unknown agent", você tentou a coisa errada.
-   Sem ela você não sabe o formato dos arquivos que a fase grava, e vai errar em loop.
-3. A skill da action diz o que a fase entrega e como concluí-la; o **como** executar é decisão do agente.
-4. **Não** carregue skills de outras actions neste claim.
+2. **Leia o arquivo da action** da Issue reivindicada (tabela acima): `phases/<action>.md`, dentro do diretório desta skill.
+   É uma **leitura de arquivo** — não é skill, não é subagente, não é slash command.
+   Sem ele você não sabe o formato dos arquivos que a fase grava, e vai errar em loop.
+3. Não conseguiu ler o arquivo? **Pare e reporte** — não improvise o formato.
+4. O guia da action diz o que a fase entrega e como concluí-la; o **como** executar é decisão do agente.
+5. **Não** leia os guias das outras actions neste claim.

@@ -31,15 +31,15 @@ const fail = (args: string[], root: string): { status: number | null; stderr: st
 };
 
 const createArgs = [
-  "create", "--title", "Falha issue", "--project", "demo", "--type", "Feat", "--action", "QA",
+  "create", "--title", "Falha issue", "--project", "demo", "--type", "Feat", "--action", "Review",
   "--problem", "problema", "--agent", "pi",
 ];
 
-// Artefato de QA fixo: createArgs cria Issues QA, cujo gate de conclusão exige o .md persistido.
+// Artefato de Review fixo: createArgs cria Issues Review, cujo gate de conclusão exige o .md persistido.
 // Semeá-lo aqui deixa as falhas testadas (estado, owner, reason) aflorarem — e é inócuo para os
 // gates de Planning/Implement quando `extra` troca a action.
 const qaArtifactFile = join(mkdtempSync(join(tmpdir(), "issues-fail-qa-")), "qa.md");
-writeFileSync(qaArtifactFile, "# QA ok");
+writeFileSync(qaArtifactFile, "# Review ok");
 
 function createIssueCLI(root: string, extra: string[] = []): string {
   const id = (JSON.parse(run([...createArgs, ...extra], root)) as { id: string }).id;
@@ -120,7 +120,7 @@ test("falha: comment vazio sem anexo e comment acima do limite — CLI", () => {
 test("falha: problem acima de 300 palavras na criação — CLI", () => {
   const root = newRoot();
   const { status, stderr } = fail(["create", "--title", "Grande", "--project", "demo", "--type", "Feat",
-    "--action", "QA", "--problem", Array(301).fill("x").join(" "), "--agent", "pi"], root);
+    "--action", "Review", "--problem", Array(301).fill("x").join(" "), "--agent", "pi"], root);
   assert.notEqual(status, 0);
   assert.match(stderr, /problem tem 301 palavras/);
   assert.match(stderr, /Issues menores relacionadas/);
@@ -290,7 +290,7 @@ test("falha: Issue inexistente → NotFoundError — CLI", () => {
 
 test("falha: stale save → ConflictError (determinístico só in-process)", () => {
   const root = newRoot();
-  const id = createIssue({ title: "C", project: "demo", type: "Feat", action: "QA", problem: "p", actor: "pi" }, root).id;
+  const id = createIssue({ title: "C", project: "demo", type: "Feat", action: "Review", problem: "p", actor: "pi" }, root).id;
   const queue = new Queue(root);
   const first = queue.loadRequired(id);
   const second = queue.loadRequired(id); // mesmo snapshot/revisão
@@ -311,7 +311,7 @@ test("falha: comando desconhecido → usage + exit ≠ 0", () => {
 
 test("falha: flag obrigatória ausente (--title, --action) — CLI", () => {
   const root = newRoot();
-  const semTitle = fail(["create", "--project", "demo", "--type", "Feat", "--action", "QA", "--problem", "p", "--agent", "pi"], root);
+  const semTitle = fail(["create", "--project", "demo", "--type", "Feat", "--action", "Review", "--problem", "p", "--agent", "pi"], root);
   assert.notEqual(semTitle.status, 0);
   assert.match(semTitle.stderr, /--title is required/);
   const semAction = fail(["create", "--title", "x", "--project", "demo", "--type", "Feat", "--problem", "p", "--agent", "pi"], root);
@@ -445,7 +445,7 @@ test("falha: IA não rebaixa a tag da Issue para destravar o próprio fechamento
   assert.equal(closed.status, "CLOSED");
 });
 
-const issueBody = { title: "Web falha", project: "web", type: "Fix", action: "QA", problem: "p" };
+const issueBody = { title: "Web falha", project: "web", type: "Fix", action: "Review", problem: "p" };
 
 async function withWeb(fn: (url: string, root: string) => Promise<void>): Promise<void> {
   const root = newRoot();

@@ -24,7 +24,7 @@ test("gates declaram artefatos, execução de código e aprovação humana", () 
     ["Planning", "required", ["requirement"], "none", "conditional"],
     ["Design", "required", ["implementation-plan"], "conditional", "conditional"],
     ["Implement", "none", [], "conditional", "conditional"],
-    ["QA", "required", ["document"], "none", "conditional"],
+    ["Review", "required", ["document"], "none", "conditional"],
     ["Deploy", "none", [], "required", "required"],
   ]);
   assert.deepEqual(gateFor("Design").artifacts.conditional,
@@ -32,6 +32,6 @@ test("gates declaram artefatos, execução de código e aprovação humana", () 
 });
 
 test("gateFor devolve snapshot e protege a definição compartilhada", () => {
-  gateFor("QA").artifacts.types.push("media");
-  assert.deepEqual(gateFor("QA").artifacts.types, ["document"]);
+  gateFor("Review").artifacts.types.push("media");
+  assert.deepEqual(gateFor("Review").artifacts.types, ["document"]);
 });

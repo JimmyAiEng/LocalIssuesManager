@@ -133,7 +133,7 @@ test("mode sequential encadeia as filhas see-also à anterior; concurrent não",
 
 test("só Planning (→Design) e Design (→Implement) decompõem", () => {
   const dir = root();
-  const qa = createIssue({ title: "qa", project: "app", type: "Feat", action: "QA", problem: "p", actor: "pi" }, dir);
+  const qa = createIssue({ title: "qa", project: "app", type: "Feat", action: "Review", problem: "p", actor: "pi" }, dir);
   assert.throws(() => decompose(dir, qa.id, { children: [{ title: "x", type: "Feat", action: "Implement", problem: "p", plan: PLAN }] }),
     (e: unknown) => e instanceof DomainError && /não decompõe/.test(e.message));
 });

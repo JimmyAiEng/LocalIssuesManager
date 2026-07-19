@@ -24,10 +24,10 @@ import {
 import { requirementsMarkup } from "../../src/web/client/gherkin.js";
 
 const issues = [
-  { id: "later", title: "Needle later", project: "app", type: "Fix", action: "QA", status: "OPEN", created_at: "2026-01-02T00:00:00Z" },
-  { id: "first", title: "Needle first", project: "app", type: "Fix", action: "QA", status: "OPEN", created_at: "2026-01-01T00:00:00Z" },
+  { id: "later", title: "Needle later", project: "app", type: "Fix", action: "Review", status: "OPEN", created_at: "2026-01-02T00:00:00Z" },
+  { id: "first", title: "Needle first", project: "app", type: "Fix", action: "Review", status: "OPEN", created_at: "2026-01-01T00:00:00Z" },
   { id: "going", title: "Needle going", project: "app", type: "Fix", action: "Implement", status: "CLAIMED", created_at: "2026-01-01T00:00:00Z" },
-  { id: "other", title: "Needle other", project: "other", type: "Feat", action: "QA", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" },
+  { id: "other", title: "Needle other", project: "other", type: "Feat", action: "Review", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" },
 ];
 
 test("view model combina filtros por tipo e mantém as quatro colunas ordenadas", () => {
@@ -51,8 +51,8 @@ test("filtro por Owner isola as Issues de um dono", () => {
 
 test("dentro da coluna, decisões pendentes vêm antes de created_at ascendente", () => {
   const column = [
-    { id: "novo", title: "a", project: "p", type: "Fix", action: "QA", status: "AWAITING", created_at: "2026-01-03T00:00:00Z" },
-    { id: "antigo", title: "b", project: "p", type: "Fix", action: "QA", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" },
+    { id: "novo", title: "a", project: "p", type: "Fix", action: "Review", status: "AWAITING", created_at: "2026-01-03T00:00:00Z" },
+    { id: "antigo", title: "b", project: "p", type: "Fix", action: "Review", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" },
   ];
   assert.deepEqual(groupIssues(column).AWAITING.map((issue) => issue.id), ["antigo", "novo"]);
 });
@@ -60,12 +60,12 @@ test("dentro da coluna, decisões pendentes vêm antes de created_at ascendente"
 test("pendingDecisions lista Issues AWAITING com action, mais antiga primeiro", () => {
   const list = [
     { id: "i1", title: "Mais nova", project: "app", action: "Implement", status: "AWAITING", created_at: "2026-01-01T00:00:00Z", status_changed_at: "2026-01-05T00:00:00Z" },
-    { id: "i2", title: "Mais antiga", project: "app", action: "QA", status: "AWAITING", created_at: "2026-01-01T00:00:00Z", status_changed_at: "2026-01-02T00:00:00Z" },
-    { id: "i3", title: "Fechada", project: "app", action: "QA", status: "CLOSED", created_at: "2026-01-01T00:00:00Z" },
+    { id: "i2", title: "Mais antiga", project: "app", action: "Review", status: "AWAITING", created_at: "2026-01-01T00:00:00Z", status_changed_at: "2026-01-02T00:00:00Z" },
+    { id: "i3", title: "Fechada", project: "app", action: "Review", status: "CLOSED", created_at: "2026-01-01T00:00:00Z" },
   ];
   const decisions = pendingDecisions(list);
   assert.deepEqual(decisions.map((decision) => [decision.issueId, decision.action]), [
-    ["i2", "QA"],
+    ["i2", "Review"],
     ["i1", "Implement"],
   ]);
 });
@@ -229,9 +229,9 @@ test("step fora do vocabulário Given/When/Then/And renderiza sem keyword", () =
 
 test("funções tolerantes a undefined: campos ausentes (não só vazios) usam o fallback ??", () => {
   assert.deepEqual(pendingDecisions(undefined), []); // issues ?? []
-  const noStatusChangedAt = { id: "i1", title: "t", project: "p", action: "QA", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" };
+  const noStatusChangedAt = { id: "i1", title: "t", project: "p", action: "Review", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" };
   assert.deepEqual(pendingDecisions([noStatusChangedAt]), [{ issueId: "i1", issueTitle: "t", project: "p",
-    action: "QA", since: "2026-01-01T00:00:00Z" }]); // status_changed_at ?? created_at
+    action: "Review", since: "2026-01-01T00:00:00Z" }]); // status_changed_at ?? created_at
 
   assert.deepEqual(splitThread(undefined), { older: [], recent: [] }); // entries ?? []
   assert.equal(isUnclassified({ status: "OPEN" }), true); // issue.tags ?? {}

@@ -13,7 +13,7 @@ const bin = resolve("bin/issues");
 const cli = (args: string[], root: string): string =>
   execFileSync(bin, args, { env: { ...process.env, ISSUES_ROOT: root }, encoding: "utf8" });
 
-const issueBody = { title: "Web issue", project: "web", type: "Fix", action: "QA", problem: "quebra", human_need: "HITL" };
+const issueBody = { title: "Web issue", project: "web", type: "Fix", action: "Review", problem: "quebra", human_need: "HITL" };
 
 // --- CA-05: fluxo humano equivalente via API web -----------------------------
 test("CA-05: humano cria Issue HITL pela web; IA entrega evidência via CLI; humano decide AWAITING -> CLOSED", async () =>
@@ -21,10 +21,10 @@ test("CA-05: humano cria Issue HITL pela web; IA entrega evidência via CLI; hum
     const created = await request(url, "POST", "/api/issues", issueBody);
     assert.equal(created.status, 201);
     const id = created.body.id as string;
-    // IA conduz pela CLI real no mesmo store: claim + artefato de QA (gate) + evidência para AWAITING.
+    // IA conduz pela CLI real no mesmo store: claim + artefato de Review (gate) + evidência para AWAITING.
     cli(["next", "--agent", "pi", "--project", "web"], root);
     const qa = join(mkdtempSync(join(tmpdir(), "issues-qa-")), "qa.md");
-    writeFileSync(qa, "# QA ok");
+    writeFileSync(qa, "# Review ok");
     cli(["artifact", "--id", id, "--file", qa], root);
     cli(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência: relatório"], root);
     assert.equal((await request(url, "GET", `/api/issues/${id}`)).body.status, "AWAITING");

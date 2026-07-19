@@ -9,7 +9,7 @@ import { createProject } from "../../src/app/services/use_cases/project_use_case
 import { setRequirements } from "../../src/app/services/use_cases/requirements_use_cases.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
-const input = { title: "Web issue", project: "web", type: "Fix", action: "QA", problem: "p" };
+const input = { title: "Web issue", project: "web", type: "Fix", action: "Review", problem: "p" };
 // JSONL: uma Feature estruturada por linha, o formato que o RequirementArtifact valida.
 const VALID_REQ_FEATURES = [{
   feature: "Login", como: "usuário", quero: "entrar", para: "acesse o painel",
@@ -21,11 +21,11 @@ test("API cria, lista por tipo, lê e fecha pela camada app", async () => withWe
   const created = await request(url, "POST", "/api/issues", input);
   assert.equal(created.status, 201);
   assert.equal(created.body.type, "Fix");
-  assert.equal(created.body.action, "QA");
+  assert.equal(created.body.action, "Review");
   assert.equal((await request(url, "GET", "/api/issues?type=Fix")).body.length, 1);
   assert.equal((await request(url, "GET", "/api/issues?type=Feat")).body.length, 0);
   assert.equal((await request(url, "GET", `/api/issues/${created.body.id}`)).body.id, created.body.id);
-  setArtifact({ issueId: created.body.id as string, content: "# QA ok" }, root);
+  setArtifact({ issueId: created.body.id as string, content: "# Review ok" }, root);
   const closed = await request(url, "POST", `/api/issues/${created.body.id}/close`, { comment: "feito", closed_reason: "concluido" });
   assert.equal(closed.body.status, "CLOSED");
 }));
@@ -184,7 +184,7 @@ test("API cria Issue com tags no create, sem tags segue funcionando e rejeita va
 async function createAwaiting(url: string, root: string): Promise<string> {
   const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
   nextIssue({ agent: "pi", project: "web" }, root);
-  setArtifact({ issueId: id, content: "# QA ok" }, root); // input é QA: satisfaz o gate antes do AWAITING
+  setArtifact({ issueId: id, content: "# Review ok" }, root); // input é Review: satisfaz o gate antes do AWAITING
   await statusIssue({ id, agent: "pi", status: "AWAITING", comment: "evidência" }, root);
   return id;
 }

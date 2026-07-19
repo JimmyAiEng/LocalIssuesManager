@@ -61,7 +61,7 @@ test("RequirementArtifact rejeita conteúdo inválido e action incorreta", () =>
   const planning = createIssue({ ...body, title: "t" }, dir);
   assert.throws(() => setRequirements({ issueId: planning.id, file: file(dir, INVALID) }, dir), DomainError);
   assert.throws(() => getRequirements({ issueId: planning.id }, dir), NotFoundError);
-  const qa = createIssue({ ...body, action: "QA", title: "qa" }, dir);
+  const qa = createIssue({ ...body, action: "Review", title: "qa" }, dir);
   assert.throws(() => setRequirements({ issueId: qa.id, file: file(dir, VALID) }, dir), /não é de Planning/);
 });
 

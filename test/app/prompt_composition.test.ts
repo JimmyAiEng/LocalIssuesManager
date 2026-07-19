@@ -49,7 +49,7 @@ test("cada action recebe o seu contrato: entrega própria + rota de abandono (De
   contains("Design", "issues design changed --issue");
   contains("Design", "issues plan set --id");
   contains("Implement", "issues worktree add --id");
-  contains("QA", "APROVADO | APROVADO com ressalva | REPROVADO");
+  contains("Review", "APROVADO | APROVADO com ressalva | REPROVADO");
   const deploy = composePrompt(makeView("Deploy"));
   assert.match(deploy, /--status AWAITING --comment "PR: /);
   assert.doesNotMatch(deploy, /--reason concluido/);
@@ -166,7 +166,7 @@ test("anexos ficam localizáveis ao agente: caminho em disco + URL; sem anexo, s
 });
 
 test("Tags preenchidas aparecem formatadas como key=value e determinismo vale", () => {
-  const issue = Issue.create({ title: "T", project: "demo", type: "Feat", action: "QA", problem: "p" }, "human");
+  const issue = Issue.create({ title: "T", project: "demo", type: "Feat", action: "Review", problem: "p" }, "human");
   issue.tag({ complexity: "ALTA", risk: "BAIXO" }, "human");
   const view: IssueView = { ...issue.toJSON(), artifact: null, related: [], ancestors: [] };
   const text = composePrompt(view);

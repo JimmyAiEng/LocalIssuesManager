@@ -175,8 +175,8 @@ test("comment aceita só anexo, exige conteúdo e respeita o limite de palavras"
 
 test("role especializado é gravado na thread de comment/submit/closeByAgent e é opcional", () => {
   const issue = claimed();
-  issue.comment("codex", "revisão", [], new Date("2026-05-01T00:00:00Z"), "quality-review");
-  assert.equal(issue.thread.at(-1)?.role, "quality-review");
+  issue.comment("codex", "revisão", [], new Date("2026-05-01T00:00:00Z"), "review");
+  assert.equal(issue.thread.at(-1)?.role, "review");
   issue.comment("codex", "sem papel"); // retrocompatível: thread sem role continua válida
   assert.equal("role" in issue.thread.at(-1)!, false);
   issue.submit("pi", "evidência", new Date(), [], "architect");

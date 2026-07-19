@@ -7,7 +7,7 @@ import test from "node:test";
 
 // E2E do WORKFLOW PRINCIPAL INTEIRO pela superfície real do usuário-IA: o binário `issues`
 // como processo (execFileSync). Caminha Planning -> Design (x2, um com mudança de arquitetura
-// e um atalho) -> Implement (x4) -> QA -> Deploy, passando por TODOS os gates de ponta a ponta.
+// e um atalho) -> Implement (x4) -> Review -> Deploy, passando por TODOS os gates de ponta a ponta.
 // N=2 Features (2 Design), M=2 (4 Implement no total) — cobre os dois ramos do "Changed?".
 const bin = resolve("bin/issues");
 const run = (args: string[], vars: NodeJS.ProcessEnv): string => execFileSync(bin, args, { env: vars, encoding: "utf8" });
@@ -76,7 +76,7 @@ function decompose(vars: NodeJS.ProcessEnv, parent: string, children: object[]):
   return json(["decompose", "--id", parent, "--into", into, "--agent", "pi"], vars).children;
 }
 
-test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> QA -> Deploy, todos os gates", () => {
+test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> Review -> Deploy, todos os gates", () => {
   const vars = freshEnv();
 
   // === PLANNING: RequirementArtifact com 2 Features + fan-out 1->2 Design ========================
@@ -140,13 +140,13 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> QA -> D
     assert.equal(closeAgent(vars, id).status, "CLOSED");
   }
 
-  // === QA: exige artefato .md -> fecha AFK =====================================================
-  const qa = create(vars, "QA", "QA do conjunto", planning);
+  // === Review: exige artefato .md -> fecha AFK =====================================================
+  const qa = create(vars, "Review", "Review do conjunto", planning);
   claim(vars, qa);
   const noArtifact = attempt(["status", "--id", qa, "--agent", "pi", "--status", "CLOSED", "--comment", "fim", "--reason", "concluido"], vars);
   assert.equal(noArtifact.status, 1);
   assert.match(noArtifact.stderr, /sem o artefato de validação/);
-  run(["artifact", "--id", qa, "--file", fixture("qa.md", "# QA: requisito x comportamento ok")], vars);
+  run(["artifact", "--id", qa, "--file", fixture("qa.md", "# Review: requisito x comportamento ok")], vars);
   assert.equal(closeAgent(vars, qa).status, "CLOSED");
 
   // === DEPLOY: exige PR link + análise; força AWAITING; humano decide CLOSED ====================

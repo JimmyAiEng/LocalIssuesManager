@@ -19,13 +19,13 @@ const attempt = (args: string[], vars: NodeJS.ProcessEnv) => spawnSync(bin, args
 const json = (args: string[], vars: NodeJS.ProcessEnv) => JSON.parse(run(args, vars));
 
 const createRequired = ["create", "--title", "Bug X", "--project", "demo", "--type", "Fix",
-  "--action", "QA", "--problem", "quebra ao salvar", "--agent", "pi"];
+  "--action", "Review", "--problem", "quebra ao salvar", "--agent", "pi"];
 const createFull = createRequired.concat("--acceptance-criteria", "salva sem erro");
 
-// createRequired cria Issues QA: o gate de conclusão exige o Artefato .md. Semeia-o nos testes
+// createRequired cria Issues Review: o gate de conclusão exige o Artefato .md. Semeia-o nos testes
 // que transicionam a Issue (AWAITING/CLOSED) pela IA.
 const qaArtifactFile = join(mkdtempSync(join(tmpdir(), "issues-e2e-qa-")), "qa.md");
-writeFileSync(qaArtifactFile, "# QA ok");
+writeFileSync(qaArtifactFile, "# Review ok");
 const seedQa = (vars: NodeJS.ProcessEnv, id: string): string => run(["artifact", "--id", id, "--file", qaArtifactFile], vars);
 const diskPath = (vars: NodeJS.ProcessEnv, folder: string, id: string) =>
   join(vars.ISSUES_ROOT as string, "projects", "demo", folder, `${id}.json`);
@@ -36,7 +36,7 @@ test("RF-01: cria Issue com type+action e problema (AC opcional) e grava em open
   const created = json(createRequired, vars);
   assert.equal(created.status, "OPEN");
   assert.equal(created.type, "Fix");
-  assert.equal(created.action, "QA");
+  assert.equal(created.action, "Review");
   assert.equal(created.problem, "quebra ao salvar");
   assert.equal(created.owner, null);
   assert.deepEqual(created.relates, []);
@@ -128,7 +128,7 @@ test("RF-06: get e list refletem o estado, com filtro por tipo", () => {
   const fixOnly = json(["list", "--project", "demo", "--type", "Fix"], vars);
   assert.equal(fixOnly.length, 1);
   assert.equal(fixOnly[0].type, "Fix");
-  assert.equal(fixOnly[0].action, "QA");
+  assert.equal(fixOnly[0].action, "Review");
 });
 
 // --- RF-07: comment com anexos; tags ------------------------------------------

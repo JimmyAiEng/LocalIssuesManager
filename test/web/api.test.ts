@@ -17,6 +17,14 @@ const VALID_REQ_FEATURES = [{
 }];
 const VALID_REQ = VALID_REQ_FEATURES.map((feature) => JSON.stringify(feature)).join("\n");
 
+// Conjunto de documentos que o gate de Review exige (intent + 2 evidence nomeadas + veredito APROVADO).
+const seedReview = (root: string, id: string): void => {
+  setArtifact({ issueId: id, content: "# intenção", name: "intent.md" }, root);
+  setArtifact({ issueId: id, content: "# evidência a", name: "evidence-a.md" }, root);
+  setArtifact({ issueId: id, content: "# evidência b", name: "evidence-b.md" }, root);
+  setArtifact({ issueId: id, content: "APROVADO ok" }, root);
+};
+
 test("API cria, lista por tipo, lê e fecha pela camada app", async () => withWeb(async (url, root) => {
   const created = await request(url, "POST", "/api/issues", input);
   assert.equal(created.status, 201);
@@ -25,7 +33,7 @@ test("API cria, lista por tipo, lê e fecha pela camada app", async () => withWe
   assert.equal((await request(url, "GET", "/api/issues?type=Fix")).body.length, 1);
   assert.equal((await request(url, "GET", "/api/issues?type=Feat")).body.length, 0);
   assert.equal((await request(url, "GET", `/api/issues/${created.body.id}`)).body.id, created.body.id);
-  setArtifact({ issueId: created.body.id as string, content: "# Review ok" }, root);
+  seedReview(root, created.body.id as string);
   const closed = await request(url, "POST", `/api/issues/${created.body.id}/close`, { comment: "feito", closed_reason: "concluido" });
   assert.equal(closed.body.status, "CLOSED");
 }));
@@ -184,7 +192,7 @@ test("API cria Issue com tags no create, sem tags segue funcionando e rejeita va
 async function createAwaiting(url: string, root: string): Promise<string> {
   const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
   nextIssue({ agent: "pi", project: "web" }, root);
-  setArtifact({ issueId: id, content: "# Review ok" }, root); // input é Review: satisfaz o gate antes do AWAITING
+  seedReview(root, id); // input é Review: satisfaz o gate antes do AWAITING
   await statusIssue({ id, agent: "pi", status: "AWAITING", comment: "evidência" }, root);
   return id;
 }

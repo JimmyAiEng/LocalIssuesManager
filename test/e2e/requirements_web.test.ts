@@ -23,9 +23,12 @@ test("CA-05: humano cria Issue HITL pela web; IA entrega evidência via CLI; hum
     const id = created.body.id as string;
     // IA conduz pela CLI real no mesmo store: claim + artefato de Review (gate) + evidência para AWAITING.
     cli(["next", "--agent", "pi", "--project", "web"], root);
-    const qa = join(mkdtempSync(join(tmpdir(), "issues-qa-")), "qa.md");
-    writeFileSync(qa, "# Review ok");
-    cli(["artifact", "--id", id, "--file", qa], root);
+    const qaDir = mkdtempSync(join(tmpdir(), "issues-qa-"));
+    const qaFile = (name: string, content: string): string => { const p = join(qaDir, name); writeFileSync(p, content); return p; };
+    cli(["artifact", "--id", id, "--name", "intent.md", "--file", qaFile("intent.md", "# intenção")], root);
+    cli(["artifact", "--id", id, "--name", "evidence-a.md", "--file", qaFile("evidence-a.md", "# evidência a")], root);
+    cli(["artifact", "--id", id, "--name", "evidence-b.md", "--file", qaFile("evidence-b.md", "# evidência b")], root);
+    cli(["artifact", "--id", id, "--file", qaFile("verdict.md", "APROVADO ok")], root);
     cli(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência: relatório"], root);
     assert.equal((await request(url, "GET", `/api/issues/${id}`)).body.status, "AWAITING");
     const decided = await request(url, "POST", `/api/issues/${id}/decision`,

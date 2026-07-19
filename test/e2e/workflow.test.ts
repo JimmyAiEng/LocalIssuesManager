@@ -134,13 +134,16 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> Review 
     assert.equal(closeAgent(vars, id).status, "CLOSED");
   }
 
-  // === Review: exige artefato .md -> fecha AFK =====================================================
+  // === Review: exige intent + 2 evidence + veredito -> fecha AFK ===================================
   const qa = create(vars, "Review", "Review do conjunto", planning);
   claim(vars, qa);
   const noArtifact = attempt(["status", "--id", qa, "--agent", "pi", "--status", "CLOSED", "--comment", "fim", "--reason", "concluido"], vars);
   assert.equal(noArtifact.status, 1);
-  assert.match(noArtifact.stderr, /sem o artefato de validação/);
-  run(["artifact", "--id", qa, "--file", fixture("qa.md", "# Review: requisito x comportamento ok")], vars);
+  assert.match(noArtifact.stderr, /sem intent\.md/);
+  run(["artifact", "--id", qa, "--name", "intent.md", "--file", fixture("intent.md", "# intenção da revisão")], vars);
+  run(["artifact", "--id", qa, "--name", "evidence-a.md", "--file", fixture("evidence-a.md", "# evidência a: requisito x comportamento ok")], vars);
+  run(["artifact", "--id", qa, "--name", "evidence-b.md", "--file", fixture("evidence-b.md", "# evidência b: sem regressões")], vars);
+  run(["artifact", "--id", qa, "--file", fixture("verdict.md", "APROVADO: conjunto consistente")], vars);
   assert.equal(closeAgent(vars, qa).status, "CLOSED");
 
   // === DEPLOY: exige PR link + análise; força AWAITING; humano decide CLOSED ====================

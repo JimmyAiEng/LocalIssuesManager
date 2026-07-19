@@ -52,13 +52,20 @@ function claimed(root: string, o: { title: string; project: string; type: string
   return id;
 }
 
-// awaiting() semeia Issues Review (action default): o gate de conclusão exige o Artefato .md antes de AWAITING.
-const qaArtifactFile = join(mkdtempSync(join(tmpdir(), "issues-e2e-ui-qa-")), "qa.md");
-writeFileSync(qaArtifactFile, "# Review ok");
+// awaiting() semeia Issues Review (action default): o gate exige intent + 2 evidence + veredito antes de AWAITING.
+const qaDir = mkdtempSync(join(tmpdir(), "issues-e2e-ui-qa-"));
+const qaFile = (name: string, content: string): string => { const p = join(qaDir, name); writeFileSync(p, content); return p; };
+const intentFile = qaFile("intent.md", "# intenção");
+const evAFile = qaFile("evidence-a.md", "# evidência a");
+const evBFile = qaFile("evidence-b.md", "# evidência b");
+const verdictFile = qaFile("verdict.md", "APROVADO revisão ok");
 
 function awaiting(root: string, o: { title: string; project: string; type: string }): string {
   const id = claimed(root, o);
-  cli(["artifact", "--id", id, "--file", qaArtifactFile], root);
+  cli(["artifact", "--id", id, "--name", "intent.md", "--file", intentFile], root);
+  cli(["artifact", "--id", id, "--name", "evidence-a.md", "--file", evAFile], root);
+  cli(["artifact", "--id", id, "--name", "evidence-b.md", "--file", evBFile], root);
+  cli(["artifact", "--id", id, "--file", verdictFile], root);
   cli(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência: relatório"], root);
   return id;
 }
@@ -348,7 +355,11 @@ test("UI-09a: fechar Issue exige confirmação explícita antes de efetivar (irr
   withUI((root) => { createIssue(root, { title: "Fechar OPEN", project: "web", type: "Fix" }); },
     async (page, url, root) => {
       const id = readdirSync(join(root, "projects", "web", "open"))[0].replace(".json", "");
-      new Queue(root).artifacts.writeText("web", { issueId: id, type: "document" }, "# Review concluído");
+      const store = new Queue(root).artifacts; // gate de Review: intent + 2 evidence + veredito
+      store.writeText("web", { issueId: id, type: "document", name: "intent.md" }, "# intenção");
+      store.writeText("web", { issueId: id, type: "document", name: "evidence-a.md" }, "# evidência a");
+      store.writeText("web", { issueId: id, type: "document", name: "evidence-b.md" }, "# evidência b");
+      store.writeText("web", { issueId: id, type: "document" }, "APROVADO concluído");
       await page.goto(`${url}/issues/${id}`);
       await page.getByRole("button", { name: "Fechar Issue" }).click(); // abre painel
       await page.selectOption('select[name="closed_reason"]', "concluido");

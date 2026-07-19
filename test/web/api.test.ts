@@ -50,6 +50,18 @@ test("API registra projeto e o lista — o painel deixa de depender do CLI para 
   assert.equal((await request(url, "POST", "/api/issues", { ...input, project: "novo" })).status, 201);
 }));
 
+test("API aceita concern no POST /api/projects — HIGH persiste, ausente default LOW, inválido recusado", async () => withWeb(async (url, root) => {
+  const high = await request(url, "POST", "/api/projects", { name: "alto", repo: root, concern: "HIGH" });
+  assert.equal(high.status, 201);
+  assert.equal(high.body.concern, "HIGH");
+  assert.equal(await projectConcern(url, "alto"), "HIGH"); // persistiu no disco, não só no eco do POST
+  const low = await request(url, "POST", "/api/projects", { name: "baixo", repo: root });
+  assert.equal(low.body.concern, "LOW"); // sem concern → default LOW
+  const bad = await request(url, "POST", "/api/projects", { name: "x", repo: root, concern: "MEDIO" });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error as string, /concern inválido/);
+}));
+
 test("API rejeita projeto sem nome/repo e com repo inexistente", async () => withWeb(async (url) => {
   assert.equal((await request(url, "POST", "/api/projects", { repo: "/tmp" })).status, 400);
   const semRepo = await request(url, "POST", "/api/projects", { name: "x" });
@@ -294,6 +306,11 @@ async function withWeb(run: (url: string, root: string) => Promise<void>): Promi
 async function projectNames(url: string): Promise<string[]> {
   const response = await fetch(`${url}/api/projects`);
   return ((await response.json()) as { name: string }[]).map((project) => project.name);
+}
+
+async function projectConcern(url: string, name: string): Promise<string | undefined> {
+  const response = await fetch(`${url}/api/projects`);
+  return ((await response.json()) as { name: string; concern?: string }[]).find((project) => project.name === name)?.concern;
 }
 
 async function request(url: string, method: string, path: string, body?: object): Promise<{ status: number; body: Record<string, unknown> }> {

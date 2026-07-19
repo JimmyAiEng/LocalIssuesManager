@@ -72,12 +72,13 @@ function issueAction(response: ServerResponse, route: string[], body: Body, root
 }
 
 // Projetos: sem isso o painel não se sustenta sozinho — Issue só nasce em projeto registrado, e
-// registrar era exclusivo do CLI. Só nome e repo, exigidos pelo domínio.
+// registrar era exclusivo do CLI. Nome e repo exigidos; concern opcional (createProject valida o enum
+// e faz default LOW quando ausente).
 async function projectAction(request: IncomingMessage, response: ServerResponse, root?: string): Promise<void> {
   if (request.method === "GET") return respond(response, 200, listProjects(root));
   if (request.method !== "POST") return respond(response, 404, { error: "Not found" });
   const body = await readBody(request);
-  const project = createProject({ name: text(body, "name"), repo: text(body, "repo") }, root);
+  const project = createProject({ name: text(body, "name"), repo: text(body, "repo"), concern: optionalText(body, "concern") }, root);
   respond(response, 201, project);
 }
 

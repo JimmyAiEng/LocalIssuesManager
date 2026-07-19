@@ -70,6 +70,20 @@ test("contrato Design proíbe código de produção antes de listar as entregas"
   assert.doesNotMatch(composePrompt(makeView("Implement")), /Não escreva código de produção/);
 });
 
+// O gate validateReview cobra intent.md + ao menos duas evidence-*.md nomeadas, o veredito e, no
+// REPROVADO, uma Issue Implement/Design de retrabalho vinculada — o contrato emite todos.
+test("contrato Review emite intent, duas evidence nomeadas, veredito e o vínculo de retrabalho", () => {
+  const view = makeView("Review", { owner: "claude-code" });
+  const text = composePrompt(view);
+  assert.ok(text.includes(`issues artifact --id ${view.id} --name intent.md`), "grava intent.md");
+  const evidence = text.match(/--name evidence-[^\s]*\.md/g) ?? [];
+  assert.ok(evidence.length >= 2, `emite ao menos duas evidence-*.md nomeadas (${evidence.length})`);
+  assert.match(text, /APROVADO \| APROVADO com ressalva \| REPROVADO/);
+  // REPROVADO: cria e vincula o retrabalho Implement/Design a esta Review.
+  assert.ok(text.includes(`--relates ${view.id}`), "vincula o retrabalho a esta Review");
+  assert.match(text, /--action (Implement|Design)/);
+});
+
 test("cada ActionType aparece no cabeçalho e na seção Issue", () => {
   for (const action of ACTION_TYPES) {
     const text = composePrompt(makeView(action));

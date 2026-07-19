@@ -90,7 +90,7 @@ Se o sistema rejeitar por tamanho, o remédio nunca é resumir à força: crie I
 ## Comandos (issues-local)
 
 ```text
-issues project create --name <p> --repo <path> [--container <img>] [--check <cmd>] [--test-paths <csv>]   # registra projeto (repo + check de Implement; --container = imagem Docker com o toolchain, roda cada check isolado; --test-paths liga o enforcement de TDD)
+issues project create --name <p> --repo <path>   # registra projeto (nome + repositório git, que viaja no prompt do agente)
 issues project list
 issues create --title <t> --project <p> --type <T> --action <A> --problem <txt>
               [--acceptance-criteria <c>] [--relates a,b] [--artifact-file <a.md>]
@@ -105,7 +105,6 @@ issues relate --id <id> --relates <a,b> [--kind parent|child|see-also]   # linha
 issues decompose --id <id> --into <arquivo.json> --agent <ia>  # fan-out: cria as filhas (Design por grupo de Features / Implement por Small Plan)
 issues artifact --id <id> --file <a.md>              # grava/substitui o Artefato .md (≤300 palavras; o nome do arquivo é irrelevante)
 issues status --id <id> --agent <ia> --status AWAITING|CLOSED --comment <evidência> [--reason <r>] [--role <papel>]
-issues worktree add|remove --id <id>                 # worktree git no repo do projeto
 issues requirements set --id <id> --file <req.jsonl> # Features estruturadas, uma por linha (entrega de Planning)
 issues design doc|add --issue <id> [--kind <k>] --file <f>   # entrega de Design
 issues design changed --issue <id> --value true|false        # decisão de arquitetura (entrega de Design)

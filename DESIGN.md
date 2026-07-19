@@ -18,7 +18,7 @@ Domain (Issue, Artifact, Workflow, GatePolicy)
     ↓
 Queue + ArtifactStore concretos
     ↓
-Filesystem / Git / PlantUML / project checks
+Filesystem / PlantUML
 ```
 
 - `Issue` protege identidade, transições, Owner, Thread, tags e relações.
@@ -37,7 +37,7 @@ Agregado da unidade de trabalho. Campos principais:
 
 ```text
 id · title · project · type · action · problem · acceptance_criteria
-status · owner · closed_reason · tags · relates · worktree
+status · owner · closed_reason · tags · relates
 architecture_changed · thread · phases · revision
 ```
 
@@ -51,7 +51,7 @@ AWAITING --decide--> OPEN | CLOSED
 CLAIMED --reset--> OPEN
 ```
 
-A Issue não executa PlantUML, Git, checks, consultas à linhagem ou regras específicas de Workflow.
+A Issue não executa PlantUML, consultas à linhagem ou regras específicas de Workflow.
 
 ### Artifact
 
@@ -81,7 +81,7 @@ Cada tipo vive em `src/domain/artifacts/*_artifact.ts` e expõe sua validação 
 |---|---|---|---|
 | Planning | RequirementArtifact | Não | Condicional às tags |
 | Design | ImplementationPlanArtifact; Document + UML quando arquitetura muda | PlantUML quando arquitetura muda | Quando arquitetura muda ou pelas tags |
-| Implement | Nenhum | TDD/checks quando configurados no Projeto | Condicional às tags |
+| Implement | Nenhum | Não | Condicional às tags |
 | Review | Artifact `doc` de validação | Não | Condicional às tags |
 | Deploy | Nenhum | Análise externa do PR | Sempre |
 
@@ -109,9 +109,7 @@ src/app/services/workflows/
 
 Cada módulo conhece somente a orquestração da sua Action. Dependências externas permanecem na aplicação:
 
-- PlantUML: `plantuml_check.ts`;
-- Git/TDD: `implement_execution.ts`;
-- checks do projeto: `project_use_cases.ts`;
+- PlantUML: `uml-validation/plantuml_check.ts`;
 - filesystem: `Queue` e `ArtifactStore` concretos.
 
 O fechamento humano direto continua sendo override para cancelamento/classificação administrativa. A decisão de uma Issue `AWAITING` continua exclusiva do humano.

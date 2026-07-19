@@ -42,8 +42,8 @@ Dados ficam em `~/issues-manager` (ou `ISSUES_ROOT`):
 
 ### Projeto
 
-Issues só existem em projeto **registrado**: `issues project create --name <p> --repo <path> [--check <cmd>]`.
-O `--repo` aponta o repositório git (base das worktrees); o `--check` é o script que uma Issue `Implement` precisa passar para ser concluída.
+Issues só existem em projeto **registrado**: `issues project create --name <p> --repo <path>`.
+O `--repo` aponta o repositório git do projeto e viaja no prompt do agente; o CLI orquestra o trabalho, não invoca git nem executa checks por você.
 
 ### Issue (unidade de trabalho)
 
@@ -70,7 +70,7 @@ O `--repo` aponta o repositório git (base das worktrees); o `--check` é o scri
 
 | Comando | Função | Obrigatório | Opcional |
 |---------|--------|-------------|----------|
-| **project create** | Registrar projeto | `--name` `--repo` | `--check` |
+| **project create** | Registrar projeto | `--name` `--repo` | — |
 | **project list** | Listar projetos | — | — |
 | **create** | Criar Issue | `--title` `--project` `--type` `--action` `--problem` + (`--human` \| `--agent`) | `--acceptance-criteria` `--relates` `--artifact-file` `--complexity` `--risk` `--human-need` `--attach` |
 | **next** | Claimar a próxima Issue | `--agent` + (`--project` \| `--id`) | `--prompt` |
@@ -91,8 +91,8 @@ O `--repo` aponta o repositório git (base das worktrees); o `--check` é o scri
 ### Exemplos
 
 ```bash
-# Projeto primeiro (repo + check de Implement)
-issues project create --name app --repo ~/code/app --check "npm run check"
+# Projeto primeiro (nome + repositório git)
+issues project create --name app --repo ~/code/app
 
 # Create (type = problema; action = entrega esperada)
 issues create --title "Login com e-mail" --project app --type Feat --action Planning \
@@ -120,7 +120,7 @@ A IA só conclui (`AWAITING`/`CLOSED`) se a entrega da action existir:
 |--------|------|
 | `Planning` | Requisitos válidos em JSONL (`issues requirements set`), máx. 5 Features + as filhas `Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` os nomes que cobre): toda Feature em exatamente uma filha |
 | `Design` | Decisão de arquitetura (`issues design changed`) + plano válido (`issues plan set`) + **≥1 filha `Implement`** (`issues decompose`). Com `architecture_changed=true`: também `design.md` + os 4 níveis em PlantUML válido, e só fecha por decisão humana |
-| `Implement` | Worktree criada (`issues worktree add`) + checks do projeto passando na worktree (+ ordem TDD, se `--test-paths`) |
+| `Implement` | Evidência da conclusão (o CLI não cria worktree nem roda check; validar a fatia com as ferramentas do repo é do agente) |
 | `Review` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
 | `Deploy` | Só `AWAITING`: link http(s) do PR + resultado da análise na thread; fecha via `decide` humano |
 
@@ -145,8 +145,6 @@ issues get DESIGN --id <id>     # pacote + validation.ready
 ## Infraestrutura
 
 ```bash
-issues worktree add --id <uuid> [--path <p>]   # sandbox git no repo do projeto
-issues worktree remove --id <uuid>
 issues web [--port <n>] [--no-open]            # UI local (decisões humanas)
 issues init [--harness …] [--target <dir>] [--force]
 issues init --dogfood                          # só no pack source

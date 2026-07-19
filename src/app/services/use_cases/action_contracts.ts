@@ -1,3 +1,4 @@
+import type { ConcernLevel } from "../../../domain/queue_repository.js";
 import type { ActionType } from "../../../domain/value_objects.js";
 
 // Contrato mecânico da action, embutido no prompt do claim (issues next --prompt): a sequência de
@@ -19,8 +20,7 @@ const CONTRACTS: Record<ActionType, string> = {
 3. Artefato do alinhamento — markdown livre, máx. 300 palavras:
    issues artifact --id {{id}} --file artifact.md
 4. Encerramento com evidência:
-   issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<o que foi alinhado e decidido>" --reason concluido
-   (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING, sem --reason.)`,
+{{close}}`,
 
   Design: `Não escreva código de produção nesta Issue: implementar é trabalho das filhas Implement. Código escrito aqui fica fora da fatia que será implementada, validada e revisada — é esforço perdido.
 
@@ -40,8 +40,7 @@ Grave as entregas nesta ordem (comandos prontos para esta Issue):
 4. Artefato da spec — markdown, máx. 300 palavras; é ele que viaja no prompt das filhas:
    issues artifact --id {{id}} --file artifact.md
 5. Encerramento com evidência:
-   issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<decisão, desenho, fatias criadas>" --reason concluido
-   (Com --value true: grave antes design.md com 'issues design doc --issue {{id}} --file design.md' e os diagramas com 'issues design add --issue {{id}} --kind component|package|class|activity --file <f.puml>', e encerre com --status AWAITING. HITL, risk=ALTO ou complexity=ALTA: também AWAITING.)`,
+{{close}}`,
 
   Implement: `Fluxo desta Issue (comandos prontos):
 
@@ -79,6 +78,24 @@ Fluxo desta Issue (comandos prontos):
    (Issue errada ou obsoleta: o mesmo comando com --reason errado e o porquê no --comment.)`,
 };
 
+// Passo de encerramento de Planning/Design, ramificado pelo concern do Projeto (piso de supervisão).
+// LOW mantém o fecho por agente de hoje; HIGH força AWAITING (Planning/Design não fecham por agente,
+// a decisão é humana) — assim o contrato do prompt já avisa antes de o agente bater no gate.
+const CLOSE: Partial<Record<ActionType, Record<ConcernLevel, string>>> = {
+  Planning: {
+    LOW: `   issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<o que foi alinhado e decidido>" --reason concluido
+   (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING, sem --reason.)`,
+    HIGH: `   issues status --id {{id}} --agent {{agent}} --status AWAITING --comment "<o que foi alinhado e decidido>"
+   (projeto concern HIGH: Planning não fecha por agente — envie para decisão humana com --status AWAITING, sem --reason concluido; o humano decide no web.)`,
+  },
+  Design: {
+    LOW: `   issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<decisão, desenho, fatias criadas>" --reason concluido
+   (Com --value true: grave antes design.md com 'issues design doc --issue {{id}} --file design.md' e os diagramas com 'issues design add --issue {{id}} --kind component|package|class|activity --file <f.puml>', e encerre com --status AWAITING. HITL, risk=ALTO ou complexity=ALTA: também AWAITING.)`,
+    HIGH: `   issues status --id {{id}} --agent {{agent}} --status AWAITING --comment "<decisão, desenho, fatias criadas>"
+   (projeto concern HIGH: Design não fecha por agente — envie para decisão humana com --status AWAITING, sem --reason concluido. Com --value true grave antes design.md com 'issues design doc --issue {{id}} --file design.md' e os diagramas com 'issues design add --issue {{id}} --kind component|package|class|activity --file <f.puml>'. O humano decide no web.)`,
+  },
+};
+
 // Rota de fuga comum: sem ela o agente fica preso num gate de Issue que ele mesmo criou errada
 // (observado: Issue Planning abandonada CLAIMED porque "fechar" cobrava requisitos). Deploy não
 // entra: agente nunca fecha Deploy, e o contrato dele já orienta o AWAITING com --reason errado.
@@ -86,8 +103,10 @@ const ABANDONO = `Issue errada, duplicada ou grande demais? Crie as Issues subst
    issues status --id {{id}} --agent {{agent}} --status CLOSED --reason obsoleto --comment "<por quê / substituída por qual Issue>"
    (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING --reason obsoleto.)`;
 
-export function actionContract(issue: { id: string; action: ActionType; project: string; owner: string | null }): string {
-  const body = issue.action === "Deploy" ? CONTRACTS.Deploy : `${CONTRACTS[issue.action]}\n\n${ABANDONO}`;
+export function actionContract(issue: { id: string; action: ActionType; project: string; owner: string | null; concern?: ConcernLevel }): string {
+  const raw = issue.action === "Deploy" ? CONTRACTS.Deploy : `${CONTRACTS[issue.action]}\n\n${ABANDONO}`;
+  const close = CLOSE[issue.action];
+  const body = close ? raw.replace("{{close}}", close[issue.concern ?? "LOW"]) : raw;
   return `## Entrega desta Issue (action ${issue.action})\n\n${fill(body, issue)}`;
 }
 

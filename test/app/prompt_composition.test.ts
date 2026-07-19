@@ -60,6 +60,40 @@ test("cada action recebe o seu contrato: entrega própria + rota de abandono (De
   }
 });
 
+// O concern do Projeto ramifica o passo de encerramento de Planning/Design no contrato do prompt:
+// em HIGH o gate recusa o CLOSED por agente, então o contrato já manda fechar por AWAITING.
+const closeCommand: Record<"Planning" | "Design", string> = {
+  Planning: `--status CLOSED --comment "<o que foi alinhado e decidido>" --reason concluido`,
+  Design: `--status CLOSED --comment "<decisão, desenho, fatias criadas>" --reason concluido`,
+};
+
+test("concern HIGH: Planning e Design fecham por AWAITING, sem o CLOSED --reason concluido do encerramento", () => {
+  for (const action of ["Planning", "Design"] as const) {
+    const high = composePrompt(makeView(action, { owner: "claude-code", concern: "HIGH" }));
+    assert.match(high, /--status AWAITING --comment/, `${action} HIGH encerra por AWAITING`);
+    assert.match(high, /projeto concern HIGH/, `${action} HIGH cita o concern como motivo`);
+    assert.ok(!high.includes(closeCommand[action]), `${action} HIGH não instrui o CLOSED --reason concluido do encerramento`);
+  }
+});
+
+test("concern LOW/ausente: Planning e Design mantêm o encerramento por CLOSED --reason concluido de hoje", () => {
+  for (const action of ["Planning", "Design"] as const) {
+    const base = makeView(action, { owner: "claude-code" }); // sem concern => LOW
+    const low = composePrompt(base);
+    assert.ok(low.includes(closeCommand[action]), `${action} LOW mantém o CLOSED --reason concluido`);
+    assert.doesNotMatch(low, /projeto concern HIGH/, `${action} LOW não menciona o concern HIGH`);
+    // LOW explícito é idêntico ao default (ausência = LOW); mesma Issue, só o concern muda.
+    assert.equal(composePrompt({ ...base, concern: "LOW" }), low, `${action}: LOW == default`);
+  }
+});
+
+test("concern não muda o contrato de Implement, Review nem Deploy", () => {
+  for (const action of ["Implement", "Review", "Deploy"] as const) {
+    const base = makeView(action, { owner: "claude-code" });
+    assert.equal(composePrompt({ ...base, concern: "HIGH" }), composePrompt(base), action);
+  }
+});
+
 // Observado no HomeInventory: numa Issue Design o agente escreveu os 6 arquivos de produção das
 // filhas Implement (ainda OPEN) e gastou o orçamento nisso, sem entregar os diagramas do gate.
 // Nenhuma linha do contrato proibia — agora proíbe, antes dos passos.

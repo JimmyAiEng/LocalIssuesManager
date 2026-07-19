@@ -6,7 +6,7 @@ import { DomainError } from "../../../domain/domain_error.js";
 import type { ImplementationPlan } from "../../../domain/artifacts/implementation_plan_artifact.js";
 import type { Feature } from "../../../domain/artifacts/requirement_artifact.js";
 import { Issue, type IssueData, type Phase } from "../../../domain/issue_entity.js";
-import { Queue } from "../../../domain/queue_repository.js";
+import { type ConcernLevel, Queue } from "../../../domain/queue_repository.js";
 import {
   type ActionType, type Actor, assertBrief, inverseKind, parseActionType, parseActor, parseAgentId, parseClosedReason,
   parseIssueStatus, parseIssueType, parseRelationKind, parseRole, type RelationKind, type Tags, type TagUpdates, type Thread,
@@ -54,7 +54,7 @@ export function claimIssue(input: { id: string; now?: Date }, root?: string): Is
 }
 
 export type RelatedView = { id: string; title: string; status: string; action: ActionType; artifact: string | null; kind: RelationKind; plan?: ImplementationPlan | null; thread?: Thread[] };
-export type IssueView = IssueData & { artifact: string | null; related: RelatedView[]; ancestors: RelatedView[]; features?: Feature[] | null; plan?: ImplementationPlan | null };
+export type IssueView = IssueData & { artifact: string | null; related: RelatedView[]; ancestors: RelatedView[]; features?: Feature[] | null; plan?: ImplementationPlan | null; concern?: ConcernLevel };
 
 export function getIssue(id: string, root?: string): IssueView {
   const queue = new Queue(root);
@@ -77,7 +77,8 @@ export function assertNotOpen(id: string, root?: string): void {
 export function issueView(queue: Queue, issue: Issue): IssueView {
   return { ...issue.toJSON(), artifact: queue.artifacts.readText(issue.project, { issueId: issue.id, type: "document" }),
     related: issue.relates.flatMap((r) => relatedView(queue, r.id, r.kind)), features: designFeatures(queue, issue),
-    ancestors: ancestorChain(queue, issue), plan: readPlanForView(queue, issue.project, issue.id) }; // plan = Small Plan da própria Issue
+    ancestors: ancestorChain(queue, issue), plan: readPlanForView(queue, issue.project, issue.id), // plan = Small Plan da própria Issue
+    concern: queue.readProject(issue.project)?.concern ?? "LOW" }; // piso de supervisão do Projeto: ramifica o contrato de Planning/Design no prompt
 }
 
 function relatedView(queue: Queue, id: string, kind: RelationKind): RelatedView[] {

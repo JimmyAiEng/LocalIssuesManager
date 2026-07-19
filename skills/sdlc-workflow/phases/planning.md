@@ -127,5 +127,6 @@ issues status --id <id> --agent <ia> --status CLOSED \
 ```
 
 Use `--status AWAITING` (sem `--reason`) se a Issue é HITL, `risk=ALTO` ou `complexity=ALTA`.
+Em Projeto `concern=HIGH`, Planning **não fecha por agente**: encerre sempre por `--status AWAITING` (sem `--reason concluido`) — o aceite é humano, no web — mesmo em Issue AFK.
 Sem requisitos válidos **e** toda Feature coberta por exatamente uma filha Design, o comando falha apontando a Feature descoberta ou repetida — entregue as duas antes.
 Concluída a Issue, **encerre a sessão**: não busque outra Issue.

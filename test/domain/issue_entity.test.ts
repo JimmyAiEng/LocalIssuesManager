@@ -202,14 +202,17 @@ test("relate adiciona relações novas com kind, ignora o próprio id e deduplic
   assert.deepEqual(issue.relates, [{ id: "a", kind: "child" }, { id: "b", kind: "see-also" }, { id: "c", kind: "parent" }]);
 });
 
-test("relate sem novidade ou em CLOSED é rejeitado", () => {
+test("relate sem novidade é rejeitado; em CLOSED a linhagem continua gravável", () => {
   const issue = claimed();
   issue.relate([{ id: "a", kind: "see-also" }]);
   assert.throws(() => issue.relate([{ id: "a", kind: "see-also" }, { id: issue.id, kind: "child" }]), /Nenhuma relação nova/);
   assert.throws(() => issue.relate([]), /Nenhuma relação nova/);
   const closed = Issue.create(input, "human");
   closed.closeByHuman("errada", "errado");
-  assert.throws(() => closed.relate([{ id: "a", kind: "see-also" }]), /CLOSED aggregate is immutable/);
+  const revBefore = closed.revision;
+  closed.relate([{ id: "a", kind: "see-also" }]); // linhagem gravável após CLOSED (conteúdo segue imutável)
+  assert.deepEqual(closed.relates, [{ id: "a", kind: "see-also" }]);
+  assert.equal(closed.revision, revBefore + 1);
 });
 
 test("fromJSON lê relates antigos (string[]) como see-also", () => {

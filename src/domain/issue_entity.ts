@@ -87,8 +87,10 @@ export class Issue implements IssueData {
   // Liga esta Issue a outras (linhagem direcionada): quem reivindica uma Issue enxerga os
   // artefatos das relacionadas. A existência dos ids e o par recíproco (parent↔child na Issue
   // alvo) são responsabilidade da camada de aplicação. Um id já ligado não muda de kind.
+  // Sem guarda de CLOSED (diferente de comment/tag/setWorktree): a linhagem continua gravável
+  // após o fechamento — adotar um filho num pai já CLOSED grava o par recíproco. Conteúdo segue
+  // imutável; relate só acrescenta relações, nunca altera o que foi entregue.
   relate(relations: Relation[]): void {
-    if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
     const existing = new Set(this.relates.map((r) => r.id));
     const additions = normalizeRelations(relations).filter((r) => r.id !== this.id && !existing.has(r.id));
     if (!additions.length) throw new DomainError("Nenhuma relação nova: informe ids de outras Issues");

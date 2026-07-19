@@ -10,9 +10,12 @@ import { setRequirements } from "../../src/app/services/use_cases/requirements_u
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
 const input = { title: "Web issue", project: "web", type: "Fix", action: "QA", problem: "p" };
-const VALID_REQ = JSON.stringify({
-  features: ["Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel"],
-});
+// JSONL: uma Feature estruturada por linha, o formato que o RequirementArtifact valida.
+const VALID_REQ_FEATURES = [{
+  feature: "Login", como: "usuário", quero: "entrar", para: "acesse o painel",
+  scenarios: [{ nome: "ok", steps: ["Given a tela", "When entro", "Then vejo o painel"] }],
+}];
+const VALID_REQ = VALID_REQ_FEATURES.map((feature) => JSON.stringify(feature)).join("\n");
 
 test("API cria, lista por tipo, lê e fecha pela camada app", async () => withWeb(async (url, root) => {
   const created = await request(url, "POST", "/api/issues", input);
@@ -203,7 +206,7 @@ test("API GET /issues/:id/requirements devolve requisitos persistidos (200) e 40
   setRequirements({ issueId: id, file }, root);
   const ok = await request(url, "GET", `/api/issues/${id}/requirements`);
   assert.equal(ok.status, 200);
-  assert.deepEqual(ok.body.features, JSON.parse(VALID_REQ).features);
+  assert.deepEqual(ok.body.features, VALID_REQ_FEATURES);
 }));
 
 test("API GET /issues/:id/design devolve o pacote de Design com os diagramas (200)", async () => withWeb(async (url, root) => {

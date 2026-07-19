@@ -21,6 +21,10 @@ A primeira versão do Qwen tinha "Eu quero poder criar…" (válido).
 Ao dividir as Features para caber no limite, ele reescreveu como "Eu quero criar…" e recebeu cinco vezes o erro `user story deve conter "Eu quero poder ..."`.
 A mensagem dizia o prefixo esperado, mas não mostrava a linha encontrada nem a correção; o modelo pequeno não converteu regra em edição.
 
+> **Atualização (2026-07-19)**: esta classe de erro foi eliminada por construção com a migração dos requisitos para `req.jsonl` estruturado (ADR 0009).
+> Os prefixos da user story viraram os campos `como`, `quero` e `para`, escritos pelo sistema na renderização: o validador cobra presença de campo, não gramática de texto, então não há mais prefixo para o autor errar.
+> O `mechanicalFix` descrito abaixo, que existia só para tirar o modelo desse loop, foi deletado junto com a regra que o motivava.
+
 ### F3 — A remediação sugerida bate no próprio gate
 
 O erro de 6 Features (limite 5) mandava "feche esta Issue e crie Issues menores relacionadas".
@@ -50,7 +54,7 @@ Três mudanças, todas nos canais garantidos.
 ### 1. Contrato mecânico da action no prompt do claim
 
 Novo módulo `action_contracts.ts`, chamado por `composePrompt` como última seção do prompt.
-Para cada action, o contrato lista a sequência de comandos com `id`, `agent` e `project` reais já substituídos, o conteúdo copy-paste de cada arquivo (`req.json`, `decompose.json`, `plan.json`, `artifact.md`) e o encerramento com a variante AWAITING.
+Para cada action, o contrato lista a sequência de comandos com `id`, `agent` e `project` reais já substituídos, o conteúdo copy-paste de cada arquivo (`req.jsonl`, `decompose.json`, `plan.json`, `artifact.md`) e o encerramento com a variante AWAITING.
 Toda action (exceto Deploy) termina com a rota de fuga: criar substitutas com `--relates` e abandonar com `--reason obsoleto`, que não cobra o gate.
 O "como" trabalhar continua nas skills; o contrato carrega só o "o quê" gravar e em que forma.
 Isso ataca F1, F4 e F5 na origem: zero saltos de leitura.

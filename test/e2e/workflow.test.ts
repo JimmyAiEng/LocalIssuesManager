@@ -44,9 +44,12 @@ const fixture = (name: string, content: string): string => {
 const lastLine = (text: string): string => text.trim().split("\n").at(-1) ?? "";
 
 // --- Fixtures do domínio (formatos exatos, extraídos do código/testes existentes) -------------
-const FEATURE_LOGIN = "Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel";
-const FEATURE_CADASTRO = "Feature: Cadastro\n  Como um usuário\n  Eu quero poder me cadastrar\n  Para que eu tenha conta\n\n  Scenario: ok\n    Given o formulário\n    When submeto\n    Then a conta existe";
-const REQUIREMENTS = JSON.stringify({ features: [FEATURE_LOGIN, FEATURE_CADASTRO] });
+// Requisitos em JSONL: uma Feature estruturada por linha.
+const FEATURE_LOGIN = { feature: "Login", como: "usuário", quero: "entrar", para: "acesse o painel",
+  scenarios: [{ nome: "ok", steps: ["Given a tela", "When entro", "Then vejo o painel"] }] };
+const FEATURE_CADASTRO = { feature: "Cadastro", como: "usuário", quero: "me cadastrar", para: "tenha conta",
+  scenarios: [{ nome: "ok", steps: ["Given o formulário", "When submeto", "Then a conta existe"] }] };
+const REQUIREMENTS = [FEATURE_LOGIN, FEATURE_CADASTRO].map((feature) => JSON.stringify(feature)).join("\n");
 const PLAN = JSON.stringify({ objetivo: "o", passos: ["p"], arquivos: ["a"], criterio_pronto: "c" });
 // PlantUML válido por kind, cobrindo os 4 níveis (design_gate KIND_LEVEL): component→high_level,
 // package→package, class→class, state→interface_data_model.
@@ -79,7 +82,7 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> QA -> D
   // === PLANNING: RequirementArtifact com 2 Features + fan-out 1->2 Design ========================
   const planning = create(vars, "Planning", "Planning raiz");
   claim(vars, planning);
-  run(["requirements", "set", "--id", planning, "--file", fixture("req.json", REQUIREMENTS)], vars);
+  run(["requirements", "set", "--id", planning, "--file", fixture("req.jsonl", REQUIREMENTS)], vars);
 
   // Gate negativo: com Requirements mas SEM as filhas Design, o Planning não fecha.
   const noChildren = attempt(["status", "--id", planning, "--agent", "pi", "--status", "CLOSED", "--comment", "fim", "--reason", "concluido"], vars);

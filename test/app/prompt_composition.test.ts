@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MediaArtifact } from "../../src/domain/artifacts/media_artifact.js";
+import { type Feature, toGherkin } from "../../src/domain/artifacts/requirement_artifact.js";
 import { Issue } from "../../src/domain/issue_entity.js";
 import { ACTION_TYPES, type ActionType, type IssueType } from "../../src/domain/value_objects.js";
 import type { IssueView, RelatedView } from "../../src/app/services/use_cases/issue_use_cases.js";
@@ -33,7 +34,7 @@ test("contrato da action fecha o prompt com comandos prontos: id e agent reais s
   const view = makeView("Planning", { owner: "pi" });
   const text = composePrompt(view);
   assert.match(text, /## Entrega desta Issue \(action Planning\)/);
-  assert.ok(text.includes(`issues requirements set --id ${view.id} --file req.json`));
+  assert.ok(text.includes(`issues requirements set --id ${view.id} --file req.jsonl`));
   assert.ok(text.includes(`issues decompose --id ${view.id} --into decompose.json --agent pi`));
   assert.ok(text.endsWith("--reason obsoleto.)"), "contrato (com a rota de abandono) é a última seção");
   // Sem claim (owner null), o agent fica como placeholder explícito.
@@ -43,7 +44,8 @@ test("contrato da action fecha o prompt com comandos prontos: id e agent reais s
 test("cada action recebe o seu contrato: entrega própria + rota de abandono (Deploy: só AWAITING)", () => {
   const contains = (action: ActionType, fragment: string) =>
     assert.ok(composePrompt(makeView(action)).includes(fragment), `${action}: ${fragment}`);
-  contains("Planning", '{"features": ["Feature: Login\\nComo um usuário\\nEu quero poder entrar');
+  // Payload copy-paste da linha JSONL: é a única documentação do formato garantida em qualquer harness.
+  contains("Planning", '{"feature": "Login", "como": "um usuário", "quero": "entrar", "para": "acessar o painel", "scenarios": [{"nome": "ok", "steps": ["Given a tela de login", "When envio credenciais válidas", "Then vejo o painel"]}]}');
   contains("Design", "issues design changed --issue");
   contains("Design", "issues plan set --id");
   contains("Implement", "issues worktree add --id");
@@ -112,11 +114,19 @@ test("Issue Implement filha recebe o plano do Design pai no prompt", () => {
     /Plano de implementação/);
 });
 
-test("Issue Design recebe as Features do seu grupo no prompt", () => {
-  const features = ["Feature: Login\n  Scenario: ok", "Feature: Logout\n  Scenario: ok"];
+test("Issue Design recebe as Features do seu grupo renderizadas em Gherkin no prompt", () => {
+  const features: Feature[] = [
+    { feature: "Login", como: "um usuário", quero: "entrar", para: "acessar o painel",
+      scenarios: [{ nome: "ok", steps: ["Given a tela", "Then vejo o painel"] }] },
+    { feature: "Logout", como: "um usuário", quero: "sair", para: "encerrar a sessão",
+      scenarios: [{ nome: "ok", steps: ["Given a sessão aberta", "Then volto ao login"] }] },
+  ];
   const text = composePrompt(makeView("Design", { features }));
   assert.match(text, /## Features desta Issue/);
+  // O artefato é JSONL, mas quem lê o prompt é um agente: chega o Gherkin renderizado, não a linha crua.
+  for (const feature of features) assert.ok(text.includes(toGherkin(feature)), feature.feature);
   assert.match(text, /Feature: Login[\s\S]*Feature: Logout/);
+  assert.doesNotMatch(text, /\{"feature"/);
   assert.doesNotMatch(composePrompt(makeView("Design")), /## Feature/);
 });
 

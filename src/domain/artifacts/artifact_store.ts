@@ -57,7 +57,7 @@ export class ArtifactStore {
     const base = this.#project(project);
     if (ref.type === "document" && ref.name === "design.md") return join(this.#designDir(project, ref.issueId), "design.md");
     if (ref.type === "document") return join(base, "artifacts", `${ref.issueId}.md`);
-    if (ref.type === "requirement") return join(base, "requirements", `${ref.issueId}.json`);
+    if (ref.type === "requirement") return join(base, "requirements", `${ref.issueId}.jsonl`);
     if (ref.type === "implementation-plan") return join(this.#designDir(project, ref.issueId), "plan.json");
     return join(this.#designDir(project, ref.issueId), ref.name ?? "diagram.puml");
   }
@@ -88,7 +88,7 @@ function projectSegment(project: string): string {
 
 function defaultName(type: TextArtifactType): string {
   if (type === "document") return "artifact.md";
-  if (type === "requirement") return "requirements.json";
+  if (type === "requirement") return "requirements.jsonl";
   if (type === "implementation-plan") return "plan.json";
   return "diagram.puml";
 }

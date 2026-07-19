@@ -242,25 +242,28 @@ test("falha: next --id de Issue já reivindicada — CLI", () => {
   assert.match(stderr, /Expected OPEN, got CLAIMED/);
 });
 
-// ─────────────────────────── Requisitos Gherkin ───────────────────────────
+// ─────────────────────────── Requisitos JSONL ───────────────────────────
 
-test("falha: requirements set com cada violação de Gherkin — CLI", () => {
+test("falha: requirements set com cada violação do JSONL — CLI", () => {
   const root = newRoot();
   const id = createIssueCLI(root, ["--action", "Planning"]);
-  const story = "Como um a\n  Eu quero poder b\n  Para que eu c";
-  const feature = `Feature: X\n  ${story}\n  Scenario: s\n  Given a`;
-  const cases: { json: string; expected: RegExp }[] = [
-    { json: "{isto nao e json", expected: /Requirements deve ser um arquivo JSON válido/ },
-    { json: JSON.stringify({ features: [] }), expected: /ao menos uma Feature/ },
-    { json: JSON.stringify({ features: Array(6).fill(feature) }), expected: /limite 5/ },
-    { json: JSON.stringify({ features: ["Scenario: x\n  Given a"] }), expected: /deve começar com o cabeçalho "Feature/ },
-    { json: JSON.stringify({ features: [`Feature: X\n  Eu quero poder b\n  Como um a\n  Para que eu c\n  Scenario: s\n  Given a`] }), expected: /user story deve ser "Como um <conteúdo>"/ },
-    { json: JSON.stringify({ features: [`Feature: X\n  ${story}\n  Scenario: s\n  Foobar`] }), expected: /step inválido/ },
-    { json: JSON.stringify({ features: [`Feature: X\n  ${story}\n  Scenario: s`] }), expected: /todo Scenario deve ter ao menos um step/ },
+  const feature = { feature: "Login", como: "usuário", quero: "entrar", para: "acesse o painel",
+    scenarios: [{ nome: "ok", steps: ["Given a tela", "When entro", "Then vejo o painel"] }] };
+  const named = (name: string) => ({ ...feature, feature: name });
+  const jsonl = (...lines: unknown[]): string => lines.map((line) => JSON.stringify(line)).join("\n");
+  const cases: { conteudo: string; expected: RegExp }[] = [
+    { conteudo: "\n  \n", expected: /ao menos uma Feature/ },
+    { conteudo: `${jsonl(feature)}\n{isto nao e json`, expected: /linha 2: JSON inválido/ },
+    { conteudo: jsonl({ ...feature, como: "" }), expected: /campo "como" é obrigatório/ },
+    { conteudo: jsonl({ ...feature, scenarios: [] }), expected: /"scenarios" deve ser um array com ao menos um cenário/ },
+    { conteudo: jsonl({ ...feature, scenarios: [{ nome: "ok", steps: ["Faço qualquer coisa"] }] }),
+      expected: /step deve começar com Given\/When\/Then\/And/ },
+    { conteudo: jsonl(feature, feature), expected: /Feature "Login" aparece em duas linhas/ },
+    { conteudo: jsonl(...Array.from({ length: 6 }, (_, index) => named(`F${index}`))), expected: /limite 5/ },
   ];
-  for (const [index, { json, expected }] of cases.entries()) {
-    const file = join(root, `req-${index}.json`);
-    writeFileSync(file, json, "utf8");
+  for (const [index, { conteudo, expected }] of cases.entries()) {
+    const file = join(root, `req-${index}.jsonl`);
+    writeFileSync(file, conteudo, "utf8");
     const { status, stderr } = fail(["requirements", "set", "--id", id, "--file", file], root);
     assert.notEqual(status, 0, `caso ${index} deveria falhar`);
     assert.match(stderr, expected, `caso ${index}`);

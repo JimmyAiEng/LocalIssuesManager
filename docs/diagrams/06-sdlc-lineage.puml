@@ -5,7 +5,7 @@ skinparam componentStyle rectangle
 top to bottom direction
 
 package "Planning (Issue)" {
-  [RequirementArtifact\nFeatures Gherkin] as P
+  [RequirementArtifact\nFeatures estruturadas] as P
 }
 
 package "Design (1 por Feature)" {

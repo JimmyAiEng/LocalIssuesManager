@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,14 +7,19 @@ import { decomposeIssue } from "../../src/app/services/use_cases/decomposition_u
 import { createIssue, nextIssue, relateIssues, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
 import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { getRequirements, setRequirements } from "../../src/app/services/use_cases/requirements_use_cases.js";
+import { RequirementArtifact } from "../../src/domain/artifacts/requirement_artifact.js";
 import { DomainError, NotFoundError } from "../../src/domain/domain_error.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
 const body = { project: "app", type: "Feat" as const, action: "Planning", problem: "p", actor: "human" as const };
-const FEATURE = "Feature: Login\n  Como um usuário\n  Eu quero poder entrar\n  Para que eu acesse\n\n  Scenario: ok\n    Given a tela\n    When entro\n    Then vejo o painel";
-const VALID = JSON.stringify({ features: [FEATURE] });
-const THREE = JSON.stringify({ features: [FEATURE, FEATURE.replace(/Login/g, "Logout"), FEATURE.replace(/Login/g, "Cadastro")] });
-const INVALID = JSON.stringify({ features: ["Feature: Login\n  Scenario: sem user story\n    Given a"] });
+// Requisitos em JSONL: uma Feature estruturada por linha.
+const FEATURE = { feature: "Login", como: "usuário", quero: "entrar", para: "acesse o painel",
+  scenarios: [{ nome: "ok", steps: ["Given a tela", "When entro", "Then vejo o painel"] }] };
+const named = (name: string) => ({ ...FEATURE, feature: name });
+const jsonl = (...features: object[]): string => features.map((feature) => JSON.stringify(feature)).join("\n");
+const VALID = jsonl(FEATURE);
+const THREE = jsonl(FEATURE, named("Logout"), named("Cadastro"));
+const INVALID = jsonl({ ...FEATURE, scenarios: [] });
 
 const root = (): string => {
   const dir = mkdtempSync(join(tmpdir(), "issues-req-"));
@@ -22,7 +27,7 @@ const root = (): string => {
   return dir;
 };
 const file = (dir: string, content: string): string => {
-  const path = join(dir, "requirements.json");
+  const path = join(dir, "requirements.jsonl");
   writeFileSync(path, content, "utf8");
   return path;
 };
@@ -41,11 +46,14 @@ const decomposeInto = (dir: string, issueId: string, groups: string[][]): void =
   decomposeIssue({ issueId, file: path, actor: "human" }, dir);
 };
 
-test("set/get Requirements persiste conjunto Gherkin válido", () => {
+test("set/get Requirements persiste o conjunto como JSONL em requirements/<id>.jsonl", () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "t" }, dir);
-  const saved = setRequirements({ issueId: issue.id, file: file(dir, VALID) }, dir);
+  const saved = setRequirements({ issueId: issue.id, file: file(dir, THREE) }, dir);
   assert.deepEqual(getRequirements({ issueId: issue.id }, dir), saved);
+  // O que fica em disco é o serializador único: uma Feature por linha, relido pelo mesmo parser.
+  assert.equal(new Queue(dir).readRequirements("app", issue.id), RequirementArtifact.toJsonl(saved));
+  assert.ok(existsSync(join(dir, "projects", "app", "requirements", `${issue.id}.jsonl`)));
 });
 
 test("RequirementArtifact rejeita conteúdo inválido e action incorreta", () => {
@@ -61,7 +69,7 @@ test("RequirementArtifact limita os Requirements a 5 Features", () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "t" }, dir);
   assert.throws(() => setRequirements({ issueId: issue.id,
-    file: file(dir, JSON.stringify({ features: Array(6).fill(FEATURE) })) }, dir), /limite 5/);
+    file: file(dir, jsonl(...Array.from({ length: 6 }, (_, i) => named(`F${i}`)))) }, dir), /limite 5/);
 });
 
 test("gate Planning exige RequirementArtifact e as filhas Design cobrindo as Features", async () => {

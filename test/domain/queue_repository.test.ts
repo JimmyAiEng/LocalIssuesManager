@@ -228,7 +228,8 @@ test("purgeClosed remove Media, Document, UML e Requirement Artifacts da Issue",
   queue.writeAttachment("p", att, Buffer.from("png"));
   queue.writeArtifact("p", issue.id, "# artefato");
   queue.writeDesign("p", issue.id, "design.md", "# doc");
-  queue.writeRequirements("p", issue.id, JSON.stringify({ features: [] }));
+  queue.writeRequirements("p", issue.id, JSON.stringify({ feature: "F", como: "a", quero: "b", para: "c",
+    scenarios: [{ nome: "ok", steps: ["Given a"] }] }));
   issue.status = "CLOSED"; // força o estado terminal no JSON (o purge lê status do disco)
   issue.status_changed_at = "2026-01-01T00:00:00.000Z";
   mkdirSync(join(dir, "projects/p/closed"), { recursive: true });
@@ -236,7 +237,7 @@ test("purgeClosed remove Media, Document, UML e Requirement Artifacts da Issue",
   const blob = join(dir, "projects/p/attachments", `${att.id}.png`);
   const artifact = join(dir, "projects/p/artifacts", `${issue.id}.md`);
   const design = join(dir, "projects/p/design", issue.id);
-  const requirements = join(dir, "projects/p/requirements", `${issue.id}.json`);
+  const requirements = join(dir, "projects/p/requirements", `${issue.id}.jsonl`);
   for (const path of [blob, artifact, design, requirements]) assert.equal(existsSync(path), true);
   assert.deepEqual(queue.purgeClosed(new Date("2026-07-14")), ["withall"]);
   for (const path of [blob, artifact, design, requirements]) assert.equal(existsSync(path), false);

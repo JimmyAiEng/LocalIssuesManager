@@ -78,7 +78,7 @@ O `--repo` aponta o repositório git (base das worktrees); o `--check` é o scri
 | **tag** | Tags | `--id` + (`--human` \| `--agent`) | `--complexity` `--human-need` `--risk` |
 | **relate** | Relacionar Issues (linhagem) | `--id` `--relates` | `--kind` (`parent` \| `child` \| `see-also`) |
 | **decompose** | Fan-out: criar as filhas | `--id` `--into` + (`--human` \| `--agent`) | — |
-| **requirements set** | Features Gherkin (Planning) | `--id` `--file` | — |
+| **requirements set** | Features em JSONL, uma por linha (Planning) | `--id` `--file` | — |
 | **plan set** | Plano de implementação (Design) | `--id` `--file` | — |
 | **design changed** | Decisão de arquitetura (Design) | `--issue` `--value` | — |
 | **status** | Concluir pela IA (com gate) | `--id` `--agent` `--status` `--comment` | `--reason` |
@@ -118,7 +118,7 @@ A IA só conclui (`AWAITING`/`CLOSED`) se a entrega da action existir:
 
 | Action | Gate |
 |--------|------|
-| `Planning` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features + as filhas `Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` os nomes que cobre): toda Feature em exatamente uma filha |
+| `Planning` | Requisitos válidos em JSONL (`issues requirements set`), máx. 5 Features + as filhas `Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` os nomes que cobre): toda Feature em exatamente uma filha |
 | `Design` | Decisão de arquitetura (`issues design changed`) + plano válido (`issues plan set`) + **≥1 filha `Implement`** (`issues decompose`). Com `architecture_changed=true`: também `design.md` + os 4 níveis em PlantUML válido, e só fecha por decisão humana |
 | `Implement` | Worktree criada (`issues worktree add`) + checks do projeto passando na worktree (+ ordem TDD, se `--test-paths`) |
 | `QA` | Artefato .md da validação requisito×comportamento (`issues artifact`) |

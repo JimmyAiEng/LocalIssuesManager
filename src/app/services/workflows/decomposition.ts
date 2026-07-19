@@ -1,6 +1,6 @@
 import { DomainError } from "../../../domain/domain_error.js";
 import { ImplementationPlanArtifact } from "../../../domain/artifacts/implementation_plan_artifact.js";
-import { RequirementArtifact, type RequirementSet } from "../../../domain/artifacts/requirement_artifact.js";
+import { type Feature, RequirementArtifact, type RequirementSet } from "../../../domain/artifacts/requirement_artifact.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import type { Queue } from "../../../domain/queue_repository.js";
 import { designChildCoverage } from "./planning.js";
@@ -49,12 +49,12 @@ function declaredFeatures(child: DecomposeChild): string[] {
   return features;
 }
 
-// O Gherkin das Features declaradas: o decompose grava esse recorte como o RequirementArtifact da
-// filha, que passa a possuir os seus requisitos em vez de casar nome com título depois.
-export function featureTexts(queue: Queue, parent: Issue, declared: string[]): string[] {
+// As Features declaradas: o decompose grava esse recorte como o RequirementArtifact da filha, que
+// passa a possuir os seus requisitos em vez de casar nome com título depois. Filtra pelo campo em
+// vez de indexar por posição — nome inexistente some do recorte, nunca vira `undefined` no meio.
+export function featuresDeclaradas(queue: Queue, parent: Issue, declared: string[]): Feature[] {
   const requirements = requireParentRequirements(queue, parent);
-  const names = RequirementArtifact.featureNames(requirements);
-  return declared.map((name) => requirements.features[names.indexOf(name)]!);
+  return requirements.features.filter((feature) => declared.includes(feature.feature));
 }
 
 function validateImplementChildren(children: DecomposeChild[]): void {

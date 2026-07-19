@@ -4,6 +4,7 @@ import { mediaTypeForExt } from "../../../domain/artifacts/media_artifact.js";
 import { DocumentArtifact } from "../../../domain/artifacts/document_artifact.js";
 import { DomainError } from "../../../domain/domain_error.js";
 import type { ImplementationPlan } from "../../../domain/artifacts/implementation_plan_artifact.js";
+import type { Feature } from "../../../domain/artifacts/requirement_artifact.js";
 import { Issue, type IssueData, type Phase } from "../../../domain/issue_entity.js";
 import { Queue } from "../../../domain/queue_repository.js";
 import {
@@ -52,7 +53,7 @@ export function claimIssue(input: { id: string; now?: Date }, root?: string): Is
 }
 
 export type RelatedView = { id: string; title: string; status: string; action: ActionType; artifact: string | null; kind: RelationKind; plan?: ImplementationPlan | null };
-export type IssueView = IssueData & { artifact: string | null; related: RelatedView[]; ancestors: RelatedView[]; features?: string[] | null; plan?: ImplementationPlan | null };
+export type IssueView = IssueData & { artifact: string | null; related: RelatedView[]; ancestors: RelatedView[]; features?: Feature[] | null; plan?: ImplementationPlan | null };
 
 export function getIssue(id: string, root?: string): IssueView {
   const queue = new Queue(root);

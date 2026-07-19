@@ -8,13 +8,13 @@ import type { ActionType } from "../../../domain/value_objects.js";
 const CONTRACTS: Record<ActionType, string> = {
   Planning: `Grave as entregas nesta ordem (comandos prontos para esta Issue):
 
-1. Requisitos — 1 a 5 Features Gherkin pt-BR:
-   issues requirements set --id {{id}} --file req.json
-   Conteúdo exato de req.json (uma string por Feature; os prefixos "Como um", "Eu quero poder" e "Para que eu" e os steps Given/When/Then/And são obrigatórios):
-   {"features": ["Feature: Login\\nComo um usuário\\nEu quero poder entrar\\nPara que eu acesse\\n\\nScenario: ok\\nGiven a tela de login\\nWhen envio credenciais válidas\\nThen vejo o painel"]}
+1. Requisitos — 1 a 5 Features, uma por linha (JSONL):
+   issues requirements set --id {{id}} --file req.jsonl
+   Cada linha de req.jsonl é uma Feature completa. O sistema escreve os prefixos ("Como <como>", "Eu quero poder <quero>", "Para que eu possa <para>"), então grave só a forma neutra: "como" = papel com artigo, "quero" e "para" = verbo no infinitivo. Não conjugue, não repita o prefixo.
+   {"feature": "Login", "como": "um usuário", "quero": "entrar", "para": "acessar o painel", "scenarios": [{"nome": "ok", "steps": ["Given a tela de login", "When envio credenciais válidas", "Then vejo o painel"]}]}
 2. Decomposição — uma filha Design por grupo de Features; toda Feature em exatamente uma filha:
    issues decompose --id {{id}} --into decompose.json --agent {{agent}}
-   Conteúdo exato de decompose.json ("features" repete os nomes exatos escritos após "Feature:"):
+   Conteúdo exato de decompose.json ("features" repete os valores exatos do campo "feature" de cada linha do req.jsonl):
    {"children": [{"title": "Design: <conceito>", "type": "Feat", "action": "Design", "problem": "<o que desenhar>", "features": ["Login"]}]}
 3. Artefato do alinhamento — markdown livre, máx. 300 palavras:
    issues artifact --id {{id}} --file artifact.md

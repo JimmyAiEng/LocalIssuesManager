@@ -21,7 +21,7 @@ import {
   validateDecide,
   validateReset,
 } from "../../src/web/client/view_model.js";
-import { parseFeature, requirementsMarkup } from "../../src/web/client/gherkin.js";
+import { requirementsMarkup } from "../../src/web/client/gherkin.js";
 
 const issues = [
   { id: "later", title: "Needle later", project: "app", type: "Fix", action: "QA", status: "OPEN", created_at: "2026-01-02T00:00:00Z" },
@@ -192,47 +192,39 @@ test("splitThread separa as anteriores das últimas 5", () => {
   assert.deepEqual(splitThread([1, 2, 3, 4], 2), { older: [1, 2], recent: [3, 4] });
 });
 
-const GHERKIN = [
-  "Feature: <Login>", "Como um usuário", "Eu quero poder entrar", "Para que eu acesse o sistema",
-  "Scenario: Sucesso", "Given credenciais válidas", "When envio o formulário", "Then entro no sistema", "And vejo <b>meu nome</b>",
-  "Scenario: Falha", "Given credenciais inválidas", "Then vejo erro",
-].join("\n");
-
-test("parseFeature estrutura nome, user story, scenarios e steps", () => {
-  const feature = parseFeature(GHERKIN);
-  assert.equal(feature.name, "<Login>");
-  assert.deepEqual(feature.story, ["Como um usuário", "Eu quero poder entrar", "Para que eu acesse o sistema"]);
-  assert.deepEqual(feature.scenarios.map((scenario) => scenario.name), ["Sucesso", "Falha"]);
-  assert.deepEqual(feature.scenarios[0].steps[0], { keyword: "Given", text: "credenciais válidas" });
-  assert.deepEqual(feature.scenarios[0].steps[3], { keyword: "And", text: "vejo <b>meu nome</b>" });
-});
+// Feature estruturada como a API entrega (RequirementSet): prefixos da user story são campos.
+const FEATURE = {
+  feature: "<Login>", como: "um usuário", quero: "entrar", para: "acessar o sistema",
+  scenarios: [
+    { nome: "Sucesso", steps: ["Given credenciais válidas", "When envio o formulário", "Then entro no sistema", "And vejo <b>meu nome</b>"] },
+    { nome: "Falha", steps: ["Given credenciais inválidas", "Then vejo erro"] },
+  ],
+};
 
 test("requirementsMarkup renderiza Features estruturadas escapando o conteúdo", () => {
   assert.equal(requirementsMarkup({ features: [] }), "");
   assert.equal(requirementsMarkup(null), "");
-  const html = requirementsMarkup({ features: [GHERKIN, GHERKIN] });
+  const html = requirementsMarkup({ features: [FEATURE, FEATURE] });
   assert.equal(html.match(/<article class="feature">/g)?.length, 2);
   assert.equal(html.match(/<section class="scenario">/g)?.length, 4);
   assert.match(html, /<span class="kw kw-feature">Feature<\/span>&lt;Login&gt;/);
+  assert.match(html, /<h4><span class="kw kw-scenario">Scenario<\/span>Sucesso<\/h4>/);
+  // Prefixos pt-BR escritos na renderização, um <p> por linha da user story.
+  assert.match(html, /<div class="story"><p>Como um usuário<\/p><p>Eu quero poder entrar<\/p><p>Para que eu possa acessar o sistema<\/p><\/div>/);
   assert.match(html, /<span class="kw kw-given">Given<\/span><span class="step-text">credenciais válidas<\/span>/);
+  assert.match(html, /<span class="kw kw-when">When<\/span><span class="step-text">envio o formulário<\/span>/);
+  assert.match(html, /<span class="kw kw-then">Then<\/span><span class="step-text">entro no sistema<\/span>/);
+  assert.match(html, /<span class="kw kw-and">And<\/span>/);
   assert.match(html, /&lt;b&gt;meu nome&lt;\/b&gt;/);
   assert.doesNotMatch(html, /<b>meu nome<\/b>/);
 });
 
-test("parseFeature tolera texto ausente e steps fora do vocabulário/sem descrição", () => {
-  assert.deepEqual(parseFeature(undefined), { name: "", story: [], scenarios: [] });
-  const text = [
-    "Feature: X", "Como um usuário", "Eu quero poder entrar", "Para que eu acesse",
-    "Scenario: s", "Given", "Faço qualquer coisa",
-  ].join("\n");
-  const feature = parseFeature(text);
-  assert.deepEqual(feature.scenarios[0].steps[0], { keyword: "Given", text: "" }); // sem descrição após a keyword
-  assert.deepEqual(feature.scenarios[0].steps[1], { keyword: "", text: "Faço qualquer coisa" }); // fora do vocabulário
-});
-
-test("parseFeature ignora step antes de qualquer Scenario (sem scenario atual para empilhar)", () => {
-  const text = ["Feature: X", "Como um usuário", "Eu quero poder entrar", "Para que eu acesse", "Given solto"].join("\n");
-  assert.deepEqual(parseFeature(text).scenarios, []);
+test("step fora do vocabulário Given/When/Then/And renderiza sem keyword", () => {
+  const html = requirementsMarkup({ features: [{ ...FEATURE,
+    scenarios: [{ nome: "s", steps: ["Faço <b>qualquer</b> coisa", "Given"] }] }] });
+  assert.match(html, /<li><span class="step-text">Faço &lt;b&gt;qualquer&lt;\/b&gt; coisa<\/span><\/li>/);
+  assert.match(html, /<li><span class="step-text">Given<\/span><\/li>/); // keyword sem texto não casa o padrão
+  assert.doesNotMatch(html, /kw-given/);
 });
 
 test("funções tolerantes a undefined: campos ausentes (não só vazios) usam o fallback ??", () => {

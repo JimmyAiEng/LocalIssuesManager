@@ -34,7 +34,7 @@ Leia o arquivo da action reivindicada — ele traz os formatos exatos dos arquiv
 
 | action | Leia o arquivo | Entrega obrigatória (gate de conclusão) |
 |---|---|---|
-| `Planning` | `phases/planning.md` | Requisitos Gherkin válidos (`issues requirements set`), máx. 5 Features **+** as filhas `action=Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` o grupo que cobre): toda Feature em exatamente uma filha — se sobrar Feature descoberta ou repetida, o gate aponta e não fecha |
+| `Planning` | `phases/planning.md` | Requisitos válidos em JSONL (`issues requirements set`), máx. 5 Features **+** as filhas `action=Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` o grupo que cobre): toda Feature em exatamente uma filha — se sobrar Feature descoberta ou repetida, o gate aponta e não fecha |
 | `Design` | `phases/design.md` | Decisão de arquitetura (`issues design changed --value true\|false`) + plano válido (`issues plan set`) **+** **≥1 filha `Implement`** (`issues decompose`, uma por Small Plan). Se `true`: `design.md` + os 4 níveis (High Level, Package, Class, Interface/DataModel) em PlantUML válido e **nunca fecha AFK** (só `AWAITING`, aceite humano). Se `false`: dispensa diagramas e revisão humana |
 | `Implement` | `phases/implement.md` | Worktree usada + check do projeto passando (roda sozinho no fechamento). Com `--test-paths` configurado, exige também a ordem TDD no histórico da worktree: um commit só-de-testes antes do primeiro commit de produção (cita o commit infrator) |
 | `QA` | `phases/qa.md` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
@@ -103,7 +103,7 @@ issues decompose --id <id> --into <arquivo.json> (--agent <ia>|--human)  # fan-o
 issues artifact --id <id> --file <a.md>              # grava/substitui o Artefato .md (≤300 palavras; o nome do arquivo é irrelevante)
 issues status --id <id> --agent <ia> --status AWAITING|CLOSED --comment <evidência> [--reason <r>] [--role <papel>]
 issues worktree add|remove --id <id>                 # worktree git no repo do projeto
-issues requirements set --id <id> --file <req.json>  # Features Gherkin (entrega de Planning)
+issues requirements set --id <id> --file <req.jsonl> # Features estruturadas, uma por linha (entrega de Planning)
 issues design doc|add --issue <id> [--kind <k>] --file <f>   # entrega de Design
 issues design changed --issue <id> --value true|false        # decisão de arquitetura (entrega de Design)
 issues plan set --id <id> --file <plan.json>         # plano de implementação (entrega de Design)

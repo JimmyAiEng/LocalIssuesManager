@@ -22,7 +22,9 @@ const CONTRACTS: Record<ActionType, string> = {
    issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<o que foi alinhado e decidido>" --reason concluido
    (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING, sem --reason.)`,
 
-  Design: `Grave as entregas nesta ordem (comandos prontos para esta Issue):
+  Design: `Não escreva código de produção nesta Issue: implementar é trabalho das filhas Implement, que rodam em worktree, com TDD e o check do projeto. Código escrito aqui não passa por nenhum dos três.
+
+Grave as entregas nesta ordem (comandos prontos para esta Issue):
 
 1. Decisão de arquitetura — obrigatória, escolhe o caminho:
    issues design changed --issue {{id}} --value false

@@ -58,6 +58,18 @@ test("cada action recebe o seu contrato: entrega própria + rota de abandono (De
   }
 });
 
+// Observado no HomeInventory: numa Issue Design o agente escreveu os 6 arquivos de produção das
+// filhas Implement (ainda OPEN) e gastou o orçamento nisso, sem entregar os diagramas do gate.
+// Nenhuma linha do contrato proibia — agora proíbe, antes dos passos.
+test("contrato Design proíbe código de produção antes de listar as entregas", () => {
+  const text = composePrompt(makeView("Design"));
+  assert.match(text, /Não escreva código de produção nesta Issue/);
+  assert.ok(text.indexOf("Não escreva código de produção") < text.indexOf("issues design changed"),
+    "a proibição vem antes dos comandos");
+  // Só Design: Implement é justamente onde o código deve ser escrito.
+  assert.doesNotMatch(composePrompt(makeView("Implement")), /Não escreva código de produção/);
+});
+
 test("cada ActionType aparece no cabeçalho e na seção Issue", () => {
   for (const action of ACTION_TYPES) {
     const text = composePrompt(makeView(action));

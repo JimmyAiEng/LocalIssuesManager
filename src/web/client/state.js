@@ -1,6 +1,6 @@
 export const state = {
   issues: [], projects: [], filters: loadFilters(), refreshedAt: null, decisionsOpen: false,
-  issue: null, requirements: null, design: null, draft: emptyDraft(), panel: null,
+  issue: null, requirements: null, design: null, documents: null, draft: emptyDraft(), panel: null,
   commentPanel: null, commentDraft: emptyCommentDraft(), projectDraft: emptyProjectDraft(),
   confirmClose: false, threadExpanded: false,
   // Chaves dos <details> abertos (data-details-id). Fora do DOM porque renderDetail reescreve

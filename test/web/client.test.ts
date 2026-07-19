@@ -22,6 +22,7 @@ import {
   validateReset,
 } from "../../src/web/client/view_model.js";
 import { requirementsMarkup } from "../../src/web/client/gherkin.js";
+import { documentsMarkup } from "../../src/web/client/documents.js";
 
 const issues = [
   { id: "later", title: "Needle later", project: "app", type: "Fix", action: "Review", status: "OPEN", created_at: "2026-01-02T00:00:00Z" },
@@ -253,4 +254,22 @@ test("409 é conflito; demais falhas preservam mensagem de erro", () => {
     kind: "error",
     message: "comment is required",
   });
+});
+
+test("documentsMarkup lista os nomeados com nome e markdown, omitindo o legado artifact.md", () => {
+  const html = documentsMarkup([
+    { name: "artifact.md", markdown: "# Veredito" },
+    { name: "intent.md", markdown: "# Intenção" },
+    { name: "evidence-1.md", markdown: "- passo" },
+  ]);
+  assert.doesNotMatch(html, /Veredito/); // o legado já aparece na seção Artefato
+  assert.match(html, /class="box document"/);
+  assert.match(html, /<summary>intent\.md<\/summary>/);
+  assert.match(html, /<summary>evidence-1\.md<\/summary>/);
+  assert.match(html, /<h1>Intenção<\/h1>/); // markdown renderizado
+});
+
+test("documentsMarkup sem documentos não renderiza seção", () => {
+  assert.equal(documentsMarkup(null), "");
+  assert.equal(documentsMarkup([]), "");
 });

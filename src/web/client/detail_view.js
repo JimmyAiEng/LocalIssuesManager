@@ -8,6 +8,7 @@ import {
 } from "./view.js";
 import { renderMarkdown } from "./markdown.js";
 import { requirementsMarkup } from "./gherkin.js";
+import { documentsMarkup } from "./documents.js";
 
 export function renderDetail() {
   const issue = state.issue;
@@ -15,7 +16,7 @@ export function renderDetail() {
   const owner = issue.owner ? `Owner: ${escapeHtml(issue.owner)}` : "Sem Owner";
   const closed = issue.closed_reason ? `<section class="box"><h2>Motivo de fechamento</h2><p class="preserve">${escapeHtml(issue.closed_reason)}</p></section>` : "";
   const actions = humanActions(issue.status).length || issue.status === "OPEN" ? `<section class="actionbar"><h2>Ações</h2>${actionsPanel(issue)}</section>` : "";
-  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escapeHtml(issue.title)}</h1><p class="meta">Projeto: ${escapeHtml(issue.project)} · Tipo: ${escapeHtml(issue.type)} · Action: ${escapeHtml(issue.action)} · ${owner}</p><p class="meta">ID: <code>${escapeHtml(issue.id)}</code> <button type="button" class="copy-id" data-copy-id="${escapeHtml(issue.id)}">Copiar ID</button> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}${tagEditor(issue.tags, issue.status)}</header>${closed}${mdField("Problema", issue.problem)}${artifactSection(issue)}${criteriaField(issue.acceptance_criteria)}${relatedSection(issue)}${requirementsSection(issue)}${designSection(issue)}${worktreeSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
+  root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escapeHtml(issue.title)}</h1><p class="meta">Projeto: ${escapeHtml(issue.project)} · Tipo: ${escapeHtml(issue.type)} · Action: ${escapeHtml(issue.action)} · ${owner}</p><p class="meta">ID: <code>${escapeHtml(issue.id)}</code> <button type="button" class="copy-id" data-copy-id="${escapeHtml(issue.id)}">Copiar ID</button> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}${tagEditor(issue.tags, issue.status)}</header>${closed}${mdField("Problema", issue.problem)}${artifactSection(issue)}${documentsMarkup(state.documents)}${criteriaField(issue.acceptance_criteria)}${relatedSection(issue)}${requirementsSection(issue)}${designSection(issue)}${worktreeSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
 }
 
 function commentSection(issue) {

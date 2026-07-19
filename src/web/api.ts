@@ -56,6 +56,7 @@ async function getAction(
   if (route.length === 2 && route[1] === "design") {
     return respond(response, 200, await getDesignPackage({ issueId: route[0] }, root));
   }
+  if (route.length === 2 && route[1] === "documents") return serveDocuments(response, route[0], root);
   if (route.length === 3 && route[1] === "design") return serveDiagram(request, response, route, root);
   respond(response, 404, { error: "Not found" });
 }
@@ -150,6 +151,21 @@ async function serveDiagram(request: IncomingMessage, response: ServerResponse, 
   const svg = Buffer.from(await renderSvg(source));
   response.writeHead(200, { "content-type": "image/svg+xml", "content-length": svg.length, etag, "cache-control": "no-cache" });
   response.end(svg);
+}
+
+// Documentos da Issue para o painel: os nomeados (intent.md, evidence-*.md) e o legado.
+// list() devolve o legado como "artifact.md"; a assimetria está na leitura — o legado sai sem
+// name (artifacts/<id>.md), os nomeados com name (artifacts/<id>/<name>). O client mostra os
+// nomeados no detalhe; o legado continua na seção Artefato (issue.artifact).
+function serveDocuments(response: ServerResponse, id: string, root?: string): void {
+  const queue = new Queue(root);
+  const issue = queue.loadRequired(id);
+  const documents = queue.artifacts.list(issue.project, issue.id, "document").map((name) => ({
+    name,
+    markdown: queue.artifacts.readText(issue.project,
+      { issueId: issue.id, type: "document", name: name === "artifact.md" ? undefined : name }),
+  }));
+  respond(response, 200, documents);
 }
 
 function serveAttachment(response: ServerResponse, id: string, root?: string): void {

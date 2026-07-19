@@ -209,6 +209,11 @@ export async function fetchDesign(id) {
   try { return await api(`/api/issues/${id}/design`); } catch { return null; }
 }
 
+// Documentos nomeados da Issue (intent.md, evidence-*.md). Mesmo contrato de fetchDesign: falha → null.
+export async function fetchDocuments(id) {
+  try { return await api(`/api/issues/${id}/documents`); } catch { return null; }
+}
+
 export async function refreshIssue() {
   const draft = { ...state.draft };
   const panel = state.panel;
@@ -216,15 +221,17 @@ export async function refreshIssue() {
   const commentDraft = { ...state.commentDraft };
   try {
     const id = state.issue.id;
-    const [issue, requirements, design] = await Promise.all([api(`/api/issues/${id}`), fetchRequirements(id), fetchDesign(id)]);
+    const [issue, requirements, design, documents] = await Promise.all([api(`/api/issues/${id}`), fetchRequirements(id), fetchDesign(id), fetchDocuments(id)]);
     // Só re-renderiza se o JSON mudou (mesmo contrato de pollBoard): re-render reescreve o
     // innerHTML e levaria junto seleção de texto e rolagem de quem só está lendo.
     if (JSON.stringify(issue) === JSON.stringify(state.issue)
       && JSON.stringify(requirements) === JSON.stringify(state.requirements)
-      && JSON.stringify(design) === JSON.stringify(state.design)) return;
+      && JSON.stringify(design) === JSON.stringify(state.design)
+      && JSON.stringify(documents) === JSON.stringify(state.documents)) return;
     state.issue = issue;
     state.requirements = requirements;
     state.design = design;
+    state.documents = documents;
     state.draft = draft;
     state.commentDraft = commentDraft;
     state.commentPanel = commentPanel && state.issue.status !== "CLOSED" ? commentPanel : null;

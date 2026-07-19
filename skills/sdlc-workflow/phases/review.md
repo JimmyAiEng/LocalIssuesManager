@@ -34,12 +34,13 @@ O gate `validateReview` só conclui a Issue com o conjunto persistido; sem ele o
 - o **veredito** no artefato legado (sem `--name`), começando por APROVADO | APROVADO com ressalva | REPROVADO (≤300 palavras).
   `issues artifact --id <id> --file artifact.md`
 
-Esqueleto do veredito:
+Esqueleto do veredito.
+A **primeira palavra do conteúdo** é o veredito: o gate lê a palavra inicial (regex `^\p{L}+`) e recusa qualquer coisa antes dela.
+Não ponha título `# Veredito` nem `#` na frente — o artefato começa pela própria palavra do veredito.
+Escolha uma: `APROVADO`, `APROVADO com ressalva` (a primeira palavra conta como APROVADO) ou `REPROVADO`.
 
 ```markdown
-# Veredito
-
-APROVADO | APROVADO com ressalva | REPROVADO
+REPROVADO
 
 ## Requisito × comportamento
 

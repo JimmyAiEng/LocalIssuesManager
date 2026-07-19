@@ -7,6 +7,7 @@ import { addDesignDiagram, setDesignDoc } from "../../src/app/services/use_cases
 import { nextIssue, setArtifact, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
 import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { setRequirements } from "../../src/app/services/use_cases/requirements_use_cases.js";
+import { ArtifactStore } from "../../src/domain/artifacts/artifact_store.js";
 import { startWebServer, type WebServer } from "../../src/web/server.js";
 
 const input = { title: "Web issue", project: "web", type: "Fix", action: "Review", problem: "p" };
@@ -252,6 +253,27 @@ async function withDesign(url: string, root: string): Promise<string> {
   await addDesignDiagram({ issueId: id, kind: "class", file: puml }, root);
   return id;
 }
+
+test("API lista os documentos da Issue: nomeados lidos com name, legado sem name", async () => withWeb(async (url, root) => {
+  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
+  const store = new ArtifactStore(root);
+  store.writeText("web", { issueId: id, type: "document" }, "# Veredito\nAPROVADO"); // legado: artifacts/<id>.md
+  store.writeText("web", { issueId: id, type: "document", name: "intent.md" }, "# Intenção");
+  store.writeText("web", { issueId: id, type: "document", name: "evidence-1.md" }, "- passo um");
+  const res = await request(url, "GET", `/api/issues/${id}/documents`);
+  assert.equal(res.status, 200);
+  const docs = res.body as unknown as { name: string; markdown: string }[];
+  const byName = Object.fromEntries(docs.map((doc) => [doc.name, doc.markdown]));
+  assert.deepEqual(Object.keys(byName).sort(), ["artifact.md", "evidence-1.md", "intent.md"]);
+  assert.match(byName["artifact.md"], /Veredito/); // legado lido de artifacts/<id>.md (sem name)
+  assert.equal(byName["intent.md"], "# Intenção");
+  assert.equal(byName["evidence-1.md"], "- passo um");
+}));
+
+test("API devolve lista vazia de documentos quando a Issue não tem nenhum", async () => withWeb(async (url) => {
+  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
+  assert.deepEqual((await request(url, "GET", `/api/issues/${id}/documents`)).body, []);
+}));
 
 async function withWeb(run: (url: string, root: string) => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "issues-web-"));

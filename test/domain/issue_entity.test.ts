@@ -268,18 +268,6 @@ test("tag valida categoria/valor, mescla, incrementa a revisão e guarda CLOSED"
   assert.throws(() => closed.tag({ risk: "ALTO" }, "human"), /CLOSED aggregate is immutable/);
 });
 
-test("worktree: set/clear com guarda CLOSED apenas no set", () => {
-  const issue = claimed();
-  issue.setWorktree({ path: "/tmp/wt", branch: "issue/abc" });
-  assert.deepEqual(issue.worktree, { path: "/tmp/wt", branch: "issue/abc" });
-  issue.clearWorktree();
-  assert.equal(issue.worktree, null);
-  const closed = Issue.create(input, "human");
-  closed.closeByHuman("errada", "errado");
-  assert.throws(() => closed.setWorktree({ path: "/x", branch: "b" }), /CLOSED aggregate is immutable/);
-  closed.clearWorktree(); // limpeza pós-CLOSED é permitida
-});
-
 test("decide e submit registram anexos na thread", () => {
   const attachment = MediaArtifact.create({ filename: "prova.png", mediaType: "image/png", size: 5 }).toJSON();
   const issue = claimed();
@@ -293,11 +281,18 @@ test("fromJSON hidrata defaults ausentes e toJSON não vaza baseRevision", () =>
   const issue = claimed();
   const data = issue.toJSON();
   assert.equal("baseRevision" in data, false);
-  const legacy = Issue.fromJSON({ ...data, relates: undefined as never, tags: undefined as never, worktree: undefined as never });
+  const legacy = Issue.fromJSON({ ...data, relates: undefined as never, tags: undefined as never });
   assert.deepEqual(legacy.relates, []);
   assert.deepEqual(legacy.tags, {});
-  assert.equal(legacy.worktree, null);
   const clone = Issue.fromJSON(data);
   assert.equal(clone.baseRevision, issue.revision);
   assert.deepEqual(clone.toJSON(), data);
+});
+
+// Retrocompat: JSONs antigos persistiram um campo `worktree` que já não existe no modelo.
+// Ler um desses não pode quebrar — o campo é simplesmente ignorado.
+test("fromJSON ignora um campo worktree legado sem quebrar", () => {
+  const legacy = claimed().toJSON();
+  (legacy as Record<string, unknown>).worktree = { path: "/old/wt", branch: "issue/old" };
+  assert.doesNotThrow(() => Issue.fromJSON(legacy));
 });

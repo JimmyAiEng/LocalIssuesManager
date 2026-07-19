@@ -34,7 +34,6 @@ function issueInfo(issue: IssueView): string {
     `- Critérios de aceitação: ${issue.acceptance_criteria}`,
     `- Tags: ${formatTags(issue.tags)}`,
   ];
-  if (issue.worktree) lines.push(`- Worktree: ${issue.worktree.path} (branch ${issue.worktree.branch})`);
   lines.push(...attachmentLines(issue.thread, issue.project));
   return lines.join("\n");
 }

@@ -9,7 +9,6 @@ import { createProject, listProjects } from "./app/services/use_cases/project_us
 import { getPlan, setPlan } from "./app/services/use_cases/plan_use_cases.js";
 import { composePrompt } from "./app/services/use_cases/prompt_composition.js";
 import { getRequirements, setRequirements } from "./app/services/use_cases/requirements_use_cases.js";
-import { addWorktree, removeWorktree } from "./app/services/use_cases/worktree_use_cases.js";
 import { printDesignPackage, reportCliError, runDesign } from "./cli_design.js";
 import { openBrowser, startWebServer } from "./web/server.js";
 
@@ -20,7 +19,6 @@ export function main(argv = process.argv.slice(2)): void | Promise<void> {
   try {
     const [command, ...raw] = argv;
     if (command === "project") return void runProject(raw);
-    if (command === "worktree") return void runWorktree(raw);
     if (command === "requirements") return void runRequirements(raw);
     if (command === "plan") return void runPlan(raw);
     if (command === "design") return void runDesign(raw);
@@ -58,17 +56,6 @@ function project(sub: string | undefined, options: Options): Result {
   throw new Error("Usage: issues project <create|list> [--name <n> --repo <path>]");
 }
 
-function runWorktree(raw: string[]): void {
-  const options = parseOptions(raw.slice(1));
-  print(worktree(raw[0], options), Boolean(options.pretty));
-}
-
-function worktree(sub: string | undefined, options: Options): Result {
-  if (sub === "add") return addWorktree({ issueId: value(options, "id"), path: optional(options, "path") }).toJSON();
-  if (sub === "remove") return removeWorktree({ issueId: value(options, "id") }).toJSON();
-  throw new Error("Usage: issues worktree <add|remove> --id <issueId> [--path <p>]");
-}
-
 function runRequirements(raw: string[]): void {
   const options = parseOptions(raw.slice(1));
   print(requirements(raw[0], options), Boolean(options.pretty));
@@ -102,7 +89,7 @@ function execute(command: string | undefined, options: Options): Result {
   if (command === "list") return list(options);
   if (command === "artifact") return issueArtifact(options);
   if (command === "init") return init(options);
-  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|relate|decompose|get|list|artifact|requirements|plan|design|project|worktree|web|init> [flags]");
+  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|relate|decompose|get|list|artifact|requirements|plan|design|project|web|init> [flags]");
 }
 
 function create(options: Options): Result {

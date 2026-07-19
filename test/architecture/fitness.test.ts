@@ -17,8 +17,8 @@ function files(directory: string): string[] {
 
 test("módulos expõem somente a API pública definida (FF-06)", () => {
   assert.deepEqual(publicMethods(Issue.prototype), [
-    "claim", "clearWorktree", "closeByAgent", "closeByHuman", "comment", "decide", "relate",
-    "reset", "setArchitectureChanged", "setWorktree", "submit", "tag", "toJSON",
+    "claim", "closeByAgent", "closeByHuman", "comment", "decide", "relate",
+    "reset", "setArchitectureChanged", "submit", "tag", "toJSON",
   ]);
   assert.deepEqual(publicMethods(Queue.prototype), [
     "findAttachment", "list", "listDesign", "listProjects", "load", "loadRequired", "oldestOpen", "purgeClosed", "readArtifact", "readDesign", "readProject", "readRequirements", "save", "writeArtifact", "writeAttachment", "writeDesign", "writeProject", "writeRequirements",

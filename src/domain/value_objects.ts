@@ -90,9 +90,6 @@ export function applyTags(current: Tags, updates: TagUpdates): Tags {
   return result;
 }
 
-// Worktree git isolada por Issue: path absoluto do worktree e branch criada.
-export type Worktree = { path: string; branch: string };
-
 export type Thread = {
   actor: Actor;
   timestamp: string;

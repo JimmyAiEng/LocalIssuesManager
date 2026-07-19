@@ -36,6 +36,13 @@ const LEVEL_LABEL: Record<DesignLevel, string> = {
   high_level: "High Level", package: "Package", class: "Class", interface_data_model: "Interface/DataModel",
 };
 
+// Kind sugerido por nível faltante: qual dos kinds cobre o nível não é dedutível do nome dele
+// (Interface/DataModel sai de activity ou state), então o erro entrega o comando pronto em vez
+// de deixar o agente adivinhar o par kind↔nível.
+const LEVEL_KIND: Record<DesignLevel, DesignKind> = {
+  high_level: "component", package: "package", class: "class", interface_data_model: "activity",
+};
+
 // Shape relevante do retorno de engine.checkSyntax (@plantuml/mcp-js).
 export type SyntaxCheck = UmlSyntaxCheck;
 
@@ -97,30 +104,36 @@ export type DesignDiagram = { kind: DesignKind; path: string; check: SyntaxCheck
 //  - false: atalho ao plano — dispensa diagramas e aceite humano (só o plano, cobrado à parte).
 //  - true: exige os 4 níveis cobertos por PlantUML válido (o forçar-AWAITING é da camada de app).
 // Vazio = pronto. Acumula TODAS as falhas.
+// Os remédios saem com o id da Issue já preenchido: erro de gate é o único ponto onde o agente
+// travado ainda está lendo, e um comando copy-paste ali resolve o que um placeholder não resolve
+// (observado: agente gravou design.md em disco sem `issues design doc` e ficou em loop no gate).
 export function evaluateDesignGate(
-  changed: boolean | null | undefined, doc: string | null, diagrams: DesignDiagram[],
+  changed: boolean | null | undefined, doc: string | null, diagrams: DesignDiagram[], issueId: string,
 ): DesignError[] {
   if (changed === null || changed === undefined) {
     return [{ code: "decision_required",
-      message: "decisão de arquitetura ausente — use 'issues design changed --issue <id> --value true|false'" }];
+      message: `decisão de arquitetura ausente — use: issues design changed --issue ${issueId} --value true|false` }];
   }
   if (!changed) return []; // sem mudança de arquitetura: só o plano (cobrado à parte), sem diagramas
-  return evaluateArchitectureLevels(doc, diagrams);
+  return evaluateArchitectureLevels(doc, diagrams, issueId);
 }
 
 // Arquitetura mudou: design.md presente, cada .puml válido e os 4 níveis cobertos (só diagramas
 // válidos contam para a cobertura). Lista os níveis faltantes.
-function evaluateArchitectureLevels(doc: string | null, diagrams: DesignDiagram[]): DesignError[] {
+function evaluateArchitectureLevels(doc: string | null, diagrams: DesignDiagram[], issueId: string): DesignError[] {
   const errors: DesignError[] = [];
   if (doc === null || doc.trim().length === 0) {
-    errors.push({ code: "missing_design_md", message: "design.md ausente ou vazio — use 'issues design doc'" });
+    errors.push({ code: "missing_design_md",
+      message: `design.md ausente ou vazio — grave o arquivo com: issues design doc --issue ${issueId} --file design.md (escrever o arquivo em disco não basta)` });
   }
   for (const diagram of diagrams) if (!diagram.check.valid) errors.push(plantumlError(diagram.path, diagram.check));
   const covered = new Set(diagrams.filter((d) => d.check.valid).map((d) => KIND_LEVEL[d.kind]));
   const missing = DESIGN_LEVELS.filter((level) => !covered.has(level));
   if (missing.length > 0) {
+    const commands = missing.map((level) =>
+      `issues design add --issue ${issueId} --kind ${LEVEL_KIND[level]} --file <${LEVEL_KIND[level]}.puml>`);
     errors.push({ code: "missing_level",
-      message: `níveis de arquitetura não cobertos: ${missing.map((l) => LEVEL_LABEL[l]).join(", ")} — adicione um diagrama de cada nível` });
+      message: `níveis de arquitetura não cobertos: ${missing.map((l) => LEVEL_LABEL[l]).join(", ")} — um diagrama por nível: ${commands.join(" ; ")}` });
   }
   return errors;
 }

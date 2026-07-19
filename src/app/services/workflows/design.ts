@@ -38,7 +38,7 @@ export async function designPackage(queue: Queue, issue: Issue): Promise<DesignP
     diagrams[kind] = source;
     if (source !== null) checks.push({ kind, path: `${kind}.puml`, check: await checkSyntax(source) });
   }
-  const errors = evaluateDesignGate(issue.architecture_changed, design_md, checks);
+  const errors = evaluateDesignGate(issue.architecture_changed, design_md, checks, issueId);
   return { issueId, design_md, architecture_changed: issue.architecture_changed,
     diagrams, validation: { ready: errors.length === 0, errors } };
 }
@@ -48,7 +48,7 @@ export function requireValidPlan(queue: Queue, project: string, issueId: string)
   const raw = queue.artifacts.readText(project, { issueId, type: "implementation-plan" });
   if (raw === null) {
     throw new NotFoundError(
-      "Issue Design não pode ser concluída sem plano: use 'issues plan set --id <id> --file <plan.json>'",
+      `Issue Design não pode ser concluída sem plano: use: issues plan set --id ${issueId} --file <plan.json>`,
     );
   }
   ImplementationPlanArtifact.validate(raw); // revalida; lança DomainError se inválido

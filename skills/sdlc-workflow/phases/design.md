@@ -26,6 +26,8 @@ Ela escolhe o caminho:
 - `false` — atalho: dispensa `design.md` e diagramas; basta o plano. A IA pode fechar (AFK).
 - `true` — exige `design.md` + os **4 níveis** de diagramas PlantUML e o aceite é **humano**: nunca fecha AFK, só `AWAITING`.
 
+**Issue `type=Refactor`**: o atalho AFK não existe — o Design de Refactor **sempre passa pelo engenheiro**. Mesmo com `--value false`, encerre por `--status AWAITING` (sem `--reason concluido`); o aceite é humano, no web. `--value true` segue exigindo os 4 níveis normalmente.
+
 ## Entrega 2 — o plano de implementação
 
 ```bash

@@ -55,6 +55,15 @@ test("problema e critérios de aceite são limitados a 300 palavras (Issue grand
   assert.throws(() => Issue.create({ ...input, acceptance_criteria: longText }, "pi"), /limite 300/);
 });
 
+test("Refactor não passa por Planning: create recusa type=Refactor com action=Planning", () => {
+  assert.throws(() => Issue.create({ ...input, type: "Refactor", action: "Planning" }, "pi"),
+    (error: unknown) => error instanceof DomainError && /Refactor não passa por Planning/.test(error.message));
+  // Refactor com outra action é válido (começa no Design).
+  assert.doesNotThrow(() => Issue.create({ ...input, type: "Refactor", action: "Design" }, "pi"));
+  // Planning segue válido para os demais types.
+  assert.doesNotThrow(() => Issue.create({ ...input, type: "Feat", action: "Planning" }, "pi"));
+});
+
 test("claim leva OPEN a CLAIMED e incrementa a revisão", () => {
   const issue = Issue.create(input, "pi");
   issue.claim("codex");

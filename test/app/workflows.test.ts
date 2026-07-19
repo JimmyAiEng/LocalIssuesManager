@@ -168,6 +168,19 @@ test("HIGH força AWAITING em Design AFK sem mudança de arquitetura: CLOSED rec
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
 });
 
+// Refactor sempre passa pelo engenheiro: o Design de Refactor não tem o atalho AFK do Feat —
+// mesmo sem mudança de arquitetura e em projeto LOW, o CLOSED é recusado e só AWAITING passa.
+test("Refactor Design não fecha por agente mesmo sem mudança de arquitetura", async () => {
+  const root = mkdtempSync(join(tmpdir(), "workflow-service-"));
+  const queue = new Queue(root);
+  const issue = Issue.create({ title: "d", project: "p", type: "Refactor", action: "Design", problem: "p" }, "pi");
+  issue.claim("pi");
+  queue.save(issue);
+  seedDesign(queue, issue); // architecture_changed=false + plano + filha Implement
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /Refactor.*--status AWAITING/s);
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
+});
+
 // HIGH não toca as demais actions: Implement AFK fecha normalmente (o gate de Implement só cobra
 // evidência, já dada na transição); Review AFK também fecha com a entrega válida.
 test("HIGH não altera Implement nem Review: AFK fecha normalmente", async () => {

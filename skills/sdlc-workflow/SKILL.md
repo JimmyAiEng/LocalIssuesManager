@@ -28,6 +28,16 @@ Issues podem se relacionar (`issues relate` ou `--relates` no create).
 Quem reivindica uma Issue recebe no prompt os **artefatos das relacionadas** — é assim que o design congelado chega à sessão de implementação.
 Ao decompor trabalho, crie as novas Issues já relacionadas à origem.
 
+## Workflow por type
+
+O `type` da Issue escolhe a jornada; a `action` é a fase dentro dela.
+
+- **`Feat`** — jornada completa: `Planning → Design → Implement → Review → Deploy`.
+- **`Refactor`** — refatorar sem mudar funcionalidade. **Começa no Design** (não tem Planning — o sistema recusa `Refactor`+`Planning`). O Design **sempre passa pelo engenheiro** (nunca fecha AFK, nem com `architecture_changed=false`). O Review foca em **regressão** (bug/vulnerabilidade introduzido), não em intenção. Ao fim de um `Fix`, a melhoria arquitetural adiada vira uma Issue `Refactor` relacionada.
+- **`Fix`** — mais direto (hot-fix). Guias próprios ainda não separados; siga o guia da action e a ênfase de causa-raiz.
+
+Onde a fase diverge por type, o guia da action tem uma seção **Refactor** — leia-a se a Issue for `Refactor`.
+
 ## Roteamento por action
 
 Cada action tem um guia **dentro desta skill**, em `phases/`.

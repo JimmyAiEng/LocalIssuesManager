@@ -79,6 +79,8 @@ function missingArtifacts(queue: Queue, issue: Issue): GateViolation[] {
 function forcedHumanReason(issue: Issue, concern: ConcernLevel): string | undefined {
   if (gateFor(issue.action).humanApproval.mode === "required") return issue.action.toLowerCase();
   if (issue.action === "Design" && issue.architecture_changed) return "architecture_changed";
+  // Refactor sempre passa pelo engenheiro: o Design de Refactor não tem o atalho AFK do Feat.
+  if (issue.type === "Refactor" && issue.action === "Design") return "type=Refactor";
   if (concern === "HIGH" && (issue.action === "Planning" || issue.action === "Design")) return "concern=HIGH";
   return undefined;
 }
@@ -96,6 +98,9 @@ function rejectDeployClose(): never {
 function rejectHumanRequired(issue: Issue, concern: ConcernLevel): never {
   if (issue.action === "Design" && issue.architecture_changed) {
     throw new DomainError("Issue Design com mudança de arquitetura não fecha por agente: envie para decisão humana com --status AWAITING (o aceite do Design é humano — decide no web)");
+  }
+  if (issue.type === "Refactor" && issue.action === "Design") {
+    throw new DomainError("Issue Design de Refactor não fecha por agente: o Refactor sempre passa pelo engenheiro — envie para decisão humana com --status AWAITING (o aceite do Design é humano, decide no web)");
   }
   if (concern === "HIGH" && (issue.action === "Planning" || issue.action === "Design")) {
     throw new DomainError(`Issue ${issue.action} em projeto de concern HIGH não fecha por agente: envie para decisão humana com --status AWAITING (HIGH exige aceite humano de Planning e Design — decide no web)`);

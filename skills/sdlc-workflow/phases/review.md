@@ -23,6 +23,15 @@ Cada etapa grava um documento, e **só se avança quando a etapa anterior não e
 Achou problema em qualquer etapa (conflito, falha adversarial, CI vermelho)?
 Não avance para a etapa seguinte: o veredito é REPROVADO e o problema vira retrabalho (veja abaixo).
 
+## Refactor (Diff Check em vez de Understand Intent)
+
+Numa Issue `type=Refactor` a etapa 1 muda: em vez de *Understand Intent*, faça o **Diff Check** — o Refactor não muda funcionalidade, então o foco é caçar **regressão** (bug/vulnerabilidade introduzido pela mudança), não confirmar intenção. No `intent.md`, registre o diff analisado e o que garante que o comportamento não mudou. Invariantes do Refactor a verificar:
+
+- **Mudança de interface** (assinatura pública, contrato) exige ter sido **aprovada por humano** — se apareceu sem aceite, é REPROVADO.
+- **Mudança em teste e2e não é permitida** em Refactor: se o comportamento externo não muda, os e2e não deveriam mudar. Teste e2e alterado ⇒ REPROVADO.
+
+As etapas 2–5 (Rebase, Conflict, Adversarial, CI) seguem iguais.
+
 ## Documentos e veredito (o gate exige)
 
 O gate `validateReview` só conclui a Issue com o conjunto persistido; sem ele o encerramento falha dizendo o que falta.

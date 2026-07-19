@@ -36,6 +36,10 @@ export class Issue implements IssueData {
 
   static create(input: CreateIssue, actor: Actor, now = new Date()): Issue {
     for (const key of ["title", "project", "type", "action", "problem"] as const) required(input[key], key);
+    // Refactor começa no Design: o workflow de Refactor não tem fase de Requisitos (diagrama).
+    if (input.type === "Refactor" && input.action === "Planning") {
+      throw new DomainError("Refactor não passa por Planning: o workflow de Refactor começa no Design — crie a Issue com --action Design");
+    }
     assertBrief(input.problem, "problem");
     if (input.acceptance_criteria) assertBrief(input.acceptance_criteria, "acceptance_criteria");
     const timestamp = now.toISOString();

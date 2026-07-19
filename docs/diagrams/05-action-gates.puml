@@ -17,7 +17,7 @@ case (Design)
 case (Implement)
   :validar Worktree e, quando configurados,
   ordem TDD e checks do Projeto;
-case (QA)
+case (Review)
   :exigir Artifact doc próprio;
 case (Deploy)
   :exigir link de PR + análise;

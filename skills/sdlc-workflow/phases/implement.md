@@ -33,7 +33,7 @@ Docker indisponível com `--container` configurado gera erro explícito na concl
 ## Heurísticas
 
 - Fatia grande → crie Issues `Implement` de continuação, relacionadas, e abandone esta (`--reason obsoleto`).
-- Review interno **não** substitui uma Issue `QA` para o conjunto.
+- Review interno **não** substitui uma Issue `Review` para o conjunto.
 - **Como** implementar (ferramentas, desenho do teste) é decisão do agente.
 
 ## Encerramento

@@ -64,7 +64,7 @@ Nova Issue
 │ ┌─────────────────┐ │ ┌─────────────────┐ │ ┌─────────────────┐ │ ┌────────────────────┐ │
 │ │ Corrigir filtro │ │ │ Criar endpoint  │ │ │ Validar login   │ │ │ Migrar configuração│ │
 │ │ workflowdev     │ │ │ api             │ │ │ app             │ │ │ infra              │ │
-│ │ Maintenance     │ │ │ Implement       │ │ │ QA              │ │ │ Deployment         │ │
+│ │ Maintenance     │ │ │ Implement       │ │ │ Review          │ │ │ Deployment         │ │
 │ │ há 2 dias       │ │ │ pi · há 3 horas │ │ │ há 1 dia        │ │ │ há 5 dias          │ │
 │ └─────────────────┘ │ └─────────────────┘ │ └─────────────────┘ │ └────────────────────┘ │
 │                     │                     │                     │                        │
@@ -139,7 +139,7 @@ Os valores finais são responsabilidade da implementação e devem atender contr
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ ← Voltar ao quadro                                      [↻ Atualizar]       │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ [AWAITING] [QA]  Validar login                                              │
+│ [AWAITING] [Review]  Validar login                                          │
 │ Projeto: app     ID: 7448…     Owner: pi     No Status há 1 dia             │
 ├──────────────────────────────────────────────┬───────────────────────────────┤
 │ PROBLEMA                                     │ AÇÕES                         │

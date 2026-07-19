@@ -82,7 +82,7 @@ Cada tipo vive em `src/domain/artifacts/*_artifact.ts` e expõe sua validação 
 | Planning | RequirementArtifact | Não | Condicional às tags |
 | Design | ImplementationPlanArtifact; Document + UML quando arquitetura muda | PlantUML quando arquitetura muda | Quando arquitetura muda ou pelas tags |
 | Implement | Nenhum | TDD/checks quando configurados no Projeto | Condicional às tags |
-| QA | Artifact `doc` de validação | Não | Condicional às tags |
+| Review | Artifact `doc` de validação | Não | Condicional às tags |
 | Deploy | Nenhum | Análise externa do PR | Sempre |
 
 `GateAssessment` possui três resultados:
@@ -153,4 +153,4 @@ npm run check:fitness
 npm run build
 ```
 
-A suíte contém testes unitários de Artifact, ArtifactStore, Workflow, GatePolicy e dispatcher, além do E2E completo Planning → Design → Implement → QA → Deploy.
+A suíte contém testes unitários de Artifact, ArtifactStore, Workflow, GatePolicy e dispatcher, além do E2E completo Planning → Design → Implement → Review → Deploy.

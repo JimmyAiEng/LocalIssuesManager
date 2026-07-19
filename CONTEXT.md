@@ -11,13 +11,13 @@ Trabalho maior vira novas Issues relacionadas.
 _Avoid_: task, card, item, Ticket
 
 **Action**:
-Tipo imutável da entrega esperada da Issue: `Planning` | `Design` | `Implement` | `QA` | `Deploy`.
+Tipo imutável da entrega esperada da Issue: `Planning` | `Design` | `Implement` | `Review` | `Deploy`.
 Seleciona o Workflow e o Gate que governam a Issue.
 _Avoid_: phase (como campo), stage, ticket type
 
 **Workflow**:
 Processo do SDLC executado para entregar a Action. Não é persistido — a instância (jornada) é a linhagem de Issues até o problema original ser resolvido.
-Nomes: Requirement Engineering (Planning), Design (Design), Unit of Work (Implement), Quality Review (QA) e Merge/PR Analysis (Deploy).
+Nomes: Requirement Engineering (Planning), Design (Design), Unit of Work (Implement), Quality Review (Review) e Merge/PR Analysis (Deploy).
 _Avoid_: workflow persistido, pipeline, fase (como entidade), process instance
 
 **Gate**:

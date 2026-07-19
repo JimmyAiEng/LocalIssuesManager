@@ -24,7 +24,7 @@ sdlc-workflow/
     ├── planning.md       ← action=Planning  → requisitos em JSONL (gate de conclusão)
     ├── design.md         ← action=Design    → design.md + diagramas PlantUML (gate de conclusão)
     ├── implement.md      ← action=Implement → worktree + check do projeto (gate de conclusão)
-    ├── qa.md             ← action=QA        → validação do conjunto (evidência)
+    ├── review.md         ← action=Review    → validação do conjunto (evidência)
     └── deploy.md         ← action=Deploy    → PR + go/no-go humano (evidência)
 ```
 

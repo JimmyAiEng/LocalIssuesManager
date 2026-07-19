@@ -7,7 +7,7 @@ import { validateDeploy } from "./deploy.js";
 import { validateDesign } from "./design.js";
 import { validateImplement } from "./implement.js";
 import { validatePlanning } from "./planning.js";
-import { validateQa } from "./qa.js";
+import { validateReview } from "./review.js";
 
 type CompletionStatus = "AWAITING" | "CLOSED";
 
@@ -64,7 +64,7 @@ export async function validateWorkflowDelivery(queue: Queue, issue: Issue, comme
   if (issue.action === "Planning") return validatePlanning(queue, issue);
   if (issue.action === "Design") return validateDesign(queue, issue);
   if (issue.action === "Implement") return validateImplement(queue, issue);
-  if (issue.action === "QA") return validateQa(queue, issue);
+  if (issue.action === "Review") return validateReview(queue, issue);
   validateDeploy(issue, comment);
 }
 

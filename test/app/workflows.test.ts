@@ -19,6 +19,34 @@ function context(action: ActionType): { root: string; queue: Queue; issue: Issue
   return { root, queue, issue };
 }
 
+// Projeto p com concern HIGH: piso de supervisão que força AWAITING em Planning/Design.
+function highConcern(queue: Queue): void {
+  queue.writeProject({ name: "p", repo: "x", concern: "HIGH" });
+}
+
+// Feature JSONL válida (uma linha) reutilizada por Planning (pai + filha Design cobrem "Login").
+const FEATURE = JSON.stringify({ feature: "Login", como: "u", quero: "entrar", para: "acesso",
+  scenarios: [{ nome: "ok", steps: ["Given a", "When b", "Then c"] }] });
+const PLAN = JSON.stringify({ objetivo: "o", passos: ["p"], arquivos: ["a"], criterio_pronto: "c" });
+
+// Entrega de Planning válida: requisitos + uma filha Design que particiona a Feature.
+function seedPlanning(queue: Queue, issue: Issue): void {
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "requirement" }, FEATURE);
+  const child = Issue.create({ title: "d", project: "p", type: "Feat", action: "Design", problem: "p" }, "pi");
+  queue.artifacts.writeText("p", { issueId: child.id, type: "requirement" }, FEATURE);
+  queue.save(child);
+  issue.relate([{ id: child.id, kind: "child" }]);
+}
+
+// Entrega de Design válida sem mudança de arquitetura: plano + filha Implement (atalho ao plano).
+function seedDesign(queue: Queue, issue: Issue): void {
+  issue.setArchitectureChanged(false);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "implementation-plan" }, PLAN);
+  const child = Issue.create({ title: "impl", project: "p", type: "Feat", action: "Implement", problem: "p" }, "pi");
+  queue.save(child);
+  issue.relate([{ id: child.id, kind: "child" }]);
+}
+
 // Conjunto de documentos de uma Review válida: intent + 2 evidence + veredito no artefato legado.
 function seedReview(queue: Queue, issue: Issue, verdict = "APROVADO revisão ok"): void {
   queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "intent.md" }, "# intenção");
@@ -120,6 +148,47 @@ test("abandono não afrouxa o gate de entrega nem a decisão humana", async () =
   hitl.queue.save(hitl.issue);
   await assert.rejects(statusIssue({ id: hitl.issue.id, agent: "pi", status: "CLOSED",
     comment: "abandonando", closed_reason: "obsoleto" }, hitl.root), /decisão humana/);
+});
+
+// concern=HIGH é piso de supervisão: Planning e Design AFK (sem tags) nunca fecham por agente —
+// o CLOSED é recusado mandando usar AWAITING, e o AWAITING (decisão humana) segue permitido.
+test("HIGH força AWAITING em Planning AFK: CLOSED recusado, AWAITING ok", async () => {
+  const { queue, issue } = context("Planning");
+  highConcern(queue);
+  seedPlanning(queue, issue);
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /concern HIGH.*--status AWAITING/s);
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
+});
+
+test("HIGH força AWAITING em Design AFK sem mudança de arquitetura: CLOSED recusado, AWAITING ok", async () => {
+  const { queue, issue } = context("Design");
+  highConcern(queue);
+  seedDesign(queue, issue);
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /concern HIGH.*--status AWAITING/s);
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
+});
+
+// HIGH não toca as demais actions: Implement AFK fecha normalmente (o gate de Implement só cobra
+// evidência, já dada na transição); Review AFK também fecha com a entrega válida.
+test("HIGH não altera Implement nem Review: AFK fecha normalmente", async () => {
+  const implement = context("Implement");
+  highConcern(implement.queue);
+  await assert.doesNotReject(completeIssue(implement.queue, implement.issue, "CLOSED", "fim"));
+  const review = context("Review");
+  highConcern(review.queue);
+  seedReview(review.queue, review.issue);
+  await assert.doesNotReject(completeIssue(review.queue, review.issue, "CLOSED", "fim"));
+});
+
+// LOW (e projeto sem concern) mantém o comportamento atual: Planning/Design AFK fecham.
+test("LOW não força AWAITING: Planning/Design AFK fecham como hoje", async () => {
+  const planning = context("Planning");
+  planning.queue.writeProject({ name: "p", repo: "x", concern: "LOW" });
+  seedPlanning(planning.queue, planning.issue);
+  await assert.doesNotReject(completeIssue(planning.queue, planning.issue, "CLOSED", "fim"));
+  const design = context("Design"); // sem project.json: readProject null → LOW
+  seedDesign(design.queue, design.issue);
+  await assert.doesNotReject(completeIssue(design.queue, design.issue, "CLOSED", "fim"));
 });
 
 test("fechamento humano concluido exige entrega; cancelamento preserva override", async () => {

@@ -62,7 +62,7 @@ test("claim leva OPEN a CLAIMED e incrementa a revisão", () => {
   assert.equal(issue.owner, "codex");
   assert.equal(issue.revision, 1);
   assert.equal(issue.thread.length, 1);
-  assert.throws(() => issue.claim("pi"), /Expected OPEN, got CLAIMED/);
+  assert.throws(() => issue.claim("pi"), /Expected OPEN or APPROVED, got CLAIMED/);
 });
 
 test("submit exige dono e evidência e leva CLAIMED a AWAITING", () => {
@@ -85,7 +85,7 @@ test("IA fecha Issue CLAIMED AFK com evidência e motivo", () => {
   issue.closeByAgent("pi", "feito: passos e decisões", "concluido");
   assert.equal(issue.status, "CLOSED");
   assert.equal(issue.closed_reason, "concluido");
-  assert.throws(() => issue.claim("pi"), /Expected OPEN, got CLOSED/);
+  assert.throws(() => issue.claim("pi"), /Expected OPEN or APPROVED, got CLOSED/);
 });
 
 test("closeByAgent exige dono e evidência", () => {
@@ -111,17 +111,31 @@ test("humano fecha Issue OPEN ou CLAIMED com motivo; AWAITING só via decide", (
   assert.equal(silent.status, "CLOSED");
 });
 
-test("decisão humana fecha a Issue AWAITING com motivo", () => {
+test("decide APPROVED aprova a Issue AWAITING, limpa o claim e reentra na fila sem reason", () => {
   const issue = awaiting();
-  issue.decide("CLOSED", "aceito", "concluido");
-  assert.equal(issue.status, "CLOSED");
-  assert.equal(issue.closed_reason, "concluido");
+  issue.decide("APPROVED", "aprovado: pode seguir o handoff");
+  assert.equal(issue.status, "APPROVED");
+  assert.equal(issue.closed_reason, null);
+  assert.equal(issue.owner, null);
+  assert.equal(issue.claimed_at, null);
 });
 
-test("decisão humana registra decided_by para auditar o Code Review final", () => {
-  const closing = awaiting();
-  closing.decide("CLOSED", "aprovado", "concluido");
-  assert.equal(closing.thread.at(-1)?.decided_by, "human");
+test("decide CLOSED fecha com motivo (abandono ou concluído); reason é obrigatório", () => {
+  const abandon = awaiting();
+  abandon.decide("CLOSED", "descartada", "obsoleto");
+  assert.equal(abandon.status, "CLOSED");
+  assert.equal(abandon.closed_reason, "obsoleto");
+  // ponytail: a recusa de `concluido` no decide (usar Aprovar) entra com a migração do caller na fatia App.
+  const done = awaiting();
+  done.decide("CLOSED", "aceito", "concluido");
+  assert.equal(done.closed_reason, "concluido");
+  assert.throws(() => awaiting().decide("CLOSED", "x"), /Closed reason is required/);
+});
+
+test("decisão humana registra decided_by em APPROVED e OPEN; agente não carimba", () => {
+  const approving = awaiting();
+  approving.decide("APPROVED", "aprovado");
+  assert.equal(approving.thread.at(-1)?.decided_by, "human");
   const reopening = awaiting();
   reopening.decide("OPEN", "refazer");
   assert.equal(reopening.thread.at(-1)?.decided_by, "human");
@@ -129,15 +143,34 @@ test("decisão humana registra decided_by para auditar o Code Review final", () 
   assert.equal(awaiting().thread.at(-1)?.decided_by, undefined);
 });
 
-test("decisão humana devolve para OPEN limpando o claim; regras de decisão valem", () => {
+test("decide OPEN/APPROVED exigem comentário e proíbem reason; OPEN limpa o claim", () => {
   const issue = awaiting();
   assert.throws(() => issue.decide("OPEN", "   "), /comment is required/);
+  assert.throws(() => issue.decide("APPROVED", "   "), /comment is required/);
   assert.throws(() => issue.decide("CLOSED", "x"), /Closed reason is required/);
-  assert.throws(() => issue.decide("OPEN", "volta", "concluido"), /OPEN cannot have a closed reason/);
+  assert.throws(() => issue.decide("OPEN", "volta", "obsoleto"), /OPEN cannot have a closed reason/);
+  assert.throws(() => issue.decide("APPROVED", "volta", "obsoleto"), /APPROVED cannot have a closed reason/);
   issue.decide("OPEN", "refazer com testes");
   assert.equal(issue.status, "OPEN");
   assert.equal(issue.owner, null);
   assert.equal(issue.claimed_at, null);
+});
+
+test("claim aceita APPROVED: a aprovada reentra na fila e volta a CLAIMED com novo dono", () => {
+  const issue = awaiting();
+  issue.decide("APPROVED", "aprovado");
+  assert.equal(issue.status, "APPROVED");
+  issue.claim("codex");
+  assert.equal(issue.status, "CLAIMED");
+  assert.equal(issue.owner, "codex");
+});
+
+test("APPROVED é mutável como OPEN (comment/tag); só CLOSED é imutável", () => {
+  const issue = awaiting();
+  issue.decide("APPROVED", "aprovado");
+  assert.doesNotThrow(() => issue.comment("pi", "nota pós-aprovação"));
+  assert.doesNotThrow(() => issue.tag({ risk: "ALTO" }, "human"));
+  assert.equal(issue.status, "APPROVED");
 });
 
 test("decide fora de AWAITING é rejeitado", () => {

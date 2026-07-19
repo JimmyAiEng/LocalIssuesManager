@@ -111,13 +111,13 @@ function fullBoard(root: string): { open1: string; open2: string; claimedId: str
 // =====================================================================================
 // Item 1 — Quadro: colunas, contagem, ordem (mais antigos primeiro)
 // =====================================================================================
-test("UI-01: quadro mostra as 4 colunas com contagem por Status e os cards mais antigos primeiro", async () =>
+test("UI-01: quadro mostra as 5 colunas com contagem por Status e os cards mais antigos primeiro", async () =>
   withUI(fullBoard, async (page, url) => {
     await page.goto(`${url}/`);
     await page.getByRole("heading", { name: "Issues", exact: true }).waitFor();
     const columns = page.locator(".board .column");
     await assert.deepEqual(await columns.locator("h2").evaluateAll((hs) => hs.map((h) => h.id)),
-      ["OPEN", "CLAIMED", "AWAITING", "CLOSED"]);
+      ["OPEN", "CLAIMED", "AWAITING", "APPROVED", "CLOSED"]);
     assert.equal(await page.locator(".column.status-OPEN h2 small").textContent(), "2");
     assert.equal(await page.locator(".column.status-CLAIMED h2 small").textContent(), "1");
     assert.equal(await page.locator(".column.status-CLOSED h2 small").textContent(), "1");

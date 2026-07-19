@@ -80,6 +80,32 @@ test("oldestOpen usa timestamp de entrada em OPEN e desempate estável", () => {
   assert.equal(queue.oldestOpen("missing"), null);
 });
 
+test("oldestOpen mescla OPEN e APPROVED e cria a pasta approved sob demanda", () => {
+  const dir = root();
+  const queue = new Queue(dir);
+  const approved = Issue.create({ ...body, project: "p", title: "approved" }, "pi", new Date("2026-01-01"));
+  approved.claim("pi", new Date("2026-01-02"));
+  approved.submit("pi", "evidência", new Date("2026-01-03"));
+  approved.decide("APPROVED", "aprovado", undefined, new Date("2026-01-04"));
+  queue.save(approved);
+  queue.save(Issue.create({ ...body, project: "p", title: "open" }, "pi", new Date("2026-02-01")));
+  assert.equal(existsSync(join(dir, "projects/p/approved", `${approved.id}.json`)), true);
+  assert.equal(queue.oldestOpen("p")?.id, approved.id); // APPROVED é elegível e mais antiga (01-04 < 02-01)
+});
+
+test("JSON legado com 4 status (sem APPROVED) carrega sem migração", () => {
+  const dir = root();
+  const queue = new Queue(dir);
+  const legacy = Issue.create({ ...body, project: "p" }, "pi", new Date("2026-01-01"));
+  legacy.claim("pi", new Date("2026-01-02"));
+  legacy.submit("pi", "evidência", new Date("2026-01-03"));
+  mkdirSync(join(dir, "projects/p/awaiting"), { recursive: true });
+  writeFileSync(join(dir, "projects/p/awaiting", `${legacy.id}.json`), JSON.stringify(legacy.toJSON()));
+  const loaded = queue.load(legacy.id);
+  assert.equal(loaded?.status, "AWAITING");
+  assert.deepEqual(loaded?.phases.map((phase) => phase.status), ["OPEN", "CLAIMED", "AWAITING"]);
+});
+
 test("save rejeita snapshot sem transição", () => {
   const queue = new Queue(root());
   const issue = Issue.create({ ...body, project: "p" }, "pi");

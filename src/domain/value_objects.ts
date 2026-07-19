@@ -5,7 +5,7 @@ export const AGENT_IDS = ["cursor", "claude-code", "codex", "pi"] as const;
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"] as const;
 export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"] as const;
 export const ACTION_TYPES = ["Planning", "Design", "Implement", "Review", "Deploy"] as const;
-export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "CLOSED"] as const;
+export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "APPROVED", "CLOSED"] as const;
 // Linhagem direcionada entre Issues: parent/child expressam o fan-out Planning→Design→Implement
 // (ancestral↔descendente); see-also é a relação simétrica sem direção (o default retrocompatível).
 export const RELATION_KINDS = ["parent", "child", "see-also"] as const;
@@ -22,7 +22,7 @@ export type RelationKind = (typeof RELATION_KINDS)[number];
 export type Role = (typeof ROLES)[number];
 export type Relation = { id: string; kind: RelationKind };
 export type Actor = "human" | AgentId;
-export type Decision = "OPEN" | "CLOSED";
+export type Decision = "OPEN" | "APPROVED" | "CLOSED";
 
 export const TAG_VALUES = {
   complexity: ["BAIXA", "MEDIA", "ALTA"],
@@ -111,11 +111,24 @@ export function required(value: string, name: string): void {
   if (!value.trim()) throw new DomainError(`${name} is required`);
 }
 
-// Regras comuns de uma decisão humana OPEN|CLOSED.
+// Decisão humana da Issue AWAITING, três-vias. OPEN rejeita e APPROVED aprova — ambas reentram na
+// fila, exigem comentário e proíbem reason. CLOSED exige um motivo (fechamento).
+// ponytail: recusar `concluido` no decide (obrigar Aprovar em vez de fechar) é inseparável da
+// migração do caller `decideIssue` (fatia App): enquanto a web/CLI ainda roteiam aprovar→CLOSED+concluido,
+// recusá-lo aqui quebraria esse fluxo. Entra junto com a fatia que troca o roteamento para APPROVED.
 export function assertDecision(status: Decision, comment: string, reason: ClosedReason | undefined): void {
-  if (status === "OPEN") required(comment, "comment");
-  if (status === "CLOSED" && !reason) throw new DomainError("Closed reason is required");
-  if (status === "OPEN" && reason) throw new DomainError("OPEN cannot have a closed reason");
+  if (status === "CLOSED") {
+    if (!reason) throw new DomainError("Closed reason is required");
+    return;
+  }
+  required(comment, "comment");
+  if (reason) throw new DomainError(`${status} cannot have a closed reason`);
+}
+
+// Passou por APPROVED em algum momento do ciclo? Governa o bypass da trava humana no fechamento
+// pós-aprovação (fatia App). Lê phases estruturalmente para não acoplar ao agregado Issue.
+export function wasApproved(phases: readonly { status: IssueStatus }[]): boolean {
+  return phases.some((phase) => phase.status === "APPROVED");
 }
 
 export function parseAgentId(value: string): AgentId {

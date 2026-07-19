@@ -31,13 +31,14 @@ const issues = [
   { id: "other", title: "Needle other", project: "other", type: "Feat", action: "Review", status: "AWAITING", created_at: "2026-01-01T00:00:00Z" },
 ];
 
-test("view model combina filtros por tipo e mantém as quatro colunas ordenadas", () => {
+test("view model combina filtros por tipo e mantém as cinco colunas ordenadas", () => {
   const filtered = filterIssues(issues, { title: "needle", project: "app", type: "Fix" });
   const columns = groupIssues(filtered);
   assert.deepEqual(columns.OPEN.map((issue) => issue.id), ["first", "later"]);
   assert.deepEqual(columns.CLAIMED.map((issue) => issue.id), ["going"]);
   assert.deepEqual(columns.AWAITING, []);
-  assert.equal(Object.keys(columns).length, 4);
+  assert.deepEqual(columns.APPROVED, []);
+  assert.equal(Object.keys(columns).length, 5);
 });
 
 test("filtro por Owner isola as Issues de um dono", () => {

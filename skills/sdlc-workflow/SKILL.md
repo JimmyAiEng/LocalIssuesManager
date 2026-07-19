@@ -51,7 +51,8 @@ Se a Issue for grande demais para uma sessão, crie as Issues menores relacionad
 
 - **AFK (padrão)**: a IA fecha direto — `issues status --id <id> --agent <ia> --status CLOSED --comment "<evidência>" --reason concluido`.
 - **HITL**, `risk=ALTO` ou `complexity=ALTA`: a IA **não fecha**; envia para decisão humana — `issues status … --status AWAITING --comment "<evidência>"` — e o humano decide no painel web.
-- A **evidência é obrigatória**: um relatório curto do que foi feito, os passos e as decisões tomadas.
+- **Projeto `concern=HIGH`**: piso de supervisão do Projeto — Planning e Design **não fecham por agente**, só por `--status AWAITING` (a decisão é humana, no web), mesmo em Issue AFK.
+- Como `concern` é piso e não teto, `concern=LOW` (ou Projeto sem o campo) não muda nada: Planning/Design seguem a regra AFK/HITL acima.
 - O gate da action roda nas duas saídas (AWAITING e CLOSED) quando `--reason` é `concluido` ou está ausente; sem a entrega, o comando falha explicando o que falta.
 - **Abandono**: `--reason obsoleto|duplicado|errado` **pula o gate** da action — a Issue abandonada não tem entrega a cobrar.
 

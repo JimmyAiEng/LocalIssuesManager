@@ -195,5 +195,6 @@ issues status --id <id> --agent <ia> --status CLOSED \
 ```
 
 Com `architecture_changed=true`, HITL, `risk=ALTO` ou `complexity=ALTA`: use `--status AWAITING` (sem `--reason`) — o fechamento é do humano, via `decide` no web.
+Em Projeto `concern=HIGH`, Design **não fecha por agente** nem com `architecture_changed=false`: encerre sempre por `--status AWAITING` (sem `--reason concluido`) — o aceite é humano, no web — mesmo em Issue AFK.
 **Gate**: sem a decisão de arquitetura, sem plano válido e sem ao menos uma filha Implement, o comando sai com exit 1 e JSON `{"errors":[…]}` no stderr; a Issue permanece no status atual.
 Concluída a Issue, **encerre a sessão**: não busque outra Issue.

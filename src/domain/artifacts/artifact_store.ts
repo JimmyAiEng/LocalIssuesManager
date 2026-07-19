@@ -25,6 +25,7 @@ export class ArtifactStore {
   list(project: string, issueId: string, type: ArtifactType): string[] {
     if (type === "media") return [];
     if (type === "uml") return this.#designFiles(project, issueId, ".puml");
+    if (type === "document") return this.#documents(project, issueId);
     const name = defaultName(type);
     return this.readText(project, { issueId, type, name }) === null ? [] : [name];
   }
@@ -45,6 +46,7 @@ export class ArtifactStore {
 
   purgeIssue(project: string, issueId: string): void {
     rmSync(this.#textPath(project, { issueId, type: "document" }), { force: true });
+    rmSync(this.#documentsDir(project, issueId), { recursive: true, force: true });
     rmSync(this.#textPath(project, { issueId, type: "requirement" }), { force: true });
     rmSync(this.#designDir(project, issueId), { recursive: true, force: true });
   }
@@ -56,7 +58,9 @@ export class ArtifactStore {
   #textPath(project: string, ref: ArtifactRef): string {
     const base = this.#project(project);
     if (ref.type === "document" && ref.name === "design.md") return join(this.#designDir(project, ref.issueId), "design.md");
-    if (ref.type === "document") return join(base, "artifacts", `${ref.issueId}.md`);
+    if (ref.type === "document") return ref.name
+      ? join(this.#documentsDir(project, ref.issueId), ref.name)
+      : join(base, "artifacts", `${ref.issueId}.md`);
     if (ref.type === "requirement") return join(base, "requirements", `${ref.issueId}.jsonl`);
     if (ref.type === "implementation-plan") return join(this.#designDir(project, ref.issueId), "plan.json");
     return join(this.#designDir(project, ref.issueId), ref.name ?? "diagram.puml");
@@ -66,6 +70,13 @@ export class ArtifactStore {
     const directory = this.#designDir(project, issueId);
     return existsSync(directory) ? readdirSync(directory).filter((name) => name.endsWith(suffix)) : [];
   }
+  #documents(project: string, issueId: string): string[] {
+    const directory = this.#documentsDir(project, issueId);
+    const named = existsSync(directory) ? readdirSync(directory).filter((name) => name.endsWith(".md")) : [];
+    const legacy = this.readText(project, { issueId, type: "document" }) === null ? [] : [defaultName("document")];
+    return [...legacy, ...named];
+  }
+  #documentsDir(project: string, issueId: string): string { return join(this.#project(project), "artifacts", issueId); }
   #designDir(project: string, issueId: string): string { return join(this.#project(project), "design", issueId); }
   #project(project: string): string { return join(this.#root, "projects", projectSegment(project)); }
   #projects(): string[] {

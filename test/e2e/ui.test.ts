@@ -59,6 +59,7 @@ const intentFile = qaFile("intent.md", "# intenção");
 const evAFile = qaFile("evidence-a.md", "# evidência a");
 const evBFile = qaFile("evidence-b.md", "# evidência b");
 const verdictFile = qaFile("verdict.md", "APROVADO revisão ok");
+const handoffFile = qaFile("handoff.md", "# handoff"); // obrigatório ao enviar para AWAITING
 
 function awaiting(root: string, o: { title: string; project: string; type: string }): string {
   const id = claimed(root, o);
@@ -66,13 +67,17 @@ function awaiting(root: string, o: { title: string; project: string; type: strin
   cli(["artifact", "--id", id, "--name", "evidence-a.md", "--file", evAFile], root);
   cli(["artifact", "--id", id, "--name", "evidence-b.md", "--file", evBFile], root);
   cli(["artifact", "--id", id, "--file", verdictFile], root);
+  cli(["artifact", "--id", id, "--name", "handoff.md", "--file", handoffFile], root);
   cli(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência: relatório"], root);
   return id;
 }
 
+// Aprovar gera APPROVED; o agente reivindica a aprovada e a fecha (fluxo novo).
 function closed(root: string, o: { title: string; project: string; type: string }): string {
   const id = awaiting(root, o);
-  cli(["decide", "--id", id, "--human", "--status", "CLOSED", "--comment", "aceito", "--reason", "concluido"], root);
+  cli(["decide", "--id", id, "--human", "--status", "APPROVED", "--comment", "aceito"], root);
+  cli(["next", "--id", id, "--agent", "pi"], root);
+  cli(["status", "--id", id, "--agent", "pi", "--status", "CLOSED", "--comment", "handoff executado", "--reason", "concluido"], root);
   return id;
 }
 
@@ -80,7 +85,7 @@ function closed(root: string, o: { title: string; project: string; type: string 
 function findIssueFile(root: string, id: string): string {
   const projects = join(root, "projects");
   for (const project of readdirSync(projects)) {
-    for (const folder of ["open", "claimed", "awaiting", "closed"]) {
+    for (const folder of ["open", "claimed", "awaiting", "approved", "closed"]) {
       const candidate = join(projects, project, folder, `${id}.json`);
       try { readFileSync(candidate); return candidate; } catch { /* próxima pasta */ }
     }

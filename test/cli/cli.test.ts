@@ -31,11 +31,13 @@ const intentFile = qaFile("intent.md", "# intenção");
 const evAFile = qaFile("evidence-a.md", "# evidência a");
 const evBFile = qaFile("evidence-b.md", "# evidência b");
 const verdictFile = qaFile("verdict.md", "APROVADO revisão ok");
+const handoffFile = qaFile("handoff.md", "# handoff"); // obrigatório ao enviar para AWAITING
 const seedReview = (vars: NodeJS.ProcessEnv, id: string): void => {
   run(["artifact", "--id", id, "--name", "intent.md", "--file", intentFile], vars);
   run(["artifact", "--id", id, "--name", "evidence-a.md", "--file", evAFile], vars);
   run(["artifact", "--id", id, "--name", "evidence-b.md", "--file", evBFile], vars);
   run(["artifact", "--id", id, "--file", verdictFile], vars);
+  run(["artifact", "--id", id, "--name", "handoff.md", "--file", handoffFile], vars);
 };
 
 test("CLI retorna JSON por padrão e next devolve a IssueView reivindicada", () => {
@@ -155,8 +157,12 @@ test("e2e: ciclo HITL via CLI — AWAITING pela IA, decisão humana fecha", () =
   assert.notEqual(denied.status, 0);
   assert.match(denied.stderr, /decisão humana/);
   run(["status", "--id", created.id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência"], vars);
-  const closed = JSON.parse(run(["decide", "--id", created.id, "--human", "--status", "CLOSED",
-    "--comment", "aceito", "--reason", "concluido"], vars));
+  // Aprovar gera APPROVED; o agente reivindica a aprovada e a fecha (fluxo novo).
+  const approved = JSON.parse(run(["decide", "--id", created.id, "--human", "--status", "APPROVED", "--comment", "aceito"], vars));
+  assert.equal(approved.status, "APPROVED");
+  run(["next", "--id", created.id, "--agent", "pi"], vars);
+  const closed = JSON.parse(run(["status", "--id", created.id, "--agent", "pi", "--status", "CLOSED",
+    "--comment", "handoff executado", "--reason", "concluido"], vars));
   assert.equal(closed.status, "CLOSED");
 });
 
@@ -378,10 +384,15 @@ test("in-process: main() cobre status/decide/reset e o gate assíncrono de statu
     await captureMain(["artifact", "--id", forDecide.id, "--name", "evidence-a.md", "--file", evAFile]);
     await captureMain(["artifact", "--id", forDecide.id, "--name", "evidence-b.md", "--file", evBFile]);
     await captureMain(["artifact", "--id", forDecide.id, "--file", verdictFile]);
+    await captureMain(["artifact", "--id", forDecide.id, "--name", "handoff.md", "--file", handoffFile]);
     await captureMain(["status", "--id", forDecide.id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência"]);
     const decided = JSON.parse((await captureMain(["decide", "--id", forDecide.id, "--human",
-      "--status", "CLOSED", "--comment", "aceito", "--reason", "concluido"])).stdout);
-    assert.equal(decided.status, "CLOSED");
+      "--status", "APPROVED", "--comment", "aceito"])).stdout);
+    assert.equal(decided.status, "APPROVED");
+    await captureMain(["next", "--id", forDecide.id, "--agent", "pi"]);
+    const doneDecide = JSON.parse((await captureMain(["status", "--id", forDecide.id, "--agent", "pi",
+      "--status", "CLOSED", "--comment", "handoff executado", "--reason", "concluido"])).stdout);
+    assert.equal(doneDecide.status, "CLOSED");
 
     const gateFail = await captureMain(["status", "--id", forStatus.id, "--agent", "pi",
       "--status", "CLOSED", "--comment", "x", "--reason", "concluido"]);

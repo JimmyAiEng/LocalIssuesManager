@@ -61,19 +61,23 @@ export function getIssue(id: string, root?: string): IssueView {
   return issueView(queue, queue.loadRequired(id));
 }
 
-// Trava do `issues get` no CLI: Issue OPEN só chega ao agente pelo claim de `issues next`, que
-// entrega junto o contrato da action. Sem ela sobra uma porta lateral — `list` + `get` devolvem a
-// Issue inteira sem reivindicar nem mostrar o contrato, e o agente implementa uma Issue que segue
-// OPEN para todo mundo (observado no HomeInventory). A web não passa por aqui: no painel humano,
-// ver a fila aberta é justamente o ponto.
+// Handoff cru (handoff.md) da Issue: a sessão pós-APPROVED o lê para seguir; ausente falha.
+export function getHandoff(id: string, root?: string): string {
+  const queue = new Queue(root);
+  const handoff = queue.artifacts.readText(queue.loadRequired(id).project, { issueId: id, type: "document", name: "handoff.md" });
+  if (handoff === null) throw new DomainError(`Issue ${id} sem handoff.md: grave-o com 'issues artifact --id ${id} --name handoff.md --file <f>'`);
+  return handoff;
+}
+
+// Trava do `issues get` no CLI: Issue OPEN só chega ao agente pelo claim de `issues next` (que entrega
+// o contrato da action); sem ela, `list`+`get` deixam trabalhar Issue não reivindicada. A web não passa aqui.
 export function assertNotOpen(id: string, root?: string): void {
   const issue = new Queue(root).loadRequired(id);
   if (issue.status !== "OPEN") return;
   throw new DomainError(`Issue ${id} está OPEN: reivindique com 'issues next --id ${id} --agent <ia>' — o claim entrega o contrato da action. 'issues get' só lê Issue já reivindicada.`);
 }
 
-// Injeta o Artefato .md da Issue, a view das relacionadas (com os artefatos delas) e a cadeia
-// de ancestrais (subindo os parent): quem reivindica recebe a linhagem sem buscar cada Issue.
+// Injeta o Artefato .md, a view das relacionadas (com seus artefatos) e a cadeia de ancestrais (parent): quem reivindica recebe a linhagem sem buscar cada Issue.
 export function issueView(queue: Queue, issue: Issue): IssueView {
   return { ...issue.toJSON(), artifact: queue.artifacts.readText(issue.project, { issueId: issue.id, type: "document" }),
     related: issue.relates.flatMap((r) => relatedView(queue, r.id, r.kind)), features: designFeatures(queue, issue),
@@ -128,10 +132,8 @@ function summary(issue: Issue): IssueSummary {
     relates: issue.relates.map((r) => r.id) }; // o quadro só precisa dos ids das relacionadas
 }
 
-// Fila: a Issue OPEN mais antiga do projeto (ou uma específica por id) é reivindicada pela IA.
-// Em projeto concern=HIGH, uma Issue Design/Implement só é reivindicável por AGENTE depois que todo
-// pai (relates kind=parent) fecha: --id recusa citando o pai; --project pula e pega a próxima
-// elegível (nunca trava a fila). LOW, Issue sem pai, see-also do decompose e claim humano: livres.
+// Fila: reivindica a Issue elegível mais antiga do projeto (ou uma por --id). Em concern=HIGH,
+// Design/Implement só é reivindicável por agente com todo pai (kind=parent) CLOSED: --id recusa citando o pai; --project pula. LOW/sem-pai/see-also/humano: livres.
 export function nextIssue(input: { agent: string; project?: string; id?: string; now?: Date }, root?: string): IssueView | null {
   const agent = parseAgentId(input.agent);
   const queue = new Queue(root);
@@ -150,9 +152,10 @@ function claimTarget(queue: Queue, id: string): Issue {
   return issue;
 }
 
-// Pula as filhas bloqueadas e ordena como `oldestOpen`; sem bloqueio, devolve a mesma Issue.
+// Elegível = OPEN ou APPROVED (a aprovada reentra na fila para o handoff seguir); pula as filhas
+// bloqueadas e ordena como `oldestOpen`.
 function oldestEligible(queue: Queue, project: string | undefined): Issue | null {
-  return queue.list({ status: "OPEN", project })
+  return [...queue.list({ status: "OPEN", project }), ...queue.list({ status: "APPROVED", project })]
     .sort((a, b) => a.status_changed_at.localeCompare(b.status_changed_at) || a.id.localeCompare(b.id))
     .find((issue) => !blockingParent(queue, issue)) ?? null;
 }
@@ -190,17 +193,18 @@ export type DecideInput = {
   closed_reason?: string; attachments?: IncomingAttachment[]; now?: Date;
 };
 
+// Decisão humana da AWAITING: OPEN rejeita, APPROVED aprova (reentra na fila), CLOSED só abandona
+// (concluido recusado). Nenhuma gera Implement CLOSED+concluido: a Review dispara no fechar por agente.
 export function decideIssue(input: DecideInput, root?: string): Issue {
   if (!input.human) throw new DomainError("Decide requires --human");
   const queue = new Queue(root);
   const issue = queue.loadRequired(input.id);
-  if (input.status !== "OPEN" && input.status !== "CLOSED") throw new DomainError("Invalid decision");
+  if (input.status !== "OPEN" && input.status !== "APPROVED" && input.status !== "CLOSED") throw new DomainError("Invalid decision");
   const reason = input.closed_reason ? parseClosedReason(input.closed_reason) : undefined;
   const created = persistableAttachments(input.attachments, input.now);
   issue.decide(input.status, input.comment, reason, input.now, created.map(({ entity }) => entity.toJSON()));
   for (const { entity, bytes } of created) queue.artifacts.writeMedia(issue.project, entity, bytes);
   queue.save(issue);
-  afterIssueClosed(queue, issue, root); // decide humano da web também fecha Implement e dispara a Review
   return issue;
 }
 
@@ -215,9 +219,7 @@ export function resetClaim(input: { id: string; human: boolean; comment: string;
   return issue;
 }
 
-// Relaciona Issues (linhagem direcionada): os ids precisam existir; a relação dá acesso aos
-// artefatos. Com kind=child (default see-also), grava o par recíproco parent na Issue alvo,
-// tornando a linhagem navegável nos dois sentidos.
+// Relaciona Issues (linhagem direcionada): ids devem existir; kind=child (default see-also) grava o par recíproco parent na alvo, tornando a linhagem navegável nos dois sentidos.
 export function relateIssues(input: { id: string; relates: string[]; kind?: string }, root?: string): Issue {
   const kind = input.kind ? parseRelationKind(input.kind) : "see-also";
   const queue = new Queue(root);
@@ -244,9 +246,7 @@ export function artifactFromFile(path: string): string {
   return readFileSync(path, "utf8");
 }
 
-// Grava/substitui um Artifact doc da Issue; não persiste o JSON da Issue. Com `name`, grava um
-// documento nomeado (intent.md, evidence-*.md); sem, o artefato legado. O nome vem do --name da CLI,
-// então é trust boundary: o store faz `join`, aqui barramos travessia de path.
+// Grava/substitui um Artifact doc (não persiste o JSON). Com `name`, grava nomeado; sem, o legado. O --name é trust boundary: barramos travessia de path.
 export function setArtifact(input: { issueId: string; content: string; name?: string }, root?: string): void {
   const queue = new Queue(root);
   const issue = queue.loadRequired(input.issueId);

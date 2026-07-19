@@ -30,11 +30,13 @@ const intentFile = qaFile("intent.md", "# intenção");
 const evAFile = qaFile("evidence-a.md", "# evidência a");
 const evBFile = qaFile("evidence-b.md", "# evidência b");
 const verdictFile = qaFile("verdict.md", "APROVADO revisão ok");
+const handoffFile = qaFile("handoff.md", "# handoff"); // obrigatório ao enviar para AWAITING
 const seedQa = (vars: NodeJS.ProcessEnv, id: string): void => {
   run(["artifact", "--id", id, "--name", "intent.md", "--file", intentFile], vars);
   run(["artifact", "--id", id, "--name", "evidence-a.md", "--file", evAFile], vars);
   run(["artifact", "--id", id, "--name", "evidence-b.md", "--file", evBFile], vars);
   run(["artifact", "--id", id, "--file", verdictFile], vars);
+  run(["artifact", "--id", id, "--name", "handoff.md", "--file", handoffFile], vars);
 };
 const diskPath = (vars: NodeJS.ProcessEnv, folder: string, id: string) =>
   join(vars.ISSUES_ROOT as string, "projects", "demo", folder, `${id}.json`);
@@ -97,8 +99,12 @@ test("RF-04: Issue HITL vai a AWAITING pela IA e o humano decide", () => {
     "--status", "AWAITING", "--comment", "evidência para decisão"], vars);
   assert.equal(awaiting.status, "AWAITING");
   assert.ok(existsSync(diskPath(vars, "awaiting", created.id)));
-  const closed = json(["decide", "--id", created.id, "--human", "--status", "CLOSED",
-    "--comment", "aceito", "--reason", "concluido"], vars);
+  // Aprovar gera APPROVED; o agente reivindica a aprovada e a fecha (fluxo novo).
+  const approved = json(["decide", "--id", created.id, "--human", "--status", "APPROVED", "--comment", "aceito"], vars);
+  assert.equal(approved.status, "APPROVED");
+  run(["next", "--id", created.id, "--agent", "pi"], vars);
+  const closed = json(["status", "--id", created.id, "--agent", "pi",
+    "--status", "CLOSED", "--comment", "handoff executado", "--reason", "concluido"], vars);
   assert.equal(closed.status, "CLOSED");
 });
 

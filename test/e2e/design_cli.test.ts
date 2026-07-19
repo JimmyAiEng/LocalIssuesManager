@@ -129,6 +129,7 @@ test("e2e: gate bloqueia a conclusão da Issue Design sem pacote (JSON errors, e
   const into = fixture("decomp.json", JSON.stringify({ children: [
     { title: "Implementar fatia", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) }] }));
   run(["decompose", "--id", issueId, "--into", into, "--agent", "pi"], vars); // trava: filha Implement
+  run(["artifact", "--id", issueId, "--name", "handoff.md", "--file", fixture("handoff.md", "# handoff")], vars);
   const issue = json(["status", "--id", issueId, "--agent", "pi",
     "--status", "AWAITING", "--comment", "fim"], vars);
   assert.equal(issue.status, "AWAITING");

@@ -36,6 +36,9 @@ const planningClaimed = (dir: string): string => {
   nextIssue({ agent: "pi", id: issue.id }, dir);
   return issue.id;
 };
+// Handoff obrigatório ao enviar para AWAITING não-abandono.
+const seedHandoff = (dir: string, id: string): void =>
+  new Queue(dir).artifacts.writeText("app", { issueId: id, type: "document", name: "handoff.md" }, "# handoff");
 // Uma filha Design por Feature: o casamento é pelo nome da Feature contido no título da filha.
 // Um grupo de Features por filha Design: o título é livre, quem casa é o campo `features`.
 const decomposeInto = (dir: string, issueId: string, groups: string[][]): void => {
@@ -78,6 +81,7 @@ test("gate Planning exige RequirementArtifact e as filhas Design cobrindo as Fea
   await assert.rejects(statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir), /sem requisitos/);
   setRequirements({ issueId, file: file(dir, VALID) }, dir);
   decomposeInto(dir, issueId, [["Login"]]);
+  seedHandoff(dir, issueId);
   const issue = await statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir);
   assert.equal(issue.status, "AWAITING");
 });
@@ -87,6 +91,7 @@ test("gate Planning fecha com agrupamento N:1 (uma filha Design cobrindo três F
   const issueId = planningClaimed(dir);
   setRequirements({ issueId, file: file(dir, THREE) }, dir);
   decomposeInto(dir, issueId, [["Login", "Logout", "Cadastro"]]);
+  seedHandoff(dir, issueId);
   const issue = await statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir);
   assert.equal(issue.status, "AWAITING");
 });

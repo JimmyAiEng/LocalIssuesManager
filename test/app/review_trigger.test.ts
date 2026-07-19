@@ -75,12 +75,16 @@ test("repetir o fechamento não duplica a Review (idempotência)", async () => {
   assert.equal(reviewsUnder(dir, parent.id).length, 1, "não duplica");
 });
 
-test("decide humano (AWAITING->CLOSED concluido) também dispara o gatilho", async () => {
+// Implement HITL: aprovar → APPROVED → reivindicar → fechar concluido dispara a Review no fim.
+test("aprovar Implement, reivindicar a aprovada e fechar dispara o gatilho de Review", async () => {
   const { dir, parent } = setup();
   const a = child(dir, parent.id, "impl-a");
   nextIssue({ agent: "claude-code", id: a.id }, dir);
+  new Queue(dir).artifacts.writeText("app", { issueId: a.id, type: "document", name: "handoff.md" }, "# handoff");
   await statusIssue({ id: a.id, agent: "claude-code", status: "AWAITING", comment: "pronto para decisão humana" }, dir);
-  decideIssue({ id: a.id, human: true, status: "CLOSED", comment: "aprovado", closed_reason: "concluido" }, dir);
+  decideIssue({ id: a.id, human: true, status: "APPROVED", comment: "aprovado" }, dir);
+  nextIssue({ agent: "claude-code", id: a.id }, dir); // reivindica a aprovada
+  await statusIssue({ id: a.id, agent: "claude-code", status: "CLOSED", comment: "handoff executado", closed_reason: "concluido" }, dir);
   assert.equal(reviewsUnder(dir, parent.id).length, 1);
 });
 

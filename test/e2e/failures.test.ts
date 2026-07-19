@@ -44,6 +44,7 @@ const intentFile = qaFile("intent.md", "# intenção");
 const evAFile = qaFile("evidence-a.md", "# evidência a");
 const evBFile = qaFile("evidence-b.md", "# evidência b");
 const verdictFile = qaFile("verdict.md", "APROVADO revisão ok");
+const handoffFile = qaFile("handoff.md", "# handoff"); // obrigatório ao enviar para AWAITING
 
 function createIssueCLI(root: string, extra: string[] = []): string {
   const id = (JSON.parse(run([...createArgs, ...extra], root)) as { id: string }).id;
@@ -51,6 +52,7 @@ function createIssueCLI(root: string, extra: string[] = []): string {
   run(["artifact", "--id", id, "--name", "evidence-a.md", "--file", evAFile], root);
   run(["artifact", "--id", id, "--name", "evidence-b.md", "--file", evBFile], root);
   run(["artifact", "--id", id, "--file", verdictFile], root);
+  run(["artifact", "--id", id, "--name", "handoff.md", "--file", handoffFile], root);
   return id;
 }
 function claimedIssueCLI(root: string, extra: string[] = []): string {

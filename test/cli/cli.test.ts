@@ -19,20 +19,20 @@ const env = () => {
   return vars;
 };
 
-// Os fluxos genéricos usam a action QA; seu gate de conclusão exige o Artefato .md, semeado
+// Os fluxos genéricos usam a action Review; seu gate de conclusão exige o Artefato .md, semeado
 // via qaArtifactFile nos testes que concluem a Issue.
 const createArgs = [
-  "create", "--title", "CLI issue", "--project", "demo", "--type", "Feat", "--action", "QA",
+  "create", "--title", "CLI issue", "--project", "demo", "--type", "Feat", "--action", "Review",
   "--problem", "problem", "--acceptance-criteria", "done", "--agent", "pi",
 ];
 const qaArtifactFile = join(mkdtempSync(join(tmpdir(), "issues-cli-qa-")), "qa.md");
-writeFileSync(qaArtifactFile, "# QA ok");
+writeFileSync(qaArtifactFile, "# Review ok");
 
 test("CLI retorna JSON por padrão e next devolve a IssueView reivindicada", () => {
   const vars = env();
   const created = JSON.parse(run(createArgs, vars));
   assert.equal(created.status, "OPEN");
-  assert.equal(created.action, "QA");
+  assert.equal(created.action, "Review");
   const claimed = JSON.parse(run(["next", "--agent", "pi", "--project", "demo"], vars));
   assert.equal(claimed.id, created.id);
   assert.equal(claimed.status, "CLAIMED");
@@ -225,7 +225,7 @@ test("CLI next --prompt (fila) retorna Markdown apontando sdlc-workflow, não JS
   run(createArgs, vars);
   const output = run(["next", "--prompt", "--agent", "pi", "--project", "demo"], vars);
   assert.match(output, /sdlc-workflow/);
-  assert.match(output, /action `QA`/);
+  assert.match(output, /action `Review`/);
   assert.throws(() => JSON.parse(output));
 });
 
@@ -372,7 +372,7 @@ test("in-process: main() cobre status/decide/reset e o gate assíncrono de statu
   await withIssuesRoot(root, async () => {
     const forStatus = JSON.parse((await captureMain(createArgs)).stdout);
     await captureMain(["next", "--id", forStatus.id, "--agent", "pi"]);
-    await captureMain(["artifact", "--id", forStatus.id, "--file", qaArtifactFile]); // gate QA
+    await captureMain(["artifact", "--id", forStatus.id, "--file", qaArtifactFile]); // gate Review
     const closed = JSON.parse((await captureMain(["status", "--id", forStatus.id, "--agent", "pi",
       "--status", "CLOSED", "--comment", "feito", "--reason", "concluido"])).stdout);
     assert.equal(closed.status, "CLOSED"); // runStatus() assíncrono
@@ -384,7 +384,7 @@ test("in-process: main() cobre status/decide/reset e o gate assíncrono de statu
 
     const forDecide = JSON.parse((await captureMain(createArgs.concat("--human-need", "HITL"))).stdout);
     await captureMain(["next", "--id", forDecide.id, "--agent", "pi"]);
-    await captureMain(["artifact", "--id", forDecide.id, "--file", qaArtifactFile]); // gate QA
+    await captureMain(["artifact", "--id", forDecide.id, "--file", qaArtifactFile]); // gate Review
     await captureMain(["status", "--id", forDecide.id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência"]);
     const decided = JSON.parse((await captureMain(["decide", "--id", forDecide.id, "--human",
       "--status", "CLOSED", "--comment", "aceito", "--reason", "concluido"])).stdout);
@@ -421,7 +421,7 @@ test("in-process: main() cobre next sem --prompt, init com/sem --dogfood, --atta
     assert.equal(JSON.parse(commented.stdout).thread.at(-1).attachments[0].kind, "image");
 
     const conflict = await captureMain(["create", "--title", "x", "--project", "demo", "--type", "Feat",
-      "--action", "QA", "--problem", "p", "--human", "--agent", "pi"]); // actorFrom(): --human e --agent juntos
+      "--action", "Review", "--problem", "p", "--human", "--agent", "pi"]); // actorFrom(): --human e --agent juntos
     assert.match(conflict.stderr, /Choose --human or --agent/);
     assert.equal(conflict.exitCode, 1);
   });
@@ -442,7 +442,7 @@ test("in-process: parseOptions cobre --attach/flag no fim dos args (sem valor) e
     assert.equal(lastEntry.attachments[0].kind, "image");
 
     // --title no fim dos args sem valor: args[++index] ?? "" cai no fallback -> value() rejeita string vazia
-    const missingValue = await captureMain(["create", "--project", "demo", "--type", "Feat", "--action", "QA", "--problem", "p", "--agent", "pi", "--title"]);
+    const missingValue = await captureMain(["create", "--project", "demo", "--type", "Feat", "--action", "Review", "--problem", "p", "--agent", "pi", "--title"]);
     assert.match(missingValue.stderr, /--title is required/);
 
     // --attach no fim dos args sem valor: mesmo fallback, mas dentro do ramo dedicado de --attach

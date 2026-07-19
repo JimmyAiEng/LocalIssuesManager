@@ -22,7 +22,7 @@ const ensureProject = (root: string, project: string): void => {
 const createIssue = (root: string, o: { title: string; project: string; type: string; action?: string; problem?: string }): string => {
   ensureProject(root, o.project);
   return JSON.parse(cli(["create", "--title", o.title, "--project", o.project, "--type", o.type,
-    "--action", o.action ?? "QA", "--problem", o.problem ?? "problema", "--human"], root)).id as string;
+    "--action", o.action ?? "Review", "--problem", o.problem ?? "problema", "--human"], root)).id as string;
 };
 
 // Um Chromium por arquivo; contexto+página por teste (higiene de processos).
@@ -52,9 +52,9 @@ function claimed(root: string, o: { title: string; project: string; type: string
   return id;
 }
 
-// awaiting() semeia Issues QA (action default): o gate de conclusão exige o Artefato .md antes de AWAITING.
+// awaiting() semeia Issues Review (action default): o gate de conclusão exige o Artefato .md antes de AWAITING.
 const qaArtifactFile = join(mkdtempSync(join(tmpdir(), "issues-e2e-ui-qa-")), "qa.md");
-writeFileSync(qaArtifactFile, "# QA ok");
+writeFileSync(qaArtifactFile, "# Review ok");
 
 function awaiting(root: string, o: { title: string; project: string; type: string }): string {
   const id = claimed(root, o);
@@ -174,7 +174,7 @@ test("UI-04a: detalhe da Issue CLAIMED mostra metadados, problema, AC, editor de
       const id = readdirSync(join(root, "projects", "api", "claimed"))[0].replace(".json", "");
       await page.goto(`${url}/issues/${id}`);
       await page.getByRole("heading", { name: "Detalhe claimed" }).waitFor();
-      assert.match(await page.locator(".detail .meta").first().innerText(), /Projeto: api · Tipo: Refactor · Action: QA/);
+      assert.match(await page.locator(".detail .meta").first().innerText(), /Projeto: api · Tipo: Refactor · Action: Review/);
       assert.match(await page.locator(".detail").innerText(), /Problema/);
       assert.match(await page.locator(".detail").innerText(), /Critérios de aceite/);
       await assert.ok(await page.getByText("Classificar Issue").count()); // editor de tags
@@ -348,7 +348,7 @@ test("UI-09a: fechar Issue exige confirmação explícita antes de efetivar (irr
   withUI((root) => { createIssue(root, { title: "Fechar OPEN", project: "web", type: "Fix" }); },
     async (page, url, root) => {
       const id = readdirSync(join(root, "projects", "web", "open"))[0].replace(".json", "");
-      new Queue(root).artifacts.writeText("web", { issueId: id, type: "document" }, "# QA concluído");
+      new Queue(root).artifacts.writeText("web", { issueId: id, type: "document" }, "# Review concluído");
       await page.goto(`${url}/issues/${id}`);
       await page.getByRole("button", { name: "Fechar Issue" }).click(); // abre painel
       await page.selectOption('select[name="closed_reason"]', "concluido");

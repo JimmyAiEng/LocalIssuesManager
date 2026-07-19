@@ -16,7 +16,7 @@ Válido em **qualquer projeto** que use este pack + o CLI `issues` do issues-loc
 Uma **Issue** é a unidade de trabalho de uma sessão: pequena, com uma entrega única.
 
 - **type** diz o problema: `Fix` · `Feat` · `Research` · `Refactor`.
-- **action** diz a entrega esperada: `Planning` · `Design` · `Implement` · `QA` · `Deploy`.
+- **action** diz a entrega esperada: `Planning` · `Design` · `Implement` · `Review` · `Deploy`.
 - Status: `OPEN → CLAIMED → (AWAITING →) CLOSED`.
 - Issue `OPEN` só chega até você pelo claim de `issues next` — é ele que entrega o contrato da action junto. `issues get` recusa id em `OPEN`: não dá para contornar o claim com `list` + `get` e trabalhar uma Issue que ninguém reivindicou.
 - Trabalho maior vira **novas Issues relacionadas** (`--relates`), nunca uma Issue gorda.
@@ -38,7 +38,7 @@ Leia o arquivo da action reivindicada — ele traz os formatos exatos dos arquiv
 | `Planning` | `phases/planning.md` | Requisitos válidos em JSONL (`issues requirements set`), máx. 5 Features **+** as filhas `action=Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` o grupo que cobre): toda Feature em exatamente uma filha — se sobrar Feature descoberta ou repetida, o gate aponta e não fecha |
 | `Design` | `phases/design.md` | Decisão de arquitetura (`issues design changed --value true\|false`) + plano válido (`issues plan set`) **+** **≥1 filha `Implement`** (`issues decompose`, uma por Small Plan). Se `true`: `design.md` + os 4 níveis (High Level, Package, Class, Interface/DataModel) em PlantUML válido e **nunca fecha AFK** (só `AWAITING`, aceite humano). Se `false`: dispensa diagramas e revisão humana |
 | `Implement` | `phases/implement.md` | Worktree usada + check do projeto passando (roda sozinho no fechamento). Com `--test-paths` configurado, exige também a ordem TDD no histórico da worktree: um commit só-de-testes antes do primeiro commit de produção (cita o commit infrator) |
-| `QA` | `phases/qa.md` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
+| `Review` | `phases/review.md` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
 | `Deploy` | `phases/deploy.md` | Nunca fecha AFK: só `AWAITING` com link http(s) de PR + resultado da análise na thread; fecha só via `decide` humano |
 
 ## Qualificação (no claim)

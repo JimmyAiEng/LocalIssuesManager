@@ -17,7 +17,7 @@ export type IssueData = {
 };
 
 // Uma Issue é a unidade de trabalho: type diz o problema (Fix/Feat/Research/Refactor) e
-// action diz a entrega esperada (Planning/Design/Implement/QA/Deploy). Não há Tickets:
+// action diz a entrega esperada (Planning/Design/Implement/Review/Deploy). Não há Tickets:
 // trabalho maior vira novas Issues relacionadas (relates), formando a linhagem.
 export class Issue implements IssueData {
   id!: string; title!: string; project!: string; type!: IssueType; action!: ActionType;

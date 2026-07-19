@@ -11,8 +11,8 @@ import { createProject, listProjects } from "../../src/app/services/use_cases/pr
 import { type CommandRunner, dockerArgv, runProjectChecks } from "../../src/app/services/project_checks.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
-// QA não tem gate de conclusão: os testes genéricos de fluxo usam essa action.
-const body = { project: "app", type: "Feat" as const, action: "QA", problem: "p", actor: "human" as const };
+// Review não tem gate de conclusão: os testes genéricos de fluxo usam essa action.
+const body = { project: "app", type: "Feat" as const, action: "Review", problem: "p", actor: "human" as const };
 const longText = Array(301).fill("x").join(" ");
 
 const root = () => {
@@ -118,7 +118,7 @@ test("next --id reivindica a Issue específica; inexistente lança NotFound", ()
 
 test("ciclo AFK: IA reivindica, entrega evidência e fecha direto", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "afk", artifact: "# qa ok" }, dir); // body é QA: satisfaz o gate
+  const issue = createIssue({ ...body, title: "afk", artifact: "# qa ok" }, dir); // body é Review: satisfaz o gate
   nextIssue({ agent: "pi", project: "app" }, dir);
   await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito: passos e decisões", closed_reason: "concluido" }, dir);
   assert.equal(getIssue(issue.id, dir).status, "CLOSED");
@@ -209,16 +209,16 @@ test("gate Implement: falha de mutation orienta reforçar os testes, não o cód
   );
 });
 
-test("gate QA: sem o artefato de validação a IA não conclui a Issue", async () => {
+test("gate Review: sem o artefato de validação a IA não conclui a Issue", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "qa", action: "QA" }, dir);
+  const issue = createIssue({ ...body, title: "qa", action: "Review" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
   await assert.rejects(
     statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
     /sem o artefato de validação.*issues artifact/,
   );
   assert.equal(getIssue(issue.id, dir).status, "CLAIMED"); // nada foi aplicado
-  setArtifact({ issueId: issue.id, content: "# QA\nrequisito × comportamento: ok" }, dir);
+  setArtifact({ issueId: issue.id, content: "# Review\nrequisito × comportamento: ok" }, dir);
   await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir);
   assert.equal(getIssue(issue.id, dir).status, "CLOSED");
 });
@@ -251,7 +251,7 @@ test("gate Deploy: AWAITING exige link http(s) de PR e análise; só o decide hu
 
 test("status pela IA só aceita AWAITING ou CLOSED com reason", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "gate", artifact: "# qa ok" }, dir); // gate QA satisfeito
+  const issue = createIssue({ ...body, title: "gate", artifact: "# qa ok" }, dir); // gate Review satisfeito
   nextIssue({ agent: "pi", project: "app" }, dir);
   await assert.rejects(
     statusIssue({ id: issue.id, agent: "pi", status: "OPEN", comment: "x" }, dir),
@@ -389,7 +389,7 @@ test("summary do quadro traz action, status_changed_at, tags e relates", () => {
   const parent = createIssue({ ...body, title: "parent", now: new Date("2026-01-01") }, dir);
   const issue = createIssue({ ...body, title: "board", complexity: "ALTA", relates: [parent.id], now: new Date("2026-01-02") }, dir);
   const card = listIssues({ project: "app", title: "board" }, dir)[0];
-  assert.equal(card.action, "QA");
+  assert.equal(card.action, "Review");
   assert.equal(card.status_changed_at, getIssue(issue.id, dir).status_changed_at);
   assert.deepEqual(card.tags, { complexity: "ALTA" });
   assert.deepEqual(card.relates, [parent.id]);

@@ -19,8 +19,8 @@ package "Implement (N por Design)" {
   [Small Plan\n+ worktree + TDD] as I3
 }
 
-package "QA" {
-  [valida o conjunto\nentregue] as QAc
+package "Review" {
+  [valida o conjunto\nentregue] as REVc
 }
 
 package "Deploy" {
@@ -34,8 +34,8 @@ D1 --> I2 : child
 D2 --> I3 : child
 I1 ..> I2 : see-also (sequencial)
 I2 ..> I3 : see-also
-I3 --> QAc
-QAc --> DEP
+I3 --> REVc
+REVc --> DEP
 
 note right of P
   decomposeIssue faz o fan-out:

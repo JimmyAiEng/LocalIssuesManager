@@ -4,14 +4,14 @@ import { DomainError } from "./domain_error.js";
 export const AGENT_IDS = ["cursor", "claude-code", "codex", "pi"] as const;
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"] as const;
 export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"] as const;
-export const ACTION_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy"] as const;
+export const ACTION_TYPES = ["Planning", "Design", "Implement", "Review", "Deploy"] as const;
 export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "CLOSED"] as const;
 // Linhagem direcionada entre Issues: parent/child expressam o fan-out Planning→Design→Implement
 // (ancestral↔descendente); see-also é a relação simétrica sem direção (o default retrocompatível).
 export const RELATION_KINDS = ["parent", "child", "see-also"] as const;
 // Papel especializado do workflow que uma entrada da thread representa. Ortogonal ao AgentId
 // (que identifica o harness): rastreia QUEM fez o trabalho, para auditar e rotear retrabalho.
-export const ROLES = ["requirement", "breaking-issues", "architect", "test-coding", "coding", "quality-review", "pr-analysis"] as const;
+export const ROLES = ["requirement", "breaking-issues", "architect", "test-coding", "coding", "review", "pr-analysis"] as const;
 
 export type AgentId = (typeof AGENT_IDS)[number];
 export type ClosedReason = (typeof CLOSED_REASONS)[number];

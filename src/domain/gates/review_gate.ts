@@ -1,7 +1,7 @@
 import type { GateDefinition } from "./gate.js";
 
-export const QA_GATE: GateDefinition = {
-  action: "QA",
+export const REVIEW_GATE: GateDefinition = {
+  action: "Review",
   name: "Quality Review",
   artifacts: { mode: "required", types: ["document"] },
   codeExecution: { mode: "none" },

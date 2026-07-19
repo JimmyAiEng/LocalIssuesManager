@@ -1,6 +1,6 @@
 export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "CLOSED"];
 export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"];
-export const ACTION_TYPES = ["Planning", "Design", "Implement", "QA", "Deploy"];
+export const ACTION_TYPES = ["Planning", "Design", "Implement", "Review", "Deploy"];
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"];
 export const TAG_VALUES = { complexity: ["BAIXA", "MEDIA", "ALTA"], human_need: ["HITL", "AFK"], risk: ["BAIXO", "MEDIO", "ALTO"] };
 

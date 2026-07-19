@@ -22,11 +22,11 @@ test("VOs aceitam somente os enums exatos", () => {
 
 test("enums carregam exatamente os valores esperados (sem Ticket, sem ON-GOING)", () => {
   assert.deepEqual([...ISSUE_TYPES], ["Fix", "Feat", "Research", "Refactor"]);
-  assert.deepEqual([...ACTION_TYPES], ["Planning", "Design", "Implement", "QA", "Deploy"]);
+  assert.deepEqual([...ACTION_TYPES], ["Planning", "Design", "Implement", "Review", "Deploy"]);
   assert.deepEqual([...ISSUE_STATUSES], ["OPEN", "CLAIMED", "AWAITING", "CLOSED"]);
   assert.throws(() => parseIssueStatus("ON-GOING"), /Invalid status: ON-GOING/);
   // Role (papel do workflow) é ortogonal ao AgentId (harness): rastreia QUEM fez o trabalho.
-  assert.deepEqual([...ROLES], ["requirement", "breaking-issues", "architect", "test-coding", "coding", "quality-review", "pr-analysis"]);
+  assert.deepEqual([...ROLES], ["requirement", "breaking-issues", "architect", "test-coding", "coding", "review", "pr-analysis"]);
 });
 
 test("VOs identificam o enum inválido nas mensagens de domínio", () => {

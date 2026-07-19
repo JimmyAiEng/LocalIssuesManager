@@ -10,7 +10,7 @@ import { startWebServer, type WebServer } from "../../src/web/server.js";
 
 // Cobertura de rota x erro complementar ao api.test.ts (happy paths): 400/404 e a
 // justificativa para o único 409 do domínio (Stale Issue save em queue_repository.ts).
-const input = { title: "Web issue", project: "web", type: "Fix", action: "QA", problem: "p" };
+const input = { title: "Web issue", project: "web", type: "Fix", action: "Review", problem: "p" };
 
 test("API 400: corpo não-JSON, JSON não-objeto (array/null) e corpo maior que 64MB", async () => withWeb(async (url) => {
   const naoJson = await raw(url, "POST", "/api/issues", "isto não é json");
@@ -27,7 +27,7 @@ test("API 400: corpo não-JSON, JSON não-objeto (array/null) e corpo maior que 
 }));
 
 test("API 400: campo string obrigatório ausente ou com tipo errado", async () => withWeb(async (url) => {
-  assert.equal((await request(url, "POST", "/api/issues", { project: "web", type: "Fix", action: "QA", problem: "p" })).status, 400); // sem title
+  assert.equal((await request(url, "POST", "/api/issues", { project: "web", type: "Fix", action: "Review", problem: "p" })).status, 400); // sem title
   assert.equal((await request(url, "POST", "/api/issues", { ...input, title: 123 })).status, 400); // title não-string
   assert.equal((await request(url, "POST", "/api/issues", { title: "x", project: "web", type: "Fix", problem: "p" })).status, 400); // sem action
   const id = (await request(url, "POST", "/api/issues", input)).body.id as string;

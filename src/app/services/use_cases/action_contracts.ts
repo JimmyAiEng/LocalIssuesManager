@@ -52,7 +52,7 @@ Grave as entregas nesta ordem (comandos prontos para esta Issue):
    issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<o que foi implementado e como validou>" --reason concluido
    (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING, sem --reason.)`,
 
-  QA: `Fluxo desta Issue (comandos prontos):
+  Review: `Fluxo desta Issue (comandos prontos):
 
 1. Rode o produto e confronte cada requisito/critério com o comportamento observado (rodar > ler).
 2. Problema grave vira nova Issue relacionada:

@@ -15,7 +15,7 @@ package "Aplicação" {
   [Planning workflow] as PLAN
   [Design workflow] as DESIGN
   [Implement workflow] as IMPLEMENT
-  [QA workflow] as QA
+  [Review workflow] as REVIEW
   [Deploy workflow] as DEPLOY
   [PlantUML / Git / checks] as EFFECTS
 }
@@ -45,7 +45,7 @@ IUC --> COMPLETE : conclusão por IA
 COMPLETE --> PLAN
 COMPLETE --> DESIGN
 COMPLETE --> IMPLEMENT
-COMPLETE --> QA
+COMPLETE --> REVIEW
 COMPLETE --> DEPLOY
 COMPLETE --> GATES
 COMPLETE --> POLICY

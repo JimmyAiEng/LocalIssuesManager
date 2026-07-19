@@ -32,12 +32,12 @@ test("dispatcher preserva DesignGateError estruturado", async () => {
     (error: unknown) => error instanceof DesignGateError && error.errors[0]?.code === "decision_required");
 });
 
-test("QA exige doc próprio, revalida corrupção e depois aprova", async () => {
-  const { queue, issue } = context("QA");
+test("Review exige doc próprio, revalida corrupção e depois aprova", async () => {
+  const { queue, issue } = context("Review");
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /sem o artefato/);
   queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, Array(301).fill("x").join(" "));
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /limite 300/);
-  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "# QA");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "# Review");
   await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
 });
 
@@ -49,8 +49,8 @@ test("Deploy força humano antes de validar evidência", async () => {
 });
 
 test("GatePolicy impede CLOSED com supervisão e permite AWAITING", async () => {
-  const { queue, issue } = context("QA");
-  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "# QA");
+  const { queue, issue } = context("Review");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "# Review");
   issue.tag({ risk: "ALTO" }, "human");
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /decisão humana/);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
@@ -83,10 +83,10 @@ test("abandono não afrouxa o gate de entrega nem a decisão humana", async () =
 });
 
 test("fechamento humano concluido exige entrega; cancelamento preserva override", async () => {
-  const concluded = context("QA");
+  const concluded = context("Review");
   await assert.rejects(statusIssue({ id: concluded.issue.id, human: true, status: "CLOSED",
     comment: "feito", closed_reason: "concluido" }, concluded.root), /sem o artefato/);
-  const obsolete = context("QA");
+  const obsolete = context("Review");
   const closed = await statusIssue({ id: obsolete.issue.id, human: true, status: "CLOSED",
     comment: "cancelada", closed_reason: "obsoleto" }, obsolete.root);
   assert.equal(closed.status, "CLOSED");

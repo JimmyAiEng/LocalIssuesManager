@@ -51,7 +51,7 @@ O `--repo` aponta o repositório git (base das worktrees); o `--check` é o scri
 |--------|-------------|
 | Status | `OPEN` · `CLAIMED` · `AWAITING` · `CLOSED` |
 | Tipo (imutável) | `Fix` · `Feat` · `Research` · `Refactor` |
-| Action (imutável) | `Planning` · `Design` · `Implement` · `QA` · `Deploy` |
+| Action (imutável) | `Planning` · `Design` · `Implement` · `Review` · `Deploy` |
 | Relates | ids de outras Issues (linhagem; artefatos herdados no prompt) |
 
 ### Outros
@@ -121,7 +121,7 @@ A IA só conclui (`AWAITING`/`CLOSED`) se a entrega da action existir:
 | `Planning` | Requisitos válidos em JSONL (`issues requirements set`), máx. 5 Features + as filhas `Design` **particionando** as Features (`issues decompose`, cada filha declarando em `features` os nomes que cobre): toda Feature em exatamente uma filha |
 | `Design` | Decisão de arquitetura (`issues design changed`) + plano válido (`issues plan set`) + **≥1 filha `Implement`** (`issues decompose`). Com `architecture_changed=true`: também `design.md` + os 4 níveis em PlantUML válido, e só fecha por decisão humana |
 | `Implement` | Worktree criada (`issues worktree add`) + checks do projeto passando na worktree (+ ordem TDD, se `--test-paths`) |
-| `QA` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
+| `Review` | Artefato .md da validação requisito×comportamento (`issues artifact`) |
 | `Deploy` | Só `AWAITING`: link http(s) do PR + resultado da análise na thread; fecha via `decide` humano |
 
 Abandono (`--reason obsoleto`, `duplicado` ou `errado`) **pula o gate** da action: a Issue abandonada não tem entrega a cobrar.

@@ -1,4 +1,4 @@
-# Action `QA`
+# Action `Review`
 
 Validar o conjunto entregue (≠ review de Implement).
 
@@ -18,7 +18,7 @@ Se encontrar problema grave, crie uma nova Issue (`Design` ou `Implement`) relac
 
 ## Heurísticas
 
-- **Não** trate isto como o review interno de Implement; QA valida o conjunto.
+- **Não** trate isto como o review interno de Implement; a action Review valida o conjunto.
 - Preferir **outro** harness/modelo que o da implementação — recomendado, não obrigatório.
 - **Como** validar (perspectivas, ferramentas, cobertura) é decisão do agente.
 

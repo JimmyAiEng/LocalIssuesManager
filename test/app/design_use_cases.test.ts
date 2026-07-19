@@ -72,7 +72,7 @@ test("setDesignDoc rejeita Issue inexistente, non-Design e CLOSED", async () => 
   const doc = file(dir, "d.md", "# Design");
   assert.throws(() => setDesignDoc({ issueId: "nope", file: doc }, dir), /Issue not found/);
 
-  const qa = createIssue({ title: "qa", project: "app", type: "Feat", action: "QA", problem: "p", actor: "pi" }, dir);
+  const qa = createIssue({ title: "qa", project: "app", type: "Feat", action: "Review", problem: "p", actor: "pi" }, dir);
   assert.throws(() => setDesignDoc({ issueId: qa.id, file: doc }, dir), /não é de Design/);
 
   const closedId = designIssue(dir);

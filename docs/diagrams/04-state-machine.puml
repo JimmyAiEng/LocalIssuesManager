@@ -20,7 +20,7 @@ state CLAIMED {
   note as N1
     Só o owner muda o status.
     A conclusão roda o gate da action
-    (Planning/Design/Implement/QA/Deploy).
+    (Planning/Design/Implement/Review/Deploy).
   end note
 }
 

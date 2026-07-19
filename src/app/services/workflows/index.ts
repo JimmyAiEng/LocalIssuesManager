@@ -1,7 +1,7 @@
 import { DomainError } from "../../../domain/domain_error.js";
 import { assessGate, gateFor, type GateViolation } from "../../../domain/gates/index.js";
 import type { Issue } from "../../../domain/issue_entity.js";
-import type { Queue } from "../../../domain/queue_repository.js";
+import type { ConcernLevel, Queue } from "../../../domain/queue_repository.js";
 import { parseAgentId, parseClosedReason, parseRole } from "../../../domain/value_objects.js";
 import { validateDeploy } from "./deploy.js";
 import { validateDesign } from "./design.js";
@@ -55,8 +55,9 @@ export async function completeIssue(queue: Queue, issue: Issue, status: Completi
     if (preliminary.outcome === "rejected") await rejectInvalidDelivery(queue, issue, comment, preliminary.violations);
     await validateWorkflowDelivery(queue, issue, comment);
   }
-  const assessment = assessGate(issue.tags, { forceHuman: forcedHumanReason(issue) });
-  if (status === "CLOSED" && assessment.outcome === "human-required") rejectHumanRequired(issue);
+  const concern = queue.readProject(issue.project)?.concern ?? "LOW";
+  const assessment = assessGate(issue.tags, { forceHuman: forcedHumanReason(issue, concern) });
+  if (status === "CLOSED" && assessment.outcome === "human-required") rejectHumanRequired(issue, concern);
 }
 
 export async function validateWorkflowDelivery(queue: Queue, issue: Issue, comment: string): Promise<void> {
@@ -73,9 +74,13 @@ function missingArtifacts(queue: Queue, issue: Issue): GateViolation[] {
     .map((type) => ({ code: "missing_artifact", message: `Artifact obrigatório ausente: ${type}` }));
 }
 
-function forcedHumanReason(issue: Issue): string | undefined {
+// Piso de supervisão do concern do Projeto: em HIGH, Planning e Design nunca fecham por agente
+// (só por AWAITING/decisão humana). LOW e demais actions ficam com a regra base (required / arch).
+function forcedHumanReason(issue: Issue, concern: ConcernLevel): string | undefined {
   if (gateFor(issue.action).humanApproval.mode === "required") return issue.action.toLowerCase();
-  return issue.action === "Design" && issue.architecture_changed ? "architecture_changed" : undefined;
+  if (issue.action === "Design" && issue.architecture_changed) return "architecture_changed";
+  if (concern === "HIGH" && (issue.action === "Planning" || issue.action === "Design")) return "concern=HIGH";
+  return undefined;
 }
 
 async function rejectInvalidDelivery(queue: Queue, issue: Issue, comment: string,
@@ -88,9 +93,12 @@ function rejectDeployClose(): never {
   throw new DomainError("Issue Deploy não fecha por agente: envie para decisão humana com --status AWAITING; o go/no-go do deploy é do humano (decide no web)");
 }
 
-function rejectHumanRequired(issue: Issue): never {
+function rejectHumanRequired(issue: Issue, concern: ConcernLevel): never {
   if (issue.action === "Design" && issue.architecture_changed) {
     throw new DomainError("Issue Design com mudança de arquitetura não fecha por agente: envie para decisão humana com --status AWAITING (o aceite do Design é humano — decide no web)");
+  }
+  if (concern === "HIGH" && (issue.action === "Planning" || issue.action === "Design")) {
+    throw new DomainError(`Issue ${issue.action} em projeto de concern HIGH não fecha por agente: envie para decisão humana com --status AWAITING (HIGH exige aceite humano de Planning e Design — decide no web)`);
   }
   throw new DomainError("Issue exige decisão humana (HITL, risco ALTO ou complexidade ALTA): envie a evidência com status AWAITING e deixe o humano decidir no web");
 }

@@ -1,46 +1,38 @@
 # Action `Implement` (Unit of Work)
 
-Entregar fatia funcional via TDD numa worktree, com o check do projeto passando.
+Entregar uma fatia funcional/integrável conforme a spec, com validação feita pelas ferramentas do próprio repositório.
 
-Seu objetivo é entregar uma fatia **funcional/integrável** conforme a spec (veja os artefatos das Issues relacionadas no prompt), com testes.
+Seu objetivo é entregar uma fatia **funcional/integrável** conforme a spec (veja os artefatos das Issues relacionadas no prompt), validada.
+O issue-manager **orquestra** o trabalho: ele não cria worktree, não força TDD e não roda check nenhum por você.
+O **como** implementar (worktree, desenho do teste, ferramentas) é decisão do agente.
 
 ## Fluxo da Unit of Work
 
-1. **Worktree primeiro**: `issues worktree add --id <id>` — o trabalho acontece isolado no repo do projeto; sem worktree a Issue não fecha.
-2. **Test Coding (TDD)**: escreva primeiro os testes que provam a fatia, a partir da spec e dos critérios de aceitação. Rode-os; devem falhar.
-3. **Coding**: implemente até os testes passarem.
-4. **Pipeline de validação** com as ferramentas que o próprio repositório define (lint, testes, fitness, e2e, mutação na parte alterada).
-5. **Review interno** da fatia; achados viram novos testes/código.
+1. **Isole o trabalho (recomendado)**: trabalhe numa worktree/branch própria do repo do projeto — `git worktree add ../<fatia> -b issue/<id>`.
+   É orientação, não obrigação: o CLI não cria a worktree nem exige uma para concluir.
+2. **Implemente a fatia** até ela ficar funcional e integrável conforme a spec.
+   Escrever os testes antes (TDD) é uma boa prática, mas ninguém a força aqui.
+3. **Valide com as ferramentas do próprio repositório** (lint, testes, fitness, build, e2e, mutação na parte alterada — o que o repo oferecer).
+   O CLI não executa nada disso: rode você mesmo e guarde o resultado para a evidência.
+4. **Review interno** da fatia; achados viram novos testes/código.
 
 ## Gate de conclusão
 
-Ao concluir (`AWAITING` ou `CLOSED`), o sistema roda **sozinho** o check configurado do projeto (`issues project create --check <cmd>`) dentro da worktree.
-Se o check falhar, a Issue **não conclui**: o erro traz o rabo da saída — corrija na worktree e tente de novo.
-
-### Enforcement de TDD (opt-in por `--test-paths`)
-
-Quando o projeto define os paths de teste (`issues project create --test-paths "test/,**/*.test.ts"`), o gate inspeciona o histórico git da worktree (`git log --name-only` desde o ponto de fork, via `merge-base`) e **exige a ordem TDD**: o primeiro commit que toca código de produção precisa ser precedido, cronologicamente, por ao menos um commit **só-de-testes**.
-Um primeiro commit que mistura produção e teste **viola** (não foi precedido por testes) e a mensagem de erro cita o SHA/assunto do commit infrator.
-"Arquivo de produção" é todo arquivo tocado que **não** casa com `--test-paths`; "commit só-de-testes" é aquele cujos arquivos casam todos.
-Worktree sem commits novos (nenhum código de produção tocado desde o fork) **passa** — o enforcement só dispara quando há commit de produção.
-Projeto sem `--test-paths` mantém o comportamento anterior (nenhuma verificação de histórico).
-
-Quando o projeto define `--container <imagem>`, cada check roda isolado no Docker (`docker run --rm -v <worktree>:/work -w /work <imagem> sh -c <cmd>`), montando a worktree em `/work`.
-A imagem precisa trazer o toolchain do projeto (Node, gerenciador de pacotes, ferramentas de lint/teste/mutação), pois nada do host é herdado.
-Sem `--container`, o check roda no host (comportamento legado).
-Docker indisponível com `--container` configurado gera erro explícito na conclusão — não há fallback silencioso para o host.
+Esta action não tem artefato obrigatório e o CLI não executa código: o gate cobra apenas a **evidência** da conclusão.
+A evidência (`--comment`) é um relatório curto do que foi implementado, o que você rodou para validar e o resultado.
+Sem worktree, sem check automático, sem verificação de histórico TDD — nada disso bloqueia o fechamento; a qualidade da fatia é sua responsabilidade e será cobrada na Review do conjunto.
 
 ## Heurísticas
 
 - Fatia grande → crie Issues `Implement` de continuação, relacionadas, e abandone esta (`--reason obsoleto`).
 - Review interno **não** substitui uma Issue `Review` para o conjunto.
-- **Como** implementar (ferramentas, desenho do teste) é decisão do agente.
+- **Como** implementar (ferramentas, desenho do teste, uso de worktree) é decisão do agente.
 
 ## Encerramento
 
 ```bash
 issues status --id <id> --agent <ia> --status CLOSED \
-  --comment "<evidência: o que foi implementado, passos, decisões>" --reason concluido
+  --comment "<evidência: o que foi implementado, como validou, decisões>" --reason concluido
 ```
 
 Use `--status AWAITING` (sem `--reason`) se a Issue é HITL, `risk=ALTO` ou `complexity=ALTA`.

@@ -42,7 +42,7 @@ Comentário obrigatório da conclusão pela IA (`AWAITING`/`CLOSED`): relatório
 _Avoid_: resumo opcional, changelog
 
 **Projeto**:
-Registro obrigatório (`project.json`) com nome, repositório git local e o script de validação (`check`) das Issues Implement. Issues só nascem em projeto registrado.
+Registro obrigatório (`project.json`) com nome e repositório git local. Issues só nascem em projeto registrado; o repositório viaja no prompt do agente, o CLI não invoca git nem executa checks.
 _Avoid_: Workspace, namespace
 
 **TAG**:
@@ -105,17 +105,14 @@ _Avoid_: Priority queue, backlog ranking
 Repositório concreto de Issues no domínio: persiste no filesystem (JSON por Issue + project.json), lista e seleciona o próximo trabalho. Não é Port/interface.
 _Avoid_: IssueStore, FifoQueue, IssueRepository, FsQueueRepository
 
-**Worktree**:
-Sandbox git da Issue no repositório do Projeto; obrigatória para concluir uma Issue Implement.
-_Avoid_: branch (sozinho), clone
-
 **Unit of Work**:
-Uma execução do Workflow de Implement: um agente levando a fatia até o check do Projeto passar, dentro de uma Worktree isolada.
+Uma execução do Workflow de Implement: um agente levando a fatia funcional à conclusão, validada com as ferramentas do próprio repositório (o CLI não executa checks).
 Não é a Issue — uma Issue devolvida por Reset e reivindicada de novo origina uma nova Unit of Work.
 _Avoid_: Ticket, task, card, tentativa, run
 
 **Issue Receipt**:
-Início de uma Unit of Work: o agente reivindica a Issue Implement, recebe o contexto herdado da linhagem e abre a Worktree.
+Início de uma Unit of Work: o agente reivindica a Issue Implement e recebe o contexto herdado da linhagem.
+Trabalhar numa worktree/branch isolada do repositório é orientação recomendada (`git worktree add`), não uma exigência do CLI.
 _Avoid_: Ticket Receipt, pickup, checkout
 
 **--human**:

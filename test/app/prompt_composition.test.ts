@@ -48,7 +48,9 @@ test("cada action recebe o seu contrato: entrega própria + rota de abandono (De
   contains("Planning", '{"feature": "Login", "como": "um usuário", "quero": "entrar", "para": "acessar o painel", "scenarios": [{"nome": "ok", "steps": ["Given a tela de login", "When envio credenciais válidas", "Then vejo o painel"]}]}');
   contains("Design", "issues design changed --issue");
   contains("Design", "issues plan set --id");
-  contains("Implement", "issues worktree add --id");
+  contains("Implement", "git worktree add");
+  // O wrapper `issues worktree` foi removido: o contrato Implement não pode ressuscitá-lo.
+  assert.ok(!composePrompt(makeView("Implement")).includes("issues worktree"), "Implement não instrui o wrapper removido issues worktree");
   contains("Review", "APROVADO | APROVADO com ressalva | REPROVADO");
   const deploy = composePrompt(makeView("Deploy"));
   assert.match(deploy, /--status AWAITING --comment "PR: /);

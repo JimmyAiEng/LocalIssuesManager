@@ -22,7 +22,7 @@ const CONTRACTS: Record<ActionType, string> = {
    issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<o que foi alinhado e decidido>" --reason concluido
    (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING, sem --reason.)`,
 
-  Design: `Não escreva código de produção nesta Issue: implementar é trabalho das filhas Implement, que rodam em worktree, com TDD e o check do projeto. Código escrito aqui não passa por nenhum dos três.
+  Design: `Não escreva código de produção nesta Issue: implementar é trabalho das filhas Implement. Código escrito aqui fica fora da fatia que será implementada, validada e revisada — é esforço perdido.
 
 Grave as entregas nesta ordem (comandos prontos para esta Issue):
 
@@ -45,10 +45,9 @@ Grave as entregas nesta ordem (comandos prontos para esta Issue):
 
   Implement: `Fluxo desta Issue (comandos prontos):
 
-1. Worktree antes de qualquer código (sem ela a Issue não fecha):
-   issues worktree add --id {{id}}
-2. TDD dentro da worktree: primeiro um commit só com os testes falhando, depois os commits de produção até os testes passarem.
-3. Encerramento com evidência (o check do projeto roda sozinho na worktree; se falhar, corrija e repita):
+1. Trabalhe isolado numa worktree do repo (recomendado, não obrigatório; o CLI não a cria nem cobra): git worktree add ../<fatia> -b issue/{{id}}. A orientação completa está em phases/implement.md.
+2. Implemente a fatia e valide-a com as ferramentas do próprio repositório (lint, testes, build); o CLI não roda check algum.
+3. Encerramento com evidência — é ela que conclui, descrevendo o que rodou e o resultado:
    issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<o que foi implementado e como validou>" --reason concluido
    (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING, sem --reason.)`,
 

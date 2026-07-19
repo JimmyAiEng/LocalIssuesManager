@@ -14,7 +14,7 @@ const run = (args: string[], vars: NodeJS.ProcessEnv): string => execFileSync(bi
 const attempt = (args: string[], vars: NodeJS.ProcessEnv) => spawnSync(bin, args, { env: vars, encoding: "utf8" });
 const json = (args: string[], vars: NodeJS.ProcessEnv) => JSON.parse(run(args, vars));
 
-// Repo git real: base das worktrees dos Implement (mesmo padrão de tdd_gate.test.ts).
+// Repo git real: o campo `repo` do projeto aponta para ele (vai no prompt do agente).
 function gitRepo(): string {
   const repo = mkdtempSync(join(tmpdir(), "wf-repo-"));
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });

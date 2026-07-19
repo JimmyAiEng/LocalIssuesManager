@@ -101,14 +101,11 @@ test("infos da Issue presentes, incluindo id para os comandos", () => {
   }
 });
 
-test("artefato da Issue e worktree aparecem quando existem; ausentes, nada", () => {
+test("artefato da Issue aparece quando existe; ausente, nada", () => {
   const bare = composePrompt(makeView());
   assert.doesNotMatch(bare, /## Artefato/);
-  assert.doesNotMatch(bare, /- Worktree:/);
-  const full = composePrompt(makeView("Implement", { artifact: "# contexto explorado",
-    worktree: { path: "/tmp/wt", branch: "issue/ab" } }));
+  const full = composePrompt(makeView("Implement", { artifact: "# contexto explorado" }));
   assert.match(full, /## Artefato da Issue\n# contexto explorado/);
-  assert.match(full, /- Worktree: \/tmp\/wt \(branch issue\/ab\)/);
 });
 
 test("linhagem: artefatos das relacionadas viajam no prompt; sem artefato, marcado", () => {

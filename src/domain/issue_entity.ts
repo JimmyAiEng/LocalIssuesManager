@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { MediaArtifactData } from "./artifacts/media_artifact.js";
 import { DomainError } from "./domain_error.js";
-import { applyTags, assertBrief, assertDecision, assertNoDowngrade, normalizeRelations, required, threadEntry, type ActionType, type Actor, type AgentId, type ClosedReason, type Decision, type IssueStatus, type IssueType, type Relation, type Role, type Tags, type TagUpdates, type Thread, type Worktree } from "./value_objects.js";
+import { applyTags, assertBrief, assertDecision, assertNoDowngrade, normalizeRelations, required, threadEntry, type ActionType, type Actor, type AgentId, type ClosedReason, type Decision, type IssueStatus, type IssueType, type Relation, type Role, type Tags, type TagUpdates, type Thread } from "./value_objects.js";
 
 export type Phase = { status: IssueStatus; timestamp: string };
 export type CreateIssue = {
@@ -13,7 +13,7 @@ export type IssueData = {
   problem: string; acceptance_criteria: string; status: IssueStatus; owner: Actor | null;
   closed_reason: ClosedReason | null; claimed_at: string | null; created_at: string;
   status_changed_at: string; thread: Thread[]; phases: Phase[]; relates: Relation[];
-  revision: number; tags: Tags; worktree: Worktree | null; architecture_changed: boolean | null;
+  revision: number; tags: Tags; architecture_changed: boolean | null;
 };
 
 // Uma Issue é a unidade de trabalho: type diz o problema (Fix/Feat/Research/Refactor) e
@@ -24,13 +24,12 @@ export class Issue implements IssueData {
   problem!: string; acceptance_criteria!: string; status!: IssueStatus; owner!: Actor | null;
   closed_reason!: ClosedReason | null; claimed_at!: string | null; created_at!: string;
   status_changed_at!: string; thread!: Thread[]; phases!: Phase[]; relates!: Relation[];
-  revision!: number; tags!: Tags; worktree!: Worktree | null; architecture_changed!: boolean | null; baseRevision!: number;
+  revision!: number; tags!: Tags; architecture_changed!: boolean | null; baseRevision!: number;
 
   private constructor(data: IssueData) {
     Object.assign(this, data);
     this.tags = data.tags ?? {};
     this.relates = normalizeRelations(data.relates); // JSON antigo (string[]) carrega como see-also
-    this.worktree = data.worktree ?? null;
     this.architecture_changed = data.architecture_changed ?? null; // null = decisão de arquitetura ainda não tomada
     this.baseRevision = data.revision;
   }
@@ -50,7 +49,7 @@ export class Issue implements IssueData {
     return { ...fields, acceptance_criteria: input.acceptance_criteria ?? "",
       id: randomUUID(), status: "OPEN", owner: null, closed_reason: null, claimed_at: null,
       created_at: timestamp, status_changed_at: timestamp, thread: [entry],
-      phases: [{ status: "OPEN", timestamp }], relates: normalizeRelations(relates), revision: 0, tags: {}, worktree: null, architecture_changed: null };
+      phases: [{ status: "OPEN", timestamp }], relates: normalizeRelations(relates), revision: 0, tags: {}, architecture_changed: null };
   }
 
   static fromJSON(data: IssueData): Issue {
@@ -87,7 +86,7 @@ export class Issue implements IssueData {
   // Liga esta Issue a outras (linhagem direcionada): quem reivindica uma Issue enxerga os
   // artefatos das relacionadas. A existência dos ids e o par recíproco (parent↔child na Issue
   // alvo) são responsabilidade da camada de aplicação. Um id já ligado não muda de kind.
-  // Sem guarda de CLOSED (diferente de comment/tag/setWorktree): a linhagem continua gravável
+  // Sem guarda de CLOSED (diferente de comment/tag): a linhagem continua gravável
   // após o fechamento — adotar um filho num pai já CLOSED grava o par recíproco. Conteúdo segue
   // imutável; relate só acrescenta relações, nunca altera o que foi entregue.
   relate(relations: Relation[]): void {
@@ -136,22 +135,9 @@ export class Issue implements IssueData {
     this.#transition("OPEN", "human", comment, null, now, attachments);
   }
 
-  // Registra a worktree git da Issue (obrigatória para concluir uma Issue Implement).
-  setWorktree(worktree: Worktree): void {
-    if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
-    this.worktree = worktree;
-    this.#bumpRevision();
-  }
-
-  // Limpeza da worktree (após CLOSED, decisão humana); permitido em qualquer status.
-  clearWorktree(): void {
-    this.worktree = null;
-    this.#bumpRevision();
-  }
-
   // Decisão de arquitetura da Issue Design: se a arquitetura muda, o gate exige os 4 níveis
   // de diagramas e aceite humano; se não, dispensa diagramas (atalho ao plano). O guard de
-  // action=Design fica na camada de aplicação (como setWorktree/setPlan).
+  // action=Design fica na camada de aplicação (como setPlan).
   setArchitectureChanged(value: boolean): void {
     if (this.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
     this.architecture_changed = value;

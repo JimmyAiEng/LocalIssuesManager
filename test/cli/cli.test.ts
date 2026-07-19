@@ -318,7 +318,7 @@ const inprocRoot = async () => {
   return root;
 };
 
-test("in-process: main() cobre project/worktree/requirements/relate fora do execute() principal", async () => {
+test("in-process: main() cobre project/requirements/relate fora do execute() principal", async () => {
   const root = await inprocRoot();
   await withIssuesRoot(root, async () => {
     const created = JSON.parse((await captureMain(createArgs)).stdout);
@@ -328,17 +328,6 @@ test("in-process: main() cobre project/worktree/requirements/relate fora do exec
     const other = JSON.parse((await captureMain(createArgs)).stdout);
     const related = JSON.parse((await captureMain(["relate", "--id", created.id, "--relates", other.id])).stdout);
     assert.deepEqual(related.relates, [{ id: other.id, kind: "see-also" }]); // relate() default see-also
-
-    const repo = mkdtempSync(join(tmpdir(), "issues-inproc-repo-"));
-    execFileSync("git", ["init", "-b", "main"], { cwd: repo });
-    execFileSync("git", ["config", "user.email", "t@t"], { cwd: repo });
-    execFileSync("git", ["config", "user.name", "t"], { cwd: repo });
-    execFileSync("git", ["commit", "--allow-empty", "-m", "init"], { cwd: repo });
-    await captureMain(["project", "create", "--name", "demo", "--repo", repo]); // upsert: aponta o repo git
-    const added = JSON.parse((await captureMain(["worktree", "add", "--id", created.id])).stdout);
-    assert.ok(added.worktree); // runWorktree() -> worktree("add"), repo vindo do project.json
-    const removed = JSON.parse((await captureMain(["worktree", "remove", "--id", created.id])).stdout);
-    assert.equal(removed.worktree, null); // worktree("remove")
 
     const reqIssue = JSON.parse((await captureMain(["create", "--title", "req", "--project", "demo",
       "--type", "Feat", "--action", "Planning", "--problem", "p", "--agent", "pi"])).stdout);
@@ -351,8 +340,6 @@ test("in-process: main() cobre project/worktree/requirements/relate fora do exec
     const reqs = await captureMain(["get", "--id", reqIssue.id, "--target", "REQUIREMENTS"]);
     assert.equal(JSON.parse(reqs.stdout).features.length, 1); // get() branch --target REQUIREMENTS
 
-    const badWorktree = await captureMain(["worktree", "bogus", "--id", created.id]);
-    assert.match(badWorktree.stderr, /Usage: issues worktree/);
     const badRequirements = await captureMain(["requirements", "bogus", "--id", created.id]);
     assert.match(badRequirements.stderr, /Usage: issues requirements/);
   });

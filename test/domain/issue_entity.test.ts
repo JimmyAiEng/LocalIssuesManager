@@ -120,15 +120,13 @@ test("decide APPROVED aprova a Issue AWAITING, limpa o claim e reentra na fila s
   assert.equal(issue.claimed_at, null);
 });
 
-test("decide CLOSED fecha com motivo (abandono ou concluído); reason é obrigatório", () => {
+test("decide CLOSED só abandona (errado/duplicado/obsoleto); concluido recusado; reason obrigatório", () => {
   const abandon = awaiting();
   abandon.decide("CLOSED", "descartada", "obsoleto");
   assert.equal(abandon.status, "CLOSED");
   assert.equal(abandon.closed_reason, "obsoleto");
-  // ponytail: a recusa de `concluido` no decide (usar Aprovar) entra com a migração do caller na fatia App.
-  const done = awaiting();
-  done.decide("CLOSED", "aceito", "concluido");
-  assert.equal(done.closed_reason, "concluido");
+  // Aprovar é decidir APPROVED, não fechar concluído: o decide recusa `concluido`.
+  assert.throws(() => awaiting().decide("CLOSED", "aceito", "concluido"), /para aprovar decida APPROVED/);
   assert.throws(() => awaiting().decide("CLOSED", "x"), /Closed reason is required/);
 });
 

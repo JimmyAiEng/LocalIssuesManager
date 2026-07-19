@@ -55,6 +55,11 @@ function seedReview(queue: Queue, issue: Issue, verdict = "APROVADO revisão ok"
   queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, verdict);
 }
 
+// Handoff obrigatório ao enviar para AWAITING não-abandono.
+function seedHandoff(queue: Queue, issue: Issue): void {
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "handoff.md" }, "# handoff");
+}
+
 test("dispatcher seleciona Planning; Implement não tem gate de entrega", async () => {
   const planning = context("Planning");
   await assert.rejects(completeIssue(planning.queue, planning.issue, "CLOSED", "fim"), /sem requisitos/);
@@ -113,12 +118,35 @@ test("Deploy força humano antes de validar evidência", async () => {
   const { queue, issue } = context("Deploy");
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "https://git/pr/1 análise sonar"), /não fecha por agente/);
   await assert.rejects(completeIssue(queue, issue, "AWAITING", "sem link"), /exige evidência/);
+  seedHandoff(queue, issue);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "https://git/pr/1 análise sonar OK"));
+});
+
+// Handoff obrigatório só ao enviar para AWAITING não-abandono; Implement isola (sem gate de entrega).
+test("AWAITING exige handoff.md; com ele passa; abandono dispensa", async () => {
+  const { queue, issue } = context("Implement");
+  await assert.rejects(completeIssue(queue, issue, "AWAITING", "ev"), /handoff.*issues artifact/s);
+  seedHandoff(queue, issue);
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "ev"));
+  const aband = context("Implement");
+  await assert.doesNotReject(completeIssue(aband.queue, aband.issue, "AWAITING", "ev", true));
+});
+
+// Pós-APPROVED o humano já decidiu: a trava human-required é dispensada no fechamento, mas o gate
+// de entrega segue cobrando a entrega da action.
+test("fechamento pós-APPROVED dispensa a trava humana mas revalida o gate de entrega", async () => {
+  const { queue, issue } = context("Review");
+  issue.tag({ risk: "ALTO" }, "human"); // human-required
+  issue.submit("pi", "ev"); issue.decide("APPROVED", "ok"); issue.claim("pi"); // phases passam por APPROVED
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /sem intent\.md/); // gate ainda cobra
+  seedReview(queue, issue);
+  await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim")); // trava humana dispensada
 });
 
 test("GatePolicy impede CLOSED com supervisão e permite AWAITING", async () => {
   const { queue, issue } = context("Review");
   seedReview(queue, issue);
+  seedHandoff(queue, issue);
   issue.tag({ risk: "ALTO" }, "human");
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /decisão humana/);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
@@ -156,6 +184,7 @@ test("HIGH força AWAITING em Planning AFK: CLOSED recusado, AWAITING ok", async
   const { queue, issue } = context("Planning");
   highConcern(queue);
   seedPlanning(queue, issue);
+  seedHandoff(queue, issue);
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /concern HIGH.*--status AWAITING/s);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
 });
@@ -164,6 +193,7 @@ test("HIGH força AWAITING em Design AFK sem mudança de arquitetura: CLOSED rec
   const { queue, issue } = context("Design");
   highConcern(queue);
   seedDesign(queue, issue);
+  seedHandoff(queue, issue);
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /concern HIGH.*--status AWAITING/s);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
 });

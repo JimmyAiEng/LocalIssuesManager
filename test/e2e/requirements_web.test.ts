@@ -16,12 +16,12 @@ const cli = (args: string[], root: string): string =>
 const issueBody = { title: "Web issue", project: "web", type: "Fix", action: "Review", problem: "quebra", human_need: "HITL" };
 
 // --- CA-05: fluxo humano equivalente via API web -----------------------------
-test("CA-05: humano cria Issue HITL pela web; IA entrega evidência via CLI; humano decide AWAITING -> CLOSED", async () =>
+test("CA-05: humano cria Issue HITL pela web; IA entrega evidência via CLI; humano aprova AWAITING -> APPROVED", async () =>
   withWeb(async (url, root) => {
     const created = await request(url, "POST", "/api/issues", issueBody);
     assert.equal(created.status, 201);
     const id = created.body.id as string;
-    // IA conduz pela CLI real no mesmo store: claim + artefato de Review (gate) + evidência para AWAITING.
+    // IA conduz pela CLI real no mesmo store: claim + artefato de Review (gate) + handoff + evidência para AWAITING.
     cli(["next", "--agent", "pi", "--project", "web"], root);
     const qaDir = mkdtempSync(join(tmpdir(), "issues-qa-"));
     const qaFile = (name: string, content: string): string => { const p = join(qaDir, name); writeFileSync(p, content); return p; };
@@ -29,12 +29,14 @@ test("CA-05: humano cria Issue HITL pela web; IA entrega evidência via CLI; hum
     cli(["artifact", "--id", id, "--name", "evidence-a.md", "--file", qaFile("evidence-a.md", "# evidência a")], root);
     cli(["artifact", "--id", id, "--name", "evidence-b.md", "--file", qaFile("evidence-b.md", "# evidência b")], root);
     cli(["artifact", "--id", id, "--file", qaFile("verdict.md", "APROVADO ok")], root);
+    cli(["artifact", "--id", id, "--name", "handoff.md", "--file", qaFile("handoff.md", "# handoff")], root);
     cli(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência: relatório"], root);
     assert.equal((await request(url, "GET", `/api/issues/${id}`)).body.status, "AWAITING");
+    // O botão "aprovar" do painel ainda posta decide CLOSED+concluido; o backend mapeia p/ APPROVED (ponte até a fatia 4).
     const decided = await request(url, "POST", `/api/issues/${id}/decision`,
       { status: "CLOSED", comment: "aceito", closed_reason: "concluido" });
     assert.equal(decided.status, 200);
-    assert.equal(decided.body.status, "CLOSED");
+    assert.equal(decided.body.status, "APPROVED");
   }));
 
 test("CA-05: humano assume Issue OPEN e a reseta pela web (OPEN -> CLAIMED -> OPEN)", async () =>

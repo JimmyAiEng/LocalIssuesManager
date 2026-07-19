@@ -1,8 +1,9 @@
+import { DocumentArtifact } from "../../../domain/artifacts/document_artifact.js";
 import { DomainError } from "../../../domain/domain_error.js";
 import { assessGate, gateFor, type GateViolation } from "../../../domain/gates/index.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import type { ConcernLevel, Queue } from "../../../domain/queue_repository.js";
-import { parseAgentId, parseClosedReason, parseRole } from "../../../domain/value_objects.js";
+import { parseAgentId, parseClosedReason, parseRole, wasApproved } from "../../../domain/value_objects.js";
 import { validateDeploy } from "./deploy.js";
 import { validateDesign } from "./design.js";
 import { validatePlanning } from "./planning.js";
@@ -49,15 +50,29 @@ export async function closeByHuman(queue: Queue, issue: Issue, input: Completion
 
 export async function completeIssue(queue: Queue, issue: Issue, status: CompletionStatus,
   comment: string, abandoned = false): Promise<void> {
-  if (issue.action === "Deploy" && status === "CLOSED") return rejectDeployClose();
+  // Pós-APPROVED o humano já decidiu: dispensa as travas que forçam decisão humana (Deploy não
+  // fecha por agente; HITL/risco/arquitetura/concern), senão o agente trava em loop AWAITING→APPROVED.
+  const approved = wasApproved(issue.phases);
+  if (issue.action === "Deploy" && status === "CLOSED" && !approved) return rejectDeployClose();
   if (!abandoned) {
     const preliminary = assessGate(issue.tags, { violations: missingArtifacts(queue, issue) });
     if (preliminary.outcome === "rejected") await rejectInvalidDelivery(queue, issue, comment, preliminary.violations);
     await validateWorkflowDelivery(queue, issue, comment);
+    if (status === "AWAITING") requireHandoff(queue, issue);
   }
   const concern = queue.readProject(issue.project)?.concern ?? "LOW";
   const assessment = assessGate(issue.tags, { forceHuman: forcedHumanReason(issue, concern) });
-  if (status === "CLOSED" && assessment.outcome === "human-required") rejectHumanRequired(issue, concern);
+  if (status === "CLOSED" && !approved && assessment.outcome === "human-required") rejectHumanRequired(issue, concern);
+}
+
+// Handoff obrigatório ao enviar para AWAITING não-abandono: o documento handoff.md que a sessão
+// pós-APPROVED lê para seguir. Abandono não entrega nada, então não o exige.
+function requireHandoff(queue: Queue, issue: Issue): void {
+  const handoff = queue.artifacts.readText(issue.project, { issueId: issue.id, type: "document", name: "handoff.md" });
+  if (handoff === null) {
+    throw new DomainError(`Envio para AWAITING exige o handoff: grave-o com 'issues artifact --id ${issue.id} --name handoff.md --file <f>' antes de enviar para decisão humana`);
+  }
+  DocumentArtifact.validate(handoff); // ≤300 palavras (o write já valida; reforça no gate)
 }
 
 export async function validateWorkflowDelivery(queue: Queue, issue: Issue, comment: string): Promise<void> {

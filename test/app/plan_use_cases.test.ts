@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { addDesignDiagram, setArchitectureChanged, setDesignDoc } from "../../src/app/services/use_cases/design_use_cases.js";
 import { decomposeIssue } from "../../src/app/services/use_cases/decomposition_use_cases.js";
-import { createIssue, nextIssue, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { createIssue, nextIssue, setArtifact, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
 import { getPlan, setPlan } from "../../src/app/services/use_cases/plan_use_cases.js";
 import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { DomainError, NotFoundError } from "../../src/domain/domain_error.js";
@@ -32,6 +32,10 @@ const planFile = (dir: string, plan: unknown = PLAN): string => write(dir, "plan
 
 const designIssue = (dir: string): string =>
   createIssue({ title: "d", project: "app", type: "Feat", action: "Design", problem: "p", actor: "pi" }, dir).id;
+
+// Handoff obrigatório ao enviar para AWAITING não-abandono.
+const seedHandoff = (dir: string, id: string): void =>
+  setArtifact({ issueId: id, content: "# handoff", name: "handoff.md" }, dir);
 
 // Semeia uma filha Implement (a trava de decomposição do gate de Design a exige).
 export const seedImplementChild = (dir: string, designId: string): string => {
@@ -87,6 +91,7 @@ test("gate: Issue Design conclui com doc+diagrama+plano e filha Implement", asyn
   const issueId = await fullDesign(dir);
   setPlan({ issueId, file: planFile(dir) }, dir);
   seedImplementChild(dir, issueId);
+  seedHandoff(dir, issueId);
   const issue = await statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir);
   assert.equal(issue.status, "AWAITING");
 });

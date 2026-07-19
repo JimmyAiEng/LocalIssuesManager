@@ -46,6 +46,10 @@ const seedReview = (dir: string, id: string): void => {
   setArtifact({ issueId: id, content: "APROVADO revisão ok" }, dir);
 };
 
+// Handoff obrigatório ao enviar para AWAITING não-abandono (o documento que a sessão pós-APPROVED lê).
+const seedHandoff = (dir: string, id: string): void =>
+  setArtifact({ issueId: id, content: "# handoff\npróximos passos", name: "handoff.md" }, dir);
+
 test("createIssue exige projeto registrado, com orientação de como criar", () => {
   const dir = mkdtempSync(join(tmpdir(), "issues-test-"));
   assert.throws(() => createIssue({ ...body, title: "x" }, dir),
@@ -103,9 +107,14 @@ test("ciclo HITL: IA envia para AWAITING e o humano decide", async () => {
     statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
     /decisão humana/,
   );
+  seedHandoff(dir, issue.id);
   await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "evidência: relatório" }, dir);
   assert.equal(getIssue(issue.id, dir).status, "AWAITING");
-  decideIssue({ id: issue.id, human: true, status: "CLOSED", comment: "ok", closed_reason: "concluido" }, dir);
+  // Aprovação humana gera APPROVED (não CLOSED): a Issue reentra na fila, o agente reivindica e fecha.
+  decideIssue({ id: issue.id, human: true, status: "APPROVED", comment: "aprovado" }, dir);
+  assert.equal(getIssue(issue.id, dir).status, "APPROVED");
+  nextIssue({ agent: "pi", id: issue.id }, dir);
+  await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "handoff executado", closed_reason: "concluido" }, dir);
   assert.equal(getIssue(issue.id, dir).status, "CLOSED");
 });
 
@@ -157,15 +166,20 @@ test("gate Deploy: AWAITING exige link http(s) de PR e análise; só o decide hu
   const dir = root();
   const issue = createIssue({ ...body, title: "dep2", action: "Deploy" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
-  await assert.rejects(
+  await assert.rejects( // gate do Deploy falha antes do handoff
     statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "pronto para subir" }, dir),
     /evidência de PR.*link http.*análise/,
   );
+  seedHandoff(dir, issue.id);
   await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "PR https://git/pr/9; SonarQube sem apontamentos" }, dir);
   assert.equal(getIssue(issue.id, dir).status, "AWAITING");
-  const decided = decideIssue({ id: issue.id, human: true, status: "CLOSED", comment: "go", closed_reason: "concluido" }, dir);
-  assert.equal(decided.status, "CLOSED");
-  assert.equal(decided.thread.at(-1)?.decided_by, "human"); // Code Review final auditado
+  // Go humano gera APPROVED; pós-APPROVED o agente reivindica e fecha o Deploy (trava humana dispensada, gate revalida).
+  const approved = decideIssue({ id: issue.id, human: true, status: "APPROVED", comment: "go" }, dir);
+  assert.equal(approved.status, "APPROVED");
+  assert.equal(approved.thread.at(-1)?.decided_by, "human"); // go/no-go auditado
+  nextIssue({ agent: "pi", id: issue.id }, dir);
+  const closed = await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "PR https://git/pr/9 mergeado; sonar OK", closed_reason: "concluido" }, dir);
+  assert.equal(closed.status, "CLOSED");
 });
 
 test("status pela IA só aceita AWAITING ou CLOSED com reason", async () => {
@@ -260,9 +274,34 @@ test("decideIssue rejeita status inválido e exige --human", async () => {
   const issue = createIssue({ ...body, title: "gate2" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
   seedReview(dir, issue.id);
+  seedHandoff(dir, issue.id);
   await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "evidência" }, dir);
   assert.throws(() => decideIssue({ id: issue.id, human: true, status: "AWAITING", comment: "x" }, dir), /Invalid decision/);
   assert.throws(() => decideIssue({ id: issue.id, human: false, status: "OPEN", comment: "x" }, dir), /Decide requires --human/);
+  // decide concluido é recusado: aprovar é decidir APPROVED, não fechar concluído.
+  assert.throws(() => decideIssue({ id: issue.id, human: true, status: "CLOSED", comment: "x", closed_reason: "concluido" }, dir), /para aprovar decida APPROVED/);
+});
+
+test("aprovar leva AWAITING a APPROVED e a Issue reaparece em issues next", async () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "aprovar", action: "Implement" }, dir);
+  nextIssue({ agent: "pi", project: "app" }, dir);
+  seedHandoff(dir, issue.id);
+  await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "pronto" }, dir);
+  const approved = decideIssue({ id: issue.id, human: true, status: "APPROVED", comment: "aprovado" }, dir);
+  assert.equal(approved.status, "APPROVED");
+  assert.equal(approved.owner, null); // reentra na fila sem dono
+  assert.equal(nextIssue({ agent: "pi", project: "app" }, dir)?.id, issue.id); // elegível de novo
+});
+
+test("abandono administrativo pelo decide vai direto a CLOSED sem exigir handoff", async () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "aband", action: "Implement" }, dir);
+  nextIssue({ agent: "pi", project: "app" }, dir);
+  seedHandoff(dir, issue.id);
+  await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "pronto" }, dir);
+  const closed = decideIssue({ id: issue.id, human: true, status: "CLOSED", comment: "obsoleta", closed_reason: "obsoleto" }, dir);
+  assert.equal(closed.status, "CLOSED");
 });
 
 test("reset humano limpa o claim da Issue CLAIMED", () => {
@@ -288,6 +327,7 @@ test("devolução para OPEN carrega imagem: reset e decide-open", async () => {
   assert.ok(new Queue(dir).artifacts.findMedia(resetEntry.attachments![0].id));
 
   nextIssue({ agent: "pi", project: "app" }, dir);
+  seedHandoff(dir, issue.id);
   await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "evidência" }, dir);
   const reopened = decideIssue({ id: issue.id, human: true, status: "OPEN", comment: "voltar", attachments: [img()] }, dir);
   const entry = reopened.thread.at(-1)!;

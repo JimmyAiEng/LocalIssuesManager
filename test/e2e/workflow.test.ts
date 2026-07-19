@@ -113,8 +113,12 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> Review 
   const archClose = attempt(["status", "--id", designArch, "--agent", "pi", "--status", "CLOSED", "--comment", "fim", "--reason", "concluido"], vars);
   assert.equal(archClose.status, 1);
   assert.match(archClose.stderr, /não fecha por agente/);
+  run(["artifact", "--id", designArch, "--name", "handoff.md", "--file", fixture("handoff.md", "# handoff")], vars);
   assert.equal(json(["status", "--id", designArch, "--agent", "pi", "--status", "AWAITING", "--comment", "design pronto"], vars).status, "AWAITING");
-  assert.equal(json(["decide", "--id", designArch, "--human", "--status", "CLOSED", "--comment", "aceito", "--reason", "concluido"], vars).status, "CLOSED");
+  // Aprovação humana gera APPROVED; o agente reivindica a aprovada e a fecha (trava da arquitetura dispensada, gate revalida).
+  assert.equal(json(["decide", "--id", designArch, "--human", "--status", "APPROVED", "--comment", "aceito"], vars).status, "APPROVED");
+  claim(vars, designArch);
+  assert.equal(closeAgent(vars, designArch).status, "CLOSED");
 
   // === DESIGN B (Registro): architecture_changed=false — atalho ao plano, fecha AFK ============
   claim(vars, designShortcut);
@@ -146,10 +150,10 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> Review 
   run(["artifact", "--id", qa, "--file", fixture("verdict.md", "APROVADO: conjunto consistente")], vars);
   assert.equal(closeAgent(vars, qa).status, "CLOSED");
 
-  // === DEPLOY: exige PR link + análise; força AWAITING; humano decide CLOSED ====================
+  // === DEPLOY: exige PR link + análise; força AWAITING; humano aprova; agente fecha pós-APPROVED ==
   const deploy = create(vars, "Deploy", "Deploy da release", planning);
   claim(vars, deploy);
-  // Gate negativo 1: Deploy nunca fecha por agente.
+  // Gate negativo 1: Deploy nunca fecha por agente antes da aprovação.
   const agentClose = attempt(["status", "--id", deploy, "--agent", "pi", "--status", "CLOSED", "--comment", "https://git/pr/1 análise sonar ok", "--reason", "concluido"], vars);
   assert.equal(agentClose.status, 1);
   assert.match(agentClose.stderr, /não fecha por agente/);
@@ -157,15 +161,20 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> Review 
   const noEvidence = attempt(["status", "--id", deploy, "--agent", "pi", "--status", "AWAITING", "--comment", "subi"], vars);
   assert.equal(noEvidence.status, 1);
   assert.match(lastLine(noEvidence.stderr), /exige evidência de PR/);
-  // Com PR link http(s) + resultado da análise, entrega para decisão humana.
+  // Com PR link http(s) + análise + handoff, entrega para decisão humana.
+  run(["artifact", "--id", deploy, "--name", "handoff.md", "--file", fixture("handoff.md", "# handoff")], vars);
   assert.equal(json(["status", "--id", deploy, "--agent", "pi", "--status", "AWAITING", "--comment", "PR https://git/pr/1 — análise sonar OK"], vars).status, "AWAITING");
-  const deployClosed = json(["decide", "--id", deploy, "--human", "--status", "CLOSED", "--comment", "go", "--reason", "concluido"], vars);
+  // Go humano gera APPROVED; o agente reivindica e fecha o Deploy (trava humana dispensada, gate revalida o PR).
+  const approvedDeploy = json(["decide", "--id", deploy, "--human", "--status", "APPROVED", "--comment", "go"], vars);
+  assert.equal(approvedDeploy.status, "APPROVED");
+  assert.ok(approvedDeploy.thread.some((e: { decided_by?: string }) => e.decided_by === "human"), "decisão humana registra decided_by");
+  claim(vars, deploy);
+  const deployClosed = json(["status", "--id", deploy, "--agent", "pi", "--status", "CLOSED", "--comment", "PR https://git/pr/1 mergeado; análise sonar OK", "--reason", "concluido"], vars);
   assert.equal(deployClosed.status, "CLOSED");
-  assert.ok(deployClosed.thread.some((e: { decided_by?: string }) => e.decided_by === "human"), "decisão humana registra decided_by");
 
   // === Estado terminal: tudo CLOSED ============================================================
   assert.equal(status(vars, planning), "CLOSED");
-  assert.equal(status(vars, designArch), "CLOSED"); // via decide humano
+  assert.equal(status(vars, designArch), "CLOSED"); // aprovado (APPROVED) e fechado pelo agente
   assert.equal(status(vars, designShortcut), "CLOSED"); // AFK
   for (const id of implementIds) assert.equal(status(vars, id), "CLOSED");
   assert.equal(status(vars, qa), "CLOSED");

@@ -29,6 +29,10 @@ const file = (dir: string, name: string, content: string) => {
   return path;
 };
 
+// Handoff obrigatório ao enviar para AWAITING não-abandono.
+const seedHandoff = (dir: string, id: string): void =>
+  new Queue(dir).artifacts.writeText("app", { issueId: id, type: "document", name: "handoff.md" }, "# handoff");
+
 // Issue action=Design pronta para receber o pacote (o gate roda na conclusão pela IA).
 function designIssue(dir: string): string {
   const issue = createIssue({ title: "t", project: "app", type: "Feat", action: "Design",
@@ -180,8 +184,11 @@ test("getDesignPackage é somente leitura, funciona com Issue CLOSED e re-checa 
   await completeChangedDesign(dir, issueId);
   seedImplementChild(dir, issueId);
   nextIssue({ agent: "pi", id: issueId }, dir);
+  seedHandoff(dir, issueId);
   await statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "spec congelada" }, dir);
-  decideIssue({ id: issueId, human: true, status: "CLOSED", comment: "aceito", closed_reason: "concluido" }, dir);
+  decideIssue({ id: issueId, human: true, status: "APPROVED", comment: "aceito" }, dir); // aprova → APPROVED
+  nextIssue({ agent: "pi", id: issueId }, dir); // reivindica a aprovada
+  await statusIssue({ id: issueId, agent: "pi", status: "CLOSED", comment: "fechado", closed_reason: "concluido" }, dir); // fecha pós-APPROVED
   assert.equal((await getDesignPackage({ issueId }, dir)).validation.ready, true);
 
   new Queue(dir).artifacts.writeText("app", { issueId, type: "uml", name: "class.puml" }, INVALID); // corrompido fora do use case
@@ -227,10 +234,11 @@ test("gate: com mudança e 4 níveis válidos cai em AWAITING e nunca fecha AFK"
   await assert.rejects( // com mudança de arquitetura, CLOSED por agente é bloqueado (aceite é humano)
     statusIssue({ id: issueId, agent: "pi", status: "CLOSED", comment: "fim", closed_reason: "concluido" }, dir),
     /não fecha por agente/);
+  seedHandoff(dir, issueId);
   const issue = await statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir);
   assert.equal(issue.status, "AWAITING");
-  const decided = decideIssue({ id: issueId, human: true, status: "CLOSED", comment: "aceito", closed_reason: "concluido" }, dir);
-  assert.equal(decided.status, "CLOSED");
+  const decided = decideIssue({ id: issueId, human: true, status: "APPROVED", comment: "aceito" }, dir);
+  assert.equal(decided.status, "APPROVED"); // aprovação humana gera APPROVED (não CLOSED)
 });
 
 test("gate: sem mudança de arquitetura fecha AFK sem diagramas, desde que o plano exista", async () => {

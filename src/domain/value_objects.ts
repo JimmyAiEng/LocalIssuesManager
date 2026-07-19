@@ -112,13 +112,12 @@ export function required(value: string, name: string): void {
 }
 
 // Decisão humana da Issue AWAITING, três-vias. OPEN rejeita e APPROVED aprova — ambas reentram na
-// fila, exigem comentário e proíbem reason. CLOSED exige um motivo (fechamento).
-// ponytail: recusar `concluido` no decide (obrigar Aprovar em vez de fechar) é inseparável da
-// migração do caller `decideIssue` (fatia App): enquanto a web/CLI ainda roteiam aprovar→CLOSED+concluido,
-// recusá-lo aqui quebraria esse fluxo. Entra junto com a fatia que troca o roteamento para APPROVED.
+// fila, exigem comentário e proíbem reason. CLOSED é só abandono administrativo (errado/duplicado/
+// obsoleto): exige motivo e recusa `concluido` — aprovar é decidir APPROVED, não fechar concluído.
 export function assertDecision(status: Decision, comment: string, reason: ClosedReason | undefined): void {
   if (status === "CLOSED") {
     if (!reason) throw new DomainError("Closed reason is required");
+    if (reason === "concluido") throw new DomainError("Fechar como concluído não aprova: para aprovar decida APPROVED (Aprovar); CLOSED no decide é só abandono administrativo (errado/duplicado/obsoleto)");
     return;
   }
   required(comment, "comment");

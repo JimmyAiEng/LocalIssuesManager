@@ -206,6 +206,7 @@ async function createAwaiting(url: string, root: string): Promise<string> {
   const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
   nextIssue({ agent: "pi", project: "web" }, root);
   seedReview(root, id); // input é Review: satisfaz o gate antes do AWAITING
+  setArtifact({ issueId: id, content: "# handoff", name: "handoff.md" }, root); // handoff obrigatório no AWAITING
   await statusIssue({ id, agent: "pi", status: "AWAITING", comment: "evidência" }, root);
   return id;
 }

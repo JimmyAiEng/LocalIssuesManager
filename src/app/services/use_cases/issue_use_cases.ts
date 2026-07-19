@@ -128,15 +128,44 @@ function summary(issue: Issue): IssueSummary {
 }
 
 // Fila: a Issue OPEN mais antiga do projeto (ou uma específica por id) é reivindicada pela IA.
+// Em projeto concern=HIGH, uma Issue Design/Implement só é reivindicável por AGENTE depois que todo
+// pai (relates kind=parent) fecha: --id recusa citando o pai; --project pula e pega a próxima
+// elegível (nunca trava a fila). LOW, Issue sem pai, see-also do decompose e claim humano: livres.
 export function nextIssue(input: { agent: string; project?: string; id?: string; now?: Date }, root?: string): IssueView | null {
   const agent = parseAgentId(input.agent);
   const queue = new Queue(root);
   if (!input.id && !input.project?.trim()) throw new Error("project is required");
-  const issue = input.id ? queue.loadRequired(input.id) : queue.oldestOpen(input.project);
+  const issue = input.id ? claimTarget(queue, input.id) : oldestEligible(queue, input.project);
   if (!issue) return null;
   issue.claim(agent, input.now);
   queue.save(issue);
   return issueView(queue, issue);
+}
+
+function claimTarget(queue: Queue, id: string): Issue {
+  const issue = queue.loadRequired(id);
+  const parent = blockingParent(queue, issue);
+  if (parent) throw new DomainError(`Issue ${issue.id} não é reivindicável por agente: o pai ${parent.id} está ${parent.status} (projeto concern=HIGH exige o pai CLOSED antes de reivindicar Design/Implement). Aguarde o pai fechar ou reivindique outra com 'issues next --project ${issue.project} --agent <ia>'.`);
+  return issue;
+}
+
+// Pula as filhas bloqueadas e ordena como `oldestOpen`; sem bloqueio, devolve a mesma Issue.
+function oldestEligible(queue: Queue, project: string | undefined): Issue | null {
+  return queue.list({ status: "OPEN", project })
+    .sort((a, b) => a.status_changed_at.localeCompare(b.status_changed_at) || a.id.localeCompare(b.id))
+    .find((issue) => !blockingParent(queue, issue)) ?? null;
+}
+
+// Pai (kind=parent) fora de CLOSED que bloqueia o claim de agente, ou null (só HIGH bloqueia; pai purgado já foi CLOSED; see-also do decompose é decorativa).
+function blockingParent(queue: Queue, issue: Issue): Issue | null {
+  if ((queue.readProject(issue.project)?.concern ?? "LOW") !== "HIGH") return null;
+  if (issue.action !== "Design" && issue.action !== "Implement") return null;
+  for (const relation of issue.relates) {
+    if (relation.kind !== "parent") continue;
+    const parent = queue.load(relation.id);
+    if (parent && parent.status !== "CLOSED") return parent;
+  }
+  return null;
 }
 
 export type StatusInput = {

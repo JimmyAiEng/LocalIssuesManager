@@ -21,6 +21,22 @@ const root = () => {
   return dir;
 };
 
+// Projeto concern=HIGH: piso de supervisão que bloqueia o claim de agente de Design/Implement
+// enquanto o pai (relates kind=parent) não estiver CLOSED.
+const highRoot = () => {
+  const dir = mkdtempSync(join(tmpdir(), "issues-test-"));
+  createProject({ name: "app", repo: dir, concern: "HIGH" }, dir);
+  return dir;
+};
+
+// Fecha uma Issue direto para CLOSED (sem gate), como o override humano — semente de estado do pai.
+const closeIssue = (dir: string, id: string, now?: Date) => {
+  const queue = new Queue(dir);
+  const parent = queue.loadRequired(id);
+  parent.closeByHuman("done", "concluido", now);
+  queue.save(parent);
+};
+
 // Conjunto de documentos de uma Review válida (intent + 2 evidence nomeadas + veredito APROVADO no
 // artefato legado), gravado pela superfície real setArtifact (exercita a flag --name).
 const seedReview = (dir: string, id: string): void => {
@@ -362,6 +378,74 @@ test("erros não persistem mutação parcial", async () => {
   nextIssue({ agent: "pi", project: "app" }, dir);
   await assert.rejects(statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "x" }, dir));
   assert.equal(getIssue(issue.id, dir).status, "CLAIMED");
+});
+
+test("HIGH: --id de Design/Implement com pai não-CLOSED falha citando o pai; see-also não bloqueia", () => {
+  const dir = highRoot();
+  const parent = createIssue({ ...body, title: "parent", action: "Design" }, dir); // OPEN
+  const sister = createIssue({ ...body, title: "sister", action: "Implement" }, dir);
+  const child = createIssue({ ...body, title: "child", action: "Implement" }, dir);
+  relateIssues({ id: child.id, relates: [sister.id] }, dir); // see-also (decorativa, não bloqueia)
+  relateIssues({ id: child.id, relates: [parent.id], kind: "parent" }, dir);
+  assert.throws(
+    () => nextIssue({ agent: "pi", id: child.id }, dir),
+    new RegExp(`não é reivindicável.*${parent.id}.*OPEN`),
+  );
+  assert.equal(new Queue(dir).loadRequired(child.id).status, "OPEN"); // recusado, segue OPEN
+});
+
+test("HIGH: --project pula a filha bloqueada e reivindica a próxima elegível; nunca trava a fila", () => {
+  const dir = highRoot();
+  const parent = createIssue({ ...body, title: "parent", action: "Design", now: new Date("2026-01-03") }, dir);
+  const blocked = createIssue({ ...body, title: "blocked", action: "Implement", now: new Date("2026-01-01") }, dir);
+  const eligible = createIssue({ ...body, title: "eligible", action: "Implement", now: new Date("2026-01-02") }, dir);
+  relateIssues({ id: blocked.id, relates: [parent.id], kind: "parent" }, dir);
+  // FIFO: blocked(01-01) tem pai OPEN → pula → eligible(01-02)
+  assert.equal(nextIssue({ agent: "pi", project: "app" }, dir)?.id, eligible.id);
+  // restam OPEN blocked (pai OPEN) e parent (Design sem pai) → reivindica parent
+  assert.equal(nextIssue({ agent: "pi", project: "app" }, dir)?.id, parent.id);
+  // só resta blocked, cujo pai agora está CLAIMED (não-CLOSED) → nada elegível, sem erro
+  assert.equal(nextIssue({ agent: "pi", project: "app" }, dir), null);
+  assert.equal(new Queue(dir).loadRequired(blocked.id).status, "OPEN");
+});
+
+test("HIGH: pai CLOSED (ou purgado) libera o claim de agente", () => {
+  const dir = highRoot();
+  const parent = createIssue({ ...body, title: "parent", action: "Design" }, dir);
+  const child = createIssue({ ...body, title: "child", action: "Implement" }, dir);
+  relateIssues({ id: child.id, relates: [parent.id], kind: "parent" }, dir);
+  closeIssue(dir, parent.id);
+  assert.equal(nextIssue({ agent: "pi", id: child.id }, dir)?.status, "CLAIMED");
+
+  const dir2 = highRoot();
+  const gone = createIssue({ ...body, title: "gone", action: "Design" }, dir2);
+  const orphan = createIssue({ ...body, title: "orphan", action: "Implement" }, dir2);
+  relateIssues({ id: orphan.id, relates: [gone.id], kind: "parent" }, dir2);
+  closeIssue(dir2, gone.id, new Date("2026-01-01"));
+  new Queue(dir2).purgeClosed(new Date("2026-07-14")); // pai some do store
+  assert.equal(nextIssue({ agent: "pi", id: orphan.id }, dir2)?.status, "CLAIMED");
+});
+
+test("HIGH: só Design/Implement é bloqueado; outras actions e claim humano seguem livres", () => {
+  const dir = highRoot();
+  const parent = createIssue({ ...body, title: "parent", action: "Design" }, dir); // OPEN
+  const review = createIssue({ ...body, title: "review", action: "Review" }, dir);
+  relateIssues({ id: review.id, relates: [parent.id], kind: "parent" }, dir);
+  assert.equal(nextIssue({ agent: "pi", id: review.id }, dir)?.status, "CLAIMED"); // action fora do gate
+
+  const child = createIssue({ ...body, title: "child", action: "Implement" }, dir);
+  relateIssues({ id: child.id, relates: [parent.id], kind: "parent" }, dir);
+  const claimed = claimIssue({ id: child.id }, dir); // humano não é bloqueado
+  assert.equal(claimed.status, "CLAIMED");
+  assert.equal(claimed.owner, "human");
+});
+
+test("LOW: pai não-CLOSED não bloqueia o claim de agente (comportamento atual)", () => {
+  const dir = root(); // app é LOW
+  const parent = createIssue({ ...body, title: "parent", action: "Design" }, dir); // OPEN
+  const child = createIssue({ ...body, title: "child", action: "Implement" }, dir);
+  relateIssues({ id: child.id, relates: [parent.id], kind: "parent" }, dir);
+  assert.equal(nextIssue({ agent: "pi", id: child.id }, dir)?.status, "CLAIMED");
 });
 
 // updateTags é exportado: a CLI barra o actor ausente antes (--agent is required), mas o guard

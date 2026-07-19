@@ -1,0 +1,92 @@
+import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import {
+  createIssue, decideIssue, getIssue, listIssues, nextIssue, relateIssues, statusIssue,
+} from "../../src/app/services/use_cases/issue_use_cases.js";
+import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
+import { afterIssueClosed } from "../../src/app/services/workflows/review_trigger.js";
+import { Queue } from "../../src/domain/queue_repository.js";
+import type { ActionType } from "../../src/domain/value_objects.js";
+
+const setup = (parentAction: ActionType = "Design") => {
+  const dir = mkdtempSync(join(tmpdir(), "review-trigger-"));
+  createProject({ name: "app", repo: dir }, dir);
+  const parent = createIssue({ title: "pai", project: "app", type: "Refactor", action: parentAction, problem: "p", actor: "human" }, dir);
+  return { dir, parent };
+};
+
+// Filha Implement do pai, com linhagem parent/child recíproca (como o decompose faz).
+const child = (dir: string, parentId: string, title: string) => {
+  const issue = createIssue({ title, project: "app", type: "Feat", action: "Implement", problem: "p", actor: "human" }, dir);
+  relateIssues({ id: issue.id, relates: [parentId], kind: "parent" }, dir);
+  return issue;
+};
+
+const closeByAgent = async (dir: string, id: string, reason = "concluido") => {
+  nextIssue({ agent: "claude-code", id }, dir); // claim OPEN->CLAIMED
+  await statusIssue({ id, agent: "claude-code", status: "CLOSED", comment: "feito: entregue", closed_reason: reason }, dir);
+};
+
+const reviewsUnder = (dir: string, parentId: string) =>
+  listIssues({ project: "app" }, dir).filter((i) => i.action === "Review" && i.relates.includes(parentId));
+
+test("penúltima Implement nada cria; a última cria uma Review ligada ao pai (parent) e às irmãs (see-also)", async () => {
+  const { dir, parent } = setup();
+  const a = child(dir, parent.id, "impl-a");
+  const b = child(dir, parent.id, "impl-b");
+
+  await closeByAgent(dir, a.id);
+  assert.equal(reviewsUnder(dir, parent.id).length, 0, "penúltima não deve criar Review");
+
+  await closeByAgent(dir, b.id);
+  const reviews = reviewsUnder(dir, parent.id);
+  assert.equal(reviews.length, 1, "a última deve criar exatamente uma Review");
+
+  const review = getIssue(reviews[0].id, dir);
+  assert.equal(review.action, "Review");
+  assert.equal(review.type, parent.type, "Review herda o type do pai");
+  assert.equal(review.status, "OPEN", "a Review nasce OPEN (sem docs; o gate só cobra na conclusão dela)");
+  assert.ok(review.related.some((r) => r.id === parent.id && r.kind === "parent"), "ligada ao pai via kind=parent");
+  assert.ok(review.related.some((r) => r.id === a.id && r.kind === "see-also"), "ligada à irmã a via see-also");
+  assert.ok(review.related.some((r) => r.id === b.id && r.kind === "see-also"), "ligada à irmã b via see-also");
+});
+
+test("todas as irmãs abandonadas não criam Review", async () => {
+  const { dir, parent } = setup();
+  const a = child(dir, parent.id, "impl-a");
+  const b = child(dir, parent.id, "impl-b");
+  await closeByAgent(dir, a.id, "obsoleto");
+  await closeByAgent(dir, b.id, "errado");
+  assert.equal(reviewsUnder(dir, parent.id).length, 0);
+});
+
+test("repetir o fechamento não duplica a Review (idempotência)", async () => {
+  const { dir, parent } = setup();
+  const a = child(dir, parent.id, "impl-a");
+  await closeByAgent(dir, a.id);
+  assert.equal(reviewsUnder(dir, parent.id).length, 1);
+
+  // Simula o gatilho disparando de novo pelo mesmo fechamento: a Review irmã já existe fora de CLOSED.
+  const queue = new Queue(dir);
+  afterIssueClosed(queue, queue.loadRequired(a.id), dir);
+  assert.equal(reviewsUnder(dir, parent.id).length, 1, "não duplica");
+});
+
+test("decide humano (AWAITING->CLOSED concluido) também dispara o gatilho", async () => {
+  const { dir, parent } = setup();
+  const a = child(dir, parent.id, "impl-a");
+  nextIssue({ agent: "claude-code", id: a.id }, dir);
+  await statusIssue({ id: a.id, agent: "claude-code", status: "AWAITING", comment: "pronto para decisão humana" }, dir);
+  decideIssue({ id: a.id, human: true, status: "CLOSED", comment: "aprovado", closed_reason: "concluido" }, dir);
+  assert.equal(reviewsUnder(dir, parent.id).length, 1);
+});
+
+test("pai Review (2º ciclo): fechar a Implement de retrabalho cria nova Review sob o pai Review", async () => {
+  const { dir, parent } = setup("Review");
+  const rework = child(dir, parent.id, "retrabalho");
+  await closeByAgent(dir, rework.id);
+  assert.equal(reviewsUnder(dir, parent.id).length, 1, "pai action=Review também resolve e cria a próxima Review");
+});

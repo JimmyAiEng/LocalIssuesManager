@@ -16,6 +16,7 @@ import { readPlanForView } from "./plan_use_cases.js";
 import { requireProject } from "./project_use_cases.js";
 import { designFeatures } from "./requirements_use_cases.js";
 import { closeByHuman, deliverByAgent } from "../workflows/index.js";
+import { afterIssueClosed } from "../workflows/review_trigger.js";
 
 export type CreateInput = {
   title: string; project: string; type: string; action: string; problem: string;
@@ -149,6 +150,7 @@ export async function statusIssue(input: StatusInput, root?: string): Promise<Is
   if (input.human) await closeByHuman(queue, issue, input);
   else await deliverByAgent(queue, issue, input);
   queue.save(issue);
+  afterIssueClosed(queue, issue, root); // gatilho de ciclo de vida: cria a Review ao fechar a última Implement
   return issue;
 }
 
@@ -167,6 +169,7 @@ export function decideIssue(input: DecideInput, root?: string): Issue {
   issue.decide(input.status, input.comment, reason, input.now, created.map(({ entity }) => entity.toJSON()));
   for (const { entity, bytes } of created) queue.artifacts.writeMedia(issue.project, entity, bytes);
   queue.save(issue);
+  afterIssueClosed(queue, issue, root); // decide humano da web também fecha Implement e dispara a Review
   return issue;
 }
 

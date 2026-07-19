@@ -40,6 +40,25 @@ test("CLI retorna JSON por padrão e next devolve a IssueView reivindicada", () 
   assert.equal(fetched.owner, "pi");
 });
 
+// Observado no HomeInventory: o agente pulou `next`, achou a Issue com `list`, leu tudo com `get` e
+// implementou — a Issue seguiu OPEN e sem dono, e ele nunca viu o contrato da action.
+test("CLI get recusa Issue OPEN e aponta o claim; depois de reivindicada, lê normalmente", () => {
+  const vars = env();
+  const created = JSON.parse(run(createArgs, vars));
+  const denied = spawnSync(bin, ["get", "--id", created.id], { env: vars, encoding: "utf8" });
+  assert.notEqual(denied.status, 0);
+  assert.match(denied.stderr, new RegExp(`Issue ${created.id} está OPEN`));
+  assert.match(denied.stderr, new RegExp(`issues next --id ${created.id} --agent <ia>`));
+  // A trava cobre todos os alvos de get, não só a view padrão.
+  for (const target of ["REQUIREMENTS", "PLAN", "DESIGN"]) {
+    const blocked = spawnSync(bin, ["get", target, "--id", created.id], { env: vars, encoding: "utf8" });
+    assert.notEqual(blocked.status, 0, `get ${target} deveria recusar OPEN`);
+    assert.match(blocked.stderr, /está OPEN/, `get ${target}`);
+  }
+  run(["next", "--id", created.id, "--agent", "pi"], vars);
+  assert.equal(JSON.parse(run(["get", "--id", created.id], vars)).status, "CLAIMED");
+});
+
 test("CLI create sem projeto registrado falha com orientação", () => {
   const root = mkdtempSync(join(tmpdir(), "issues-cli-noproj-"));
   const vars = { ...process.env, ISSUES_ROOT: root };
@@ -151,6 +170,7 @@ test("e2e: relate liga Issues e get devolve a linhagem com artefatos", () => {
   const impl = JSON.parse(run(createArgs, vars));
   const related = JSON.parse(run(["relate", "--id", impl.id, "--relates", design.id, "--kind", "child"], vars));
   assert.deepEqual(related.relates, [{ id: design.id, kind: "child" }]);
+  for (const id of [impl.id, design.id]) run(["next", "--id", id, "--agent", "pi"], vars); // get recusa OPEN
   const view = JSON.parse(run(["get", "--id", impl.id], vars));
   assert.equal(view.related[0].artifact, "# spec congelada");
   const target = JSON.parse(run(["get", "--id", design.id], vars));
@@ -240,6 +260,7 @@ test("e2e: artifact grava .md da Issue e create --artifact-file grava no id novo
   const ok = JSON.parse(run(["artifact", "--id", created.id, "--file", updated], vars));
   assert.deepEqual(ok, { ok: true, id: created.id });
   assert.equal(queue.artifacts.readText("demo", { issueId: created.id, type: "document" }), "# issue atualizado");
+  run(["next", "--id", created.id, "--agent", "pi"], vars); // get recusa OPEN
   assert.equal(JSON.parse(run(["get", "--id", created.id], vars)).artifact, "# issue atualizado");
 });
 
@@ -334,6 +355,7 @@ test("in-process: main() cobre project/worktree/requirements/relate fora do exec
       para: "acesse o painel", scenarios: [{ nome: "ok", steps: ["Given a tela", "When entro", "Then vejo o painel"] }] }));
     const saved = await captureMain(["requirements", "set", "--id", reqIssue.id, "--file", reqFile]);
     assert.equal(JSON.parse(saved.stdout).features.length, 1); // runRequirements() -> requirements("set")
+    await captureMain(["next", "--id", reqIssue.id, "--agent", "pi"]); // get recusa OPEN
     const reqs = await captureMain(["get", "--id", reqIssue.id, "--target", "REQUIREMENTS"]);
     assert.equal(JSON.parse(reqs.stdout).features.length, 1); // get() branch --target REQUIREMENTS
 

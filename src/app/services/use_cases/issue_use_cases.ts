@@ -60,6 +60,17 @@ export function getIssue(id: string, root?: string): IssueView {
   return issueView(queue, queue.loadRequired(id));
 }
 
+// Trava do `issues get` no CLI: Issue OPEN só chega ao agente pelo claim de `issues next`, que
+// entrega junto o contrato da action. Sem ela sobra uma porta lateral — `list` + `get` devolvem a
+// Issue inteira sem reivindicar nem mostrar o contrato, e o agente implementa uma Issue que segue
+// OPEN para todo mundo (observado no HomeInventory). A web não passa por aqui: no painel humano,
+// ver a fila aberta é justamente o ponto.
+export function assertNotOpen(id: string, root?: string): void {
+  const issue = new Queue(root).loadRequired(id);
+  if (issue.status !== "OPEN") return;
+  throw new DomainError(`Issue ${id} está OPEN: reivindique com 'issues next --id ${id} --agent <ia>' — o claim entrega o contrato da action. 'issues get' só lê Issue já reivindicada.`);
+}
+
 // Injeta o Artefato .md da Issue, a view das relacionadas (com os artefatos delas) e a cadeia
 // de ancestrais (subindo os parent): quem reivindica recebe a linhagem sem buscar cada Issue.
 export function issueView(queue: Queue, issue: Issue): IssueView {

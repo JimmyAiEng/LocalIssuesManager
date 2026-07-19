@@ -122,6 +122,7 @@ test("RF-06: get e list refletem o estado, com filtro por tipo", () => {
   const vars = freshEnv();
   const a = json(createRequired, vars);
   json(createRequired.map((arg) => (arg === "Fix" ? "Feat" : arg)), vars); // outra Issue, tipo Feat
+  json(["next", "--id", a.id, "--agent", "pi"], vars); // get recusa OPEN; list continua mostrando a fila
   assert.equal(json(["get", "--id", a.id], vars).id, a.id);
   assert.equal(json(["list", "--project", "demo"], vars).length, 2);
   const fixOnly = json(["list", "--project", "demo", "--type", "Fix"], vars);

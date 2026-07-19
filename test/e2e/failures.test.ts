@@ -273,6 +273,7 @@ test("falha: requirements set com cada violação do JSONL — CLI", () => {
 test("falha: get --target REQUIREMENTS sem arquivo persistido (NotFoundError) — CLI", () => {
   const root = newRoot();
   const id = createIssueCLI(root, ["--action", "Planning"]);
+  run(["next", "--id", id, "--agent", "pi"], root); // get recusa OPEN
   const { status, stderr } = fail(["get", "--id", id, "--target", "REQUIREMENTS"], root);
   assert.notEqual(status, 0);
   assert.match(stderr, /Requirements não encontrado/);

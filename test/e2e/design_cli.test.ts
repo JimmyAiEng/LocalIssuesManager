@@ -35,10 +35,11 @@ const fixture = (name: string, content: string): string => {
   return path;
 };
 
-// Cria uma Issue action=Design via CLI e devolve o id.
+// Cria uma Issue action=Design via CLI, já reivindicada (é assim que a fase começa, e `get` recusa OPEN).
 function designSetup(vars: NodeJS.ProcessEnv): string {
   const created = json(["create", "--title", "Design gate", "--project", "demo", "--type", "Feat",
     "--action", "Design", "--problem", "p", "--agent", "pi"], vars);
+  run(["next", "--id", created.id, "--agent", "pi"], vars);
   return created.id;
 }
 
@@ -112,7 +113,6 @@ test("e2e: get DESIGN incompleto reporta ready false; erro fora do gate sai cru"
 test("e2e: gate bloqueia a conclusão da Issue Design sem pacote (JSON errors, exit 1) e libera com pacote", () => {
   const vars = freshEnv();
   const issueId = designSetup(vars);
-  run(["next", "--id", issueId, "--agent", "pi"], vars);
   const denied = attempt(["status", "--id", issueId, "--agent", "pi",
     "--status", "AWAITING", "--comment", "fim"], vars);
   assert.equal(denied.status, 1);
@@ -222,6 +222,7 @@ test("in-process: main() roteia design e normaliza get DESIGN posicional", async
   const root = mkdtempSync(join(tmpdir(), "issues-design-main-"));
   await withIssuesRoot(root, async () => {
     const { issueId, queue } = inprocSetup(root);
+    await exitCodeAfter(() => main(["next", "--id", issueId, "--agent", "pi"])); // get recusa OPEN
 
     const doc = await exitCodeAfter(() => main(["design", "doc", "--issue", issueId,
       "--file", fixture("design.md", "# Design")]));

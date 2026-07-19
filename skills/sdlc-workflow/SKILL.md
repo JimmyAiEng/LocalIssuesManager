@@ -18,6 +18,7 @@ Uma **Issue** é a unidade de trabalho de uma sessão: pequena, com uma entrega 
 - **type** diz o problema: `Fix` · `Feat` · `Research` · `Refactor`.
 - **action** diz a entrega esperada: `Planning` · `Design` · `Implement` · `QA` · `Deploy`.
 - Status: `OPEN → CLAIMED → (AWAITING →) CLOSED`.
+- Issue `OPEN` só chega até você pelo claim de `issues next` — é ele que entrega o contrato da action junto. `issues get` recusa id em `OPEN`: não dá para contornar o claim com `list` + `get` e trabalhar uma Issue que ninguém reivindicou.
 - Trabalho maior vira **novas Issues relacionadas** (`--relates`), nunca uma Issue gorda.
 - Não há validação de sequência entre actions: você pode criar uma Issue `Implement` sem `Design` anterior — siga o roteamento e os gates descritos nesta skill.
 
@@ -95,7 +96,8 @@ issues create --title <t> --project <p> --type <T> --action <A> --problem <txt>
               [--complexity …] [--risk …] [--human-need HITL|AFK] (--agent <ia>|--human)
 issues next --prompt --project <p> --agent <ia>      # reivindica a Issue mais antiga aberta do projeto
 issues next --id <id> --agent <ia>                   # reivindica uma Issue específica
-issues get --id <id> [REQUIREMENTS|DESIGN|PLAN] | issues list [--status --project --type --title]
+issues get --id <id> [REQUIREMENTS|DESIGN|PLAN]      # recusa Issue OPEN: reivindique antes com `issues next`
+issues list [--status --project --type --title]
 issues comment --id <id> --comment <t> [--attach <arquivo>] [--role <papel>]
 issues tag --id <id> [--complexity …] [--risk …] [--human-need …] (--agent <ia>|--human)
 issues relate --id <id> --relates <a,b> [--kind parent|child|see-also]   # linhagem entre Issues (default see-also)

@@ -1,6 +1,6 @@
 import { initPack, linkPackSkillsForDogfood } from "./app/services/use_cases/init_pack_use_case.js";
 import {
-  addComment, artifactFromFile, attachmentFromFile, createIssue, decideIssue, getIssue,
+  addComment, artifactFromFile, assertNotOpen, attachmentFromFile, createIssue, decideIssue, getIssue,
   type IncomingAttachment, type IssueView, listIssues, nextIssue, relateIssues, resetClaim,
   setArtifact, statusIssue, updateTags,
 } from "./app/services/use_cases/issue_use_cases.js";
@@ -29,6 +29,7 @@ export function main(argv = process.argv.slice(2)): void | Promise<void> {
     const options = parseOptions(raw);
     if (command === "web") return void launchWeb(options);
     if (command === "next" && options.prompt) return void nextPrompt(options);
+    if (command === "get") assertNotOpen(value(options, "id")); // OPEN só pelo claim de `next`, com o contrato da action junto
     if (command === "get" && options.target === "DESIGN") return void printDesignPackage(value(options, "id"), Boolean(options.pretty));
     if (command === "status") return runStatus(options); // async pelo gate da action
     print(execute(command, options), Boolean(options.pretty));

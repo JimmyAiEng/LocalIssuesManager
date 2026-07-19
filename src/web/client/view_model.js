@@ -3,6 +3,7 @@ export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"];
 export const ACTION_TYPES = ["Planning", "Design", "Implement", "Review", "Deploy"];
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"];
 export const TAG_VALUES = { complexity: ["BAIXA", "MEDIA", "ALTA"], human_need: ["HITL", "AFK"], risk: ["BAIXO", "MEDIO", "ALTO"] };
+export const CONCERN_LEVELS = ["LOW", "HIGH"];
 
 const CREATE_FIELDS = ["title", "project", "type", "action", "problem"];
 

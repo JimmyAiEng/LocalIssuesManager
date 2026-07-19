@@ -1,5 +1,5 @@
 import {
-  CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, ACTION_TYPES, TAG_VALUES, attachmentsMarkup, escapeHtml,
+  CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, ACTION_TYPES, TAG_VALUES, CONCERN_LEVELS, attachmentsMarkup, escapeHtml,
   filterIssues, groupIssues, hasPendingDecision, isStale, isUnclassified, options, pendingDecisions,
   statusAge, statusAgeFrom,
 } from "./view_model.js";
@@ -80,6 +80,7 @@ export function renderNewProject() {
   root().innerHTML = `<main class="form-page"><a class="button" href="/" data-back>← Voltar ao quadro</a><h1>Novo Projeto</h1>${feedback()}<form id="project-form" class="form" novalidate>${summaryError()}
     ${textInput("name", "Nome", draft.name)}
     ${textInput("repo", "Repositório (caminho local do git)", draft.repo)}
+    ${selectInput("concern", "Nível de preocupação", CONCERN_LEVELS, draft.concern)}
     <div class="form-actions"><button ${state.busy ? "disabled" : ""}>Salvar Projeto</button><a class="button" href="/" data-back>Cancelar</a></div>
   </form></main>`;
 }

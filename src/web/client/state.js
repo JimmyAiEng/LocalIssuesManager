@@ -15,5 +15,5 @@ function loadFilters() { return { ...emptyFilters(), ...JSON.parse(sessionStorag
 export function saveFilters() { sessionStorage.setItem("issues.filters", JSON.stringify(state.filters)); }
 export function emptyDraft() { return { title: "", project: "", type: "", action: "", problem: "", acceptance_criteria: "", comment: "", closed_reason: "", complexity: "", human_need: "", risk: "" }; }
 export function emptyCommentDraft() { return { comment: "" }; }
-export function emptyProjectDraft() { return { name: "", repo: "" }; }
+export function emptyProjectDraft() { return { name: "", repo: "", concern: "LOW" }; }
 export function clearActionState() { state.panel = null; state.commentPanel = null; state.commentDraft = emptyCommentDraft(); state.confirmClose = false; state.errors = {}; state.feedback = null; state.busy = false; }

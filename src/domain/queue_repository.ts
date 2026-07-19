@@ -18,7 +18,7 @@ export const CONCERN_LEVELS: readonly ConcernLevel[] = ["LOW", "HIGH"];
 // ou faltar `concern`: a leitura ignora os extras e trata `concern` ausente como LOW.
 export type ProjectConfig = { name: string; repo: string; concern: ConcernLevel };
 const FOLDERS: Record<IssueStatus, string> = {
-  OPEN: "open", CLAIMED: "claimed", AWAITING: "awaiting", CLOSED: "closed",
+  OPEN: "open", CLAIMED: "claimed", AWAITING: "awaiting", APPROVED: "approved", CLOSED: "closed",
 };
 
 export class Queue {
@@ -121,8 +121,9 @@ export class Queue {
     return this.#readAll(projects, statuses).filter((issue) => matchesFilter(issue, filter));
   }
 
+  // Elegível para claim = OPEN ou APPROVED: a aprovada reentra na fila para o handoff continuar.
   oldestOpen(project?: string): Issue | null {
-    const issues = this.list({ status: "OPEN", project });
+    const issues = [...this.list({ status: "OPEN", project }), ...this.list({ status: "APPROVED", project })];
     issues.sort((a, b) => a.status_changed_at.localeCompare(b.status_changed_at) || a.id.localeCompare(b.id));
     return issues[0] ?? null;
   }

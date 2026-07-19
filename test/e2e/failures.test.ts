@@ -232,7 +232,7 @@ test("falha: next --id de Issue já reivindicada — CLI", () => {
   const id = claimedIssueCLI(root);
   const { status, stderr } = fail(["next", "--id", id, "--agent", "pi"], root);
   assert.notEqual(status, 0);
-  assert.match(stderr, /Expected OPEN, got CLAIMED/);
+  assert.match(stderr, /Expected OPEN or APPROVED, got CLAIMED/);
 });
 
 // ─────────────────────────── Requisitos JSONL ───────────────────────────
@@ -340,7 +340,7 @@ test("falha HTTP: claim de Issue não-OPEN → 400", async () => withWeb(async (
   assert.equal((await request(url, "POST", `/api/issues/${id}/claim`, {})).status, 200);
   const again = await request(url, "POST", `/api/issues/${id}/claim`, {});
   assert.equal(again.status, 400);
-  assert.match(again.body.error as string, /Expected OPEN, got CLAIMED/);
+  assert.match(again.body.error as string, /Expected OPEN or APPROVED, got CLAIMED/);
 }));
 
 test("falha HTTP: reset sem comment (comment is required) → 400", async () => withWeb(async (url) => {

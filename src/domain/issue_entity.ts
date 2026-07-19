@@ -57,7 +57,7 @@ export class Issue implements IssueData {
   }
 
   claim(actor: Actor, now = new Date()): void {
-    this.#expect("OPEN");
+    this.#expectClaimable();
     this.owner = actor;
     this.claimed_at = now.toISOString();
     this.#changeStatus("CLAIMED", now);
@@ -124,7 +124,7 @@ export class Issue implements IssueData {
   decide(status: Decision, comment: string, reason?: ClosedReason, now = new Date(), attachments: MediaArtifactData[] = []): void {
     this.#expect("AWAITING");
     assertDecision(status, comment, reason);
-    if (status === "OPEN") this.#clearClaim();
+    if (status === "OPEN" || status === "APPROVED") this.#clearClaim(); // ambas reentram na fila sem dono
     this.#transition(status, "human", comment, reason ?? null, now, attachments, "human");
   }
 
@@ -175,6 +175,13 @@ export class Issue implements IssueData {
 
   #expect(status: IssueStatus): void {
     if (this.status !== status) throw new DomainError(`Expected ${status}, got ${this.status}`);
+  }
+
+  // Reivindicável = OPEN (nova) ou APPROVED (aprovada reentra na fila para o handoff seguir).
+  #expectClaimable(): void {
+    if (this.status !== "OPEN" && this.status !== "APPROVED") {
+      throw new DomainError(`Expected OPEN or APPROVED, got ${this.status}`);
+    }
   }
 
   #expectOwner(agent: AgentId): void {

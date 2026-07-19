@@ -3,7 +3,7 @@ import test from "node:test";
 import { DomainError } from "../../src/domain/domain_error.js";
 import {
   ACTION_TYPES, AGENT_IDS, CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, MAX_DOC_WORDS, ROLES,
-  assertBrief, parseActionType, parseAgentId, parseClosedReason, parseIssueStatus, parseIssueType, parseRole, wordCount,
+  assertBrief, parseActionType, parseAgentId, parseClosedReason, parseIssueStatus, parseIssueType, parseRole, wasApproved, wordCount,
 } from "../../src/domain/value_objects.js";
 
 const cases = [
@@ -23,7 +23,7 @@ test("VOs aceitam somente os enums exatos", () => {
 test("enums carregam exatamente os valores esperados (sem Ticket, sem ON-GOING)", () => {
   assert.deepEqual([...ISSUE_TYPES], ["Fix", "Feat", "Research", "Refactor"]);
   assert.deepEqual([...ACTION_TYPES], ["Planning", "Design", "Implement", "Review", "Deploy"]);
-  assert.deepEqual([...ISSUE_STATUSES], ["OPEN", "CLAIMED", "AWAITING", "CLOSED"]);
+  assert.deepEqual([...ISSUE_STATUSES], ["OPEN", "CLAIMED", "AWAITING", "APPROVED", "CLOSED"]);
   assert.throws(() => parseIssueStatus("ON-GOING"), /Invalid status: ON-GOING/);
   // Role (papel do workflow) é ortogonal ao AgentId (harness): rastreia QUEM fez o trabalho.
   assert.deepEqual([...ROLES], ["requirement", "breaking-issues", "architect", "test-coding", "coding", "review", "pr-analysis"]);
@@ -50,6 +50,12 @@ test("wordCount conta palavras separadas por whitespace", () => {
   assert.equal(wordCount(""), 0);
   assert.equal(wordCount("   "), 0);
   assert.equal(wordCount("uma  duas\n três"), 3);
+});
+
+test("wasApproved detecta APPROVED nas phases (governa o bypass do fechamento pós-aprovação)", () => {
+  assert.equal(wasApproved([]), false);
+  assert.equal(wasApproved([{ status: "OPEN" }, { status: "CLAIMED" }, { status: "AWAITING" }]), false);
+  assert.equal(wasApproved([{ status: "OPEN" }, { status: "APPROVED" }, { status: "CLAIMED" }, { status: "CLOSED" }]), true);
 });
 
 test("assertBrief aceita até 300 palavras e rejeita acima com orientação de decomposição", () => {

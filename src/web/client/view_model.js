@@ -1,4 +1,4 @@
-export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "CLOSED"];
+export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "APPROVED", "CLOSED"];
 export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"];
 export const ACTION_TYPES = ["Planning", "Design", "Implement", "Review", "Deploy"];
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"];

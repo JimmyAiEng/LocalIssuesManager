@@ -9,15 +9,10 @@ import { defaultRoot } from "./root.js";
 import type { IssueStatus, IssueType } from "./value_objects.js";
 
 export type ListFilter = { status?: IssueStatus; project?: string; title?: string; type?: IssueType };
-// Checks nomeados do pipeline de Implement, rodados nesta ordem (lint→unit→fitness→e2e→mutation):
-// nomear a etapa permite ao gate rotear a falha (mutation = teste fraco; demais = código).
-export type ProjectChecks = { lint?: string; unit?: string; fitness?: string; e2e?: string; mutation?: string };
-// Projeto registrado: aponta o repositório git (worktrees) e a validação que uma Issue Implement
-// precisa passar. `checks` nomeados quando configurados; `check` (comando único) é o fallback legado.
-// `container` = imagem Docker com o toolchain; quando definido, cada check roda isolado nela.
-// `testPaths` = globs que definem os arquivos de teste; quando presente, o gate de Implement
-// exige a ordem TDD (commit só-de-testes antes do primeiro commit de produção). Opt-in.
-export type ProjectConfig = { name: string; repo: string; container?: string; check?: string; checks?: ProjectChecks; testPaths?: string[] };
+// Projeto registrado: aponta o repositório git local. `repo` vai no prompt do agente; o issue-manager
+// orquestra o harness, não executa checks. Configs antigos podem trazer campos extras (ex. `check`):
+// a leitura os ignora — nada aqui os acessa.
+export type ProjectConfig = { name: string; repo: string };
 const FOLDERS: Record<IssueStatus, string> = {
   OPEN: "open", CLAIMED: "claimed", AWAITING: "awaiting", CLOSED: "closed",
 };

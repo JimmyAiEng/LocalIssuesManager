@@ -24,7 +24,6 @@ export async function submitCreateProject(form) {
   try {
     const draft = state.projectDraft;
     const payload = { name: draft.name, repo: draft.repo };
-    if (draft.check.trim()) payload.check = draft.check;
     await api("/api/projects", { method: "POST", body: payload });
     state.projects = await api("/api/projects");
     state.projectDraft = emptyProjectDraft();

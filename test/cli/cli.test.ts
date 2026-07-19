@@ -67,34 +67,16 @@ test("CLI create sem projeto registrado falha com orientação", () => {
   assert.match(denied.stderr, /Projeto não registrado.*project create/);
 });
 
-test("CLI project create/list registram repo e check", () => {
+test("CLI project create/list registram repo", () => {
   const vars = env();
   const created = JSON.parse(run(["project", "create", "--name", "outro",
-    "--repo", vars.ISSUES_ROOT as string, "--check", "npm test"], vars));
-  assert.equal(created.check, "npm test");
+    "--repo", vars.ISSUES_ROOT as string], vars));
+  assert.equal(created.repo, vars.ISSUES_ROOT);
   const listed = JSON.parse(run(["project", "list"], vars));
   assert.deepEqual(listed.map((project: { name: string }) => project.name).sort(), ["demo", "outro"]);
   const bogus = spawnSync(bin, ["project", "bogus"], { env: vars, encoding: "utf8" });
   assert.notEqual(bogus.status, 0);
   assert.match(bogus.stderr, /Usage: issues project/);
-});
-
-test("CLI project create aceita checks nomeados e persiste só os informados", () => {
-  const vars = env();
-  const created = JSON.parse(run(["project", "create", "--name", "pipe",
-    "--repo", vars.ISSUES_ROOT as string,
-    "--check-lint", "npm run lint", "--check-unit", "npm test", "--check-mutation", "npm run mutation"], vars));
-  assert.deepEqual(created.checks, { lint: "npm run lint", unit: "npm test", mutation: "npm run mutation" });
-  const listed = JSON.parse(run(["project", "list"], vars));
-  const pipe = listed.find((project: { name: string }) => project.name === "pipe");
-  assert.deepEqual(pipe.checks, { lint: "npm run lint", unit: "npm test", mutation: "npm run mutation" });
-});
-
-test("CLI project create aceita --container e persiste a imagem Docker", () => {
-  const vars = env();
-  const created = JSON.parse(run(["project", "create", "--name", "docked",
-    "--repo", vars.ISSUES_ROOT as string, "--container", "node:20", "--check", "npm test"], vars));
-  assert.equal(created.container, "node:20");
 });
 
 test("CLI next --id reivindica Issue específica sem --project; sem id nem project falha", () => {

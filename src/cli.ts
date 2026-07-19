@@ -5,8 +5,7 @@ import {
   setArtifact, statusIssue, updateTags,
 } from "./app/services/use_cases/issue_use_cases.js";
 import { decomposeIssue } from "./app/services/use_cases/decomposition_use_cases.js";
-import { createProject, listProjects, type ProjectChecks } from "./app/services/use_cases/project_use_cases.js";
-import { CHECK_ORDER } from "./app/services/project_checks.js";
+import { createProject, listProjects } from "./app/services/use_cases/project_use_cases.js";
 import { getPlan, setPlan } from "./app/services/use_cases/plan_use_cases.js";
 import { composePrompt } from "./app/services/use_cases/prompt_composition.js";
 import { getRequirements, setRequirements } from "./app/services/use_cases/requirements_use_cases.js";
@@ -54,24 +53,9 @@ function runProject(raw: string[]): void {
 }
 
 function project(sub: string | undefined, options: Options): Result {
-  if (sub === "create") {
-    return createProject({ name: value(options, "name"), repo: value(options, "repo"), container: optional(options, "container"),
-      check: optional(options, "check"), checks: projectChecks(options), testPaths: testPaths(options) });
-  }
+  if (sub === "create") return createProject({ name: value(options, "name"), repo: value(options, "repo") });
   if (sub === "list") return listProjects();
-  throw new Error("Usage: issues project <create|list> [--name <n> --repo <path> [--container <image>] [--check <cmd>] [--check-lint <cmd> --check-unit <cmd> --check-fitness <cmd> --check-e2e <cmd> --check-mutation <cmd>] [--test-paths <csv>]]");
-}
-
-// Checks nomeados do pipeline de Implement (lint→unit→fitness→e2e→mutation); só os informados.
-function projectChecks(options: Options): ProjectChecks | undefined {
-  const entries = CHECK_ORDER.map((step) => [step, optional(options, `check-${step}`)] as const).filter(([, cmd]) => cmd !== undefined);
-  return entries.length ? (Object.fromEntries(entries) as ProjectChecks) : undefined;
-}
-
-// --test-paths: CSV de globs (ex. "test/,**/*.test.ts") que liga o enforcement de TDD no Implement.
-function testPaths(options: Options): string[] | undefined {
-  const paths = optional(options, "test-paths")?.split(",").map((path) => path.trim()).filter(Boolean);
-  return paths?.length ? paths : undefined;
+  throw new Error("Usage: issues project <create|list> [--name <n> --repo <path>]");
 }
 
 function runWorktree(raw: string[]): void {

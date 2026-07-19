@@ -23,7 +23,7 @@ test("gates declaram artefatos, execução de código e aprovação humana", () 
   }), [
     ["Planning", "required", ["requirement"], "none", "conditional"],
     ["Design", "required", ["implementation-plan"], "conditional", "conditional"],
-    ["Implement", "none", [], "conditional", "conditional"],
+    ["Implement", "none", [], "none", "conditional"],
     ["Review", "required", ["document"], "none", "conditional"],
     ["Deploy", "none", [], "required", "required"],
   ]);

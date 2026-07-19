@@ -19,11 +19,11 @@ function context(action: ActionType): { root: string; queue: Queue; issue: Issue
   return { root, queue, issue };
 }
 
-test("dispatcher seleciona Planning e Implement", async () => {
+test("dispatcher seleciona Planning; Implement não tem gate de entrega", async () => {
   const planning = context("Planning");
   await assert.rejects(completeIssue(planning.queue, planning.issue, "CLOSED", "fim"), /sem requisitos/);
   const implement = context("Implement");
-  await assert.rejects(completeIssue(implement.queue, implement.issue, "CLOSED", "fim"), /exige worktree/);
+  await assert.doesNotReject(completeIssue(implement.queue, implement.issue, "CLOSED", "fim"));
 });
 
 test("dispatcher preserva DesignGateError estruturado", async () => {

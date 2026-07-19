@@ -25,13 +25,12 @@ function gitRepo(): string {
   return repo;
 }
 
-// Projeto registrado com o check que SEMPRE passa (o comando shell `true`, exit 0) — o gate de
-// Implement passa sem depender do toolchain real. SEM --test-paths (enforcement de TDD é opt-in,
-// então worktree recém-criada fecha sem exigir histórico git) e SEM --container (roda no host).
+// Projeto registrado apontando um repo git real. O issue-manager orquestra o harness: não executa
+// checks nem exige worktree no fechamento de Implement — a evidência já basta.
 function freshEnv(): NodeJS.ProcessEnv {
   const root = mkdtempSync(join(tmpdir(), "wf-store-"));
   const vars = { ...process.env, ISSUES_ROOT: root };
-  execFileSync(bin, ["project", "create", "--name", "demo", "--repo", gitRepo(), "--check", "true"], { env: vars, encoding: "utf8" });
+  execFileSync(bin, ["project", "create", "--name", "demo", "--repo", gitRepo()], { env: vars, encoding: "utf8" });
   return vars;
 }
 
@@ -127,16 +126,11 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> Review 
   ]);
   assert.equal(closeAgent(vars, designShortcut).status, "CLOSED"); // sem mudança de arquitetura: fecha direto
 
-  // === IMPLEMENT x4: worktree + check do projeto (`true`) passando -> fecham AFK ================
+  // === IMPLEMENT x4: sem gate de entrega, fecham AFK só com a evidência =========================
   const implementIds = [...implA, ...implB];
   assert.equal(implementIds.length, 4);
   for (const id of implementIds) {
     claim(vars, id);
-    // Gate negativo: sem worktree, o Implement não fecha.
-    const noWt = attempt(["status", "--id", id, "--agent", "pi", "--status", "CLOSED", "--comment", "fim", "--reason", "concluido"], vars);
-    assert.equal(noWt.status, 1);
-    assert.match(noWt.stderr, /exige worktree/);
-    run(["worktree", "add", "--id", id], vars);
     assert.equal(closeAgent(vars, id).status, "CLOSED");
   }
 

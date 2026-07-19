@@ -41,20 +41,20 @@ test("registro de projeto: write/read/list com project.json e pastas de status c
   const queue = new Queue(dir);
   assert.equal(queue.readProject("app"), null);
   assert.deepEqual(queue.listProjects(), []);
-  queue.writeProject({ name: "app", repo: "/tmp/repo", check: "npm test" });
+  queue.writeProject({ name: "app", repo: "/tmp/repo" });
   queue.writeProject({ name: "space / project", repo: "/tmp/other" });
-  assert.deepEqual(queue.readProject("app"), { name: "app", repo: "/tmp/repo", check: "npm test" });
+  assert.deepEqual(queue.readProject("app"), { name: "app", repo: "/tmp/repo" });
   assert.deepEqual(queue.readProject("space / project"), { name: "space / project", repo: "/tmp/other" });
   assert.deepEqual(queue.listProjects().map((project) => project.name).sort(), ["app", "space / project"]);
   assert.equal(existsSync(join(dir, "projects", "app", "open")), true);
   assert.equal(existsSync(join(dir, "projects", "app", "project.json")), true);
 });
 
-test("registro de projeto é upsert: regravar atualiza o check", () => {
+test("registro de projeto é upsert: regravar atualiza o repo", () => {
   const queue = new Queue(root());
   queue.writeProject({ name: "app", repo: "/tmp/repo" });
-  queue.writeProject({ name: "app", repo: "/tmp/repo", check: "npm run check" });
-  assert.equal(queue.readProject("app")?.check, "npm run check");
+  queue.writeProject({ name: "app", repo: "/tmp/outro" });
+  assert.equal(queue.readProject("app")?.repo, "/tmp/outro");
 });
 
 test("oldestOpen usa timestamp de entrada em OPEN e desempate estável", () => {

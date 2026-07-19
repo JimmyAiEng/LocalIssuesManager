@@ -171,7 +171,7 @@ Atalhos:
 - Claim preso → `reset --human` (só `CLAIMED`)
 - Retrabalho → `decide OPEN` ou nova Issue relacionada
 - Issue grande (limite de 300 palavras estourando) → crie Issues menores relacionadas e abandone a original (`--reason obsoleto`)
-- Issue criada errada pela IA → `status --reason errado` (abandono: pula o gate); linhagem esquecida → `relate --kind parent` (só entre Issues não-CLOSED)
+- Issue criada errada pela IA → `status --reason errado` (abandono: pula o gate); linhagem esquecida → `relate --kind parent` (grava mesmo em Issues já CLOSED)
 
 ---
 

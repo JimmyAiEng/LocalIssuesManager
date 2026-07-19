@@ -66,7 +66,8 @@ issues relate --id <órfã> --relates <pai> --kind parent
 ```
 
 Grava o par recíproco (a órfã vira `child` do pai).
-Só funciona com **as duas Issues não-CLOSED**: adote antes de fechar o pai.
+A linhagem é gravável mesmo com Issues já **CLOSED**: dá para adotar uma órfã sob um pai fechado.
+Só o conteúdo (comment/tag/status) fica imutável após CLOSED — `relate` é a exceção.
 
 **Issue criada errada, duplicada ou obsoleta** — reivindique e abandone:
 

@@ -45,6 +45,40 @@ test("ArtifactStore trata tipos ausentes e projetos dot-segment", () => {
   assert.equal(store.readText("..", { issueId: "i", type: "document" }), "y");
 });
 
+test("ArtifactStore grava e lista múltiplos documentos nomeados por Issue", () => {
+  const store = new ArtifactStore(root());
+  store.writeText("p", { issueId: "i", type: "document", name: "intent.md" }, "# intent");
+  store.writeText("p", { issueId: "i", type: "document", name: "evidence-a.md" }, "# a");
+  store.writeText("p", { issueId: "i", type: "document", name: "evidence-b.md" }, "# b");
+  assert.equal(store.readText("p", { issueId: "i", type: "document", name: "evidence-a.md" }), "# a");
+  assert.equal(store.readText("p", { issueId: "i", type: "document", name: "evidence-b.md" }), "# b");
+  assert.deepEqual(store.list("p", "i", "document").sort(), ["evidence-a.md", "evidence-b.md", "intent.md"]);
+});
+
+test("ArtifactStore mantém retrocompatibilidade do documento legado (sem name)", () => {
+  const store = new ArtifactStore(root());
+  store.writeText("p", { issueId: "i", type: "document" }, "# legado");
+  assert.equal(store.readText("p", { issueId: "i", type: "document" }), "# legado");
+  assert.deepEqual(store.list("p", "i", "document"), ["artifact.md"]);
+});
+
+test("ArtifactStore roteia design.md para o diretório de design, fora da listagem de documentos", () => {
+  const store = new ArtifactStore(root());
+  store.writeText("p", { issueId: "i", type: "document", name: "design.md" }, "# design");
+  assert.equal(store.readText("p", { issueId: "i", type: "document", name: "design.md" }), "# design");
+  assert.deepEqual(store.list("p", "i", "document"), []);
+});
+
+test("purgeIssue remove o diretório de documentos nomeados e o arquivo legado", () => {
+  const store = new ArtifactStore(root());
+  store.writeText("p", { issueId: "i", type: "document", name: "intent.md" }, "x");
+  store.writeText("p", { issueId: "i", type: "document" }, "y");
+  store.purgeIssue("p", "i");
+  assert.deepEqual(store.list("p", "i", "document"), []);
+  assert.equal(store.readText("p", { issueId: "i", type: "document", name: "intent.md" }), null);
+  assert.equal(store.readText("p", { issueId: "i", type: "document" }), null);
+});
+
 test("purgeIssue remove todos os tipos pertencentes à Issue", () => {
   const store = new ArtifactStore(root());
   for (const type of ["document", "requirement", "implementation-plan"] as const) {

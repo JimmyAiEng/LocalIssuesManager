@@ -52,14 +52,22 @@ Grave as entregas nesta ordem (comandos prontos para esta Issue):
    issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<o que foi implementado e como validou>" --reason concluido
    (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING, sem --reason.)`,
 
-  Review: `Fluxo desta Issue (comandos prontos):
+  Review: `Valide o CONJUNTO entregue pelas Issues relacionadas (não é o review interno de Implement). Siga a sequência e só avance quando a etapa anterior não achou problema.
 
-1. Rode o produto e confronte cada requisito/critério com o comportamento observado (rodar > ler).
-2. Problema grave vira nova Issue relacionada:
-   issues create --title "<t>" --project {{project}} --type Fix --action Implement --problem "<o quê>" --relates {{id}} --agent {{agent}}
-3. Artefato do veredito — obrigatório, markdown, máx. 300 palavras, começando com APROVADO | APROVADO com ressalva | REPROVADO:
+Fluxo desta Issue (comandos prontos):
+
+1. Understand Intent — leia as threads e artefatos das Issues Planning e Design da linhagem (onde a mudança foi pedida e desenhada) e grave a intenção compreendida:
+   issues artifact --id {{id}} --name intent.md --file intent.md
+2. Rebase com a base do projeto (prd/hml/dev) e faça o Conflict Check; grave a evidência do que verificou:
+   issues artifact --id {{id}} --name evidence-conflito.md --file evidence-conflito.md
+3. Só se o Conflict Check não achou problema: Adversarial Check — estresse a solução contra cada requisito/critério (rodar > ler) e grave a evidência:
+   issues artifact --id {{id}} --name evidence-adversarial.md --file evidence-adversarial.md
+4. Só se o Adversarial Check não achou problema: rode o CI Pipeline (o check do projeto) sobre o conjunto integrado.
+5. Veredito — obrigatório, markdown, máx. 300 palavras, começando com APROVADO | APROVADO com ressalva | REPROVADO:
    issues artifact --id {{id}} --file artifact.md
-4. Encerramento com evidência:
+   REPROVADO só conclui com retrabalho VIVO: crie e vincule a esta Review ao menos uma Issue Implement ou Design fora de CLOSED:
+   issues create --title "<t>" --project {{project}} --type Fix --action Implement --problem "<o quê>" --relates {{id}} --agent {{agent}}
+6. Encerramento com evidência:
    issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<veredito + achados>" --reason concluido
    (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING, sem --reason.)`,
 

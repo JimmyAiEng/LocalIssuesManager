@@ -1,38 +1,40 @@
 # Action `Review`
 
-Validar o conjunto entregue (≠ review de Implement).
+Validar o CONJUNTO entregue pelas Issues relacionadas (≠ review interno de Implement).
+Você tem a responsabilidade de estressar e encontrar falhas no que foi entregue.
 
-Você tem a responsabilidade de estressar e encontrar falhas no que foi entregue pelas Issues relacionadas.
-Com base na Issue e no código atual, teste rigorosamente:
-1. A execução dos testes.
-2. As evidências da solução, e se a solução atende ao problema original.
-3. O design da implementação (linguagem ubíqua, padrões do repositório, arquitetura).
-4. A segurança dos endpoints e do código em si.
+## Sequência (workflow do diagrama)
 
-Se encontrar problema grave, crie uma nova Issue (`Design` ou `Implement`) relacionada para resolvê-lo.
+Execute nesta ordem.
+Cada etapa grava um documento, e **só se avança quando a etapa anterior não encontrou problema**.
 
-## Detalhes das validações
+1. **Understand Intent** — leia as threads (as sessões de chat com o humano que originaram a mudança) e os artefatos das Issues Planning e Design da linhagem.
+   É onde a mudança foi pedida e desenhada.
+   Registre a intenção compreendida em `intent.md`.
+2. **Rebase com a base do projeto** (prd/hml/dev) para revisar contra o estado real de integração.
+3. **Conflict Check** — verifique conflitos de integração após o rebase.
+   Grave o que verificou em uma `evidence-*.md`.
+4. **Adversarial Check** — só se o Conflict Check **não** achou problema.
+   Estresse a solução contra cada requisito e critério de aceitação (rodar > ler), procurando falhas.
+   Grave o que verificou em outra `evidence-*.md`.
+5. **CI Pipeline** — só se o Adversarial Check **não** achou problema.
+   Rode o check do projeto sobre o conjunto integrado.
 
-- Cada requisito/critério de aceitação confrontado com o comportamento real do produto (rodar > ler).
-- Integração entre as fatias entregues (o conjunto funciona junto, não só cada fatia isolada).
+Achou problema em qualquer etapa (conflito, falha adversarial, CI vermelho)?
+Não avance para a etapa seguinte: o veredito é REPROVADO e o problema vira retrabalho (veja abaixo).
 
-## Heurísticas
+## Documentos e veredito (o gate exige)
 
-- **Não** trate isto como o review interno de Implement; a action Review valida o conjunto.
-- Preferir **outro** harness/modelo que o da implementação — recomendado, não obrigatório.
-- **Como** validar (perspectivas, ferramentas, cobertura) é decisão do agente.
+O gate `validateReview` só conclui a Issue com o conjunto persistido; sem ele o encerramento falha dizendo o que falta.
 
-## Entrega — o Artefato do veredito
+- `intent.md` — a intenção compreendida (≤300 palavras).
+  `issues artifact --id <id> --name intent.md --file <f>`
+- ao menos duas `evidence-*.md` — o que foi verificado, aprovado e reprovado em cada etapa (cada uma ≤300 palavras).
+  `issues artifact --id <id> --name evidence-<n>.md --file <f>`
+- o **veredito** no artefato legado (sem `--name`), começando por APROVADO | APROVADO com ressalva | REPROVADO (≤300 palavras).
+  `issues artifact --id <id> --file artifact.md`
 
-O gate exige este artefato persistido: sem ele a Issue não conclui (nem AFK nem para decisão humana).
-
-```bash
-issues artifact --id <id> --file ./artifact.md
-```
-
-O **nome do arquivo é irrelevante** (o conteúdo é gravado na Issue); use `./artifact.md` e não gaste tempo decidindo.
-Máximo 300 palavras.
-Esqueleto:
+Esqueleto do veredito:
 
 ```markdown
 # Veredito
@@ -46,18 +48,27 @@ APROVADO | APROVADO com ressalva | REPROVADO
 
 ## Achados
 
-- <achado + a Issue criada para resolvê-lo, ou "Nenhum">
-
-## Como validei
-
-<comandos rodados e o que foi exercitado de verdade>
+- <achado + a Issue de retrabalho criada, ou "Nenhum">
 ```
+
+## Retrabalho (vínculo obrigatório no REPROVADO)
+
+Veredito REPROVADO só conclui com retrabalho **vivo**.
+Crie ao menos uma Issue `Implement` ou `Design` **fora de CLOSED** e vincule-a a esta Review (`--relates <id>` no create, ou `issues relate`).
+É a Issue viva que carrega o conserto — distinta das Issues revisadas, já fechadas.
+APROVADO (com ou sem ressalva) conclui direto.
+
+## Heurísticas
+
+- **Não** trate isto como o review interno de Implement; a action Review valida o conjunto.
+- Preferir **outro** harness/modelo que o da implementação — recomendado, não obrigatório.
+- **Como** validar (perspectivas, ferramentas, cobertura) é decisão do agente.
 
 ## Encerramento
 
 ```bash
 issues status --id <id> --agent <ia> --status CLOSED \
-  --comment "<veredicto + achados>" --reason concluido
+  --comment "<veredito + achados>" --reason concluido
 ```
 
 Use `--status AWAITING` (sem `--reason`) se a Issue é HITL, `risk=ALTO` ou `complexity=ALTA`.

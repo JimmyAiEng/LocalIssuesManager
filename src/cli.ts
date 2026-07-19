@@ -51,9 +51,9 @@ function runProject(raw: string[]): void {
 }
 
 function project(sub: string | undefined, options: Options): Result {
-  if (sub === "create") return createProject({ name: value(options, "name"), repo: value(options, "repo") });
+  if (sub === "create") return createProject({ name: value(options, "name"), repo: value(options, "repo"), concern: optional(options, "concern") });
   if (sub === "list") return listProjects();
-  throw new Error("Usage: issues project <create|list> [--name <n> --repo <path>]");
+  throw new Error("Usage: issues project <create|list> [--name <n> --repo <path> --concern LOW|HIGH]");
 }
 
 function runRequirements(raw: string[]): void {

@@ -9,10 +9,14 @@ import { defaultRoot } from "./root.js";
 import type { IssueStatus, IssueType } from "./value_objects.js";
 
 export type ListFilter = { status?: IssueStatus; project?: string; title?: string; type?: IssueType };
+// Nível de preocupação do Projeto: piso de supervisão que governa autonomia e ordem de claim.
+// LOW não muda nada; HIGH (fatias 2 e 3) impõe travas. Ausência na leitura = LOW (config legado).
+export type ConcernLevel = "LOW" | "HIGH";
+export const CONCERN_LEVELS: readonly ConcernLevel[] = ["LOW", "HIGH"];
 // Projeto registrado: aponta o repositório git local. `repo` vai no prompt do agente; o issue-manager
-// orquestra o harness, não executa checks. Configs antigos podem trazer campos extras (ex. `check`):
-// a leitura os ignora — nada aqui os acessa.
-export type ProjectConfig = { name: string; repo: string };
+// orquestra o harness, não executa checks. Configs antigos podem trazer campos extras (ex. `check`)
+// ou faltar `concern`: a leitura ignora os extras e trata `concern` ausente como LOW.
+export type ProjectConfig = { name: string; repo: string; concern: ConcernLevel };
 const FOLDERS: Record<IssueStatus, string> = {
   OPEN: "open", CLAIMED: "claimed", AWAITING: "awaiting", CLOSED: "closed",
 };
@@ -64,14 +68,14 @@ export class Queue {
 
   readProject(name: string): ProjectConfig | null {
     const path = join(this.#root, "projects", projectSegment(name), "project.json");
-    return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as ProjectConfig : null;
+    return existsSync(path) ? readConfig(path) : null;
   }
 
   listProjects(): ProjectConfig[] {
     return this.#projects()
       .map((segment) => join(this.#root, "projects", segment, "project.json"))
       .filter((path) => existsSync(path))
-      .map((path) => JSON.parse(readFileSync(path, "utf8")) as ProjectConfig);
+      .map(readConfig);
   }
 
   // Compatibility façade: novos callers usam `queue.artifacts`; estes aliases preservam API local.
@@ -175,6 +179,12 @@ export class Queue {
   #path(project: string, status: IssueStatus, id: string): string {
     return join(this.#root, "projects", projectSegment(project), FOLDERS[status], `${id}.json`);
   }
+}
+
+// Config legado (sem `concern`) lê como LOW: concern é piso de supervisão, ausência = o mínimo.
+function readConfig(path: string): ProjectConfig {
+  const raw = JSON.parse(readFileSync(path, "utf8")) as { name: string; repo: string; concern?: ConcernLevel };
+  return { name: raw.name, repo: raw.repo, concern: raw.concern ?? "LOW" };
 }
 
 function designArtifactType(name: string): TextArtifactType {

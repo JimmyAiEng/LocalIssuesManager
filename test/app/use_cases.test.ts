@@ -40,9 +40,11 @@ test("project create valida repo existente e list devolve os registrados", () =>
   const dir = root();
   assert.throws(() => createProject({ name: "ghost", repo: join(dir, "nope") }, dir), /Repositório não encontrado/);
   assert.throws(() => createProject({ name: " ", repo: dir }, dir), /name is required/);
-  createProject({ name: "other", repo: dir }, dir);
+  assert.throws(() => createProject({ name: "bad", repo: dir, concern: "MEDIUM" }, dir), /concern inválido/);
+  assert.equal(createProject({ name: "other", repo: dir }, dir).concern, "LOW");
+  assert.equal(createProject({ name: "high", repo: dir, concern: "HIGH" }, dir).concern, "HIGH");
   const projects = listProjects(dir).map((project) => project.name).sort();
-  assert.deepEqual(projects, ["app", "other"]);
+  assert.deepEqual(projects, ["app", "high", "other"]);
 });
 
 test("next reivindica a Issue OPEN mais antiga do projeto (FIFO)", () => {

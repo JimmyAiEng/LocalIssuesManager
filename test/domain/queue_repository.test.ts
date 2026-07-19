@@ -41,20 +41,31 @@ test("registro de projeto: write/read/list com project.json e pastas de status c
   const queue = new Queue(dir);
   assert.equal(queue.readProject("app"), null);
   assert.deepEqual(queue.listProjects(), []);
-  queue.writeProject({ name: "app", repo: "/tmp/repo" });
-  queue.writeProject({ name: "space / project", repo: "/tmp/other" });
-  assert.deepEqual(queue.readProject("app"), { name: "app", repo: "/tmp/repo" });
-  assert.deepEqual(queue.readProject("space / project"), { name: "space / project", repo: "/tmp/other" });
+  queue.writeProject({ name: "app", repo: "/tmp/repo", concern: "LOW" });
+  queue.writeProject({ name: "space / project", repo: "/tmp/other", concern: "HIGH" });
+  assert.deepEqual(queue.readProject("app"), { name: "app", repo: "/tmp/repo", concern: "LOW" });
+  assert.deepEqual(queue.readProject("space / project"), { name: "space / project", repo: "/tmp/other", concern: "HIGH" });
   assert.deepEqual(queue.listProjects().map((project) => project.name).sort(), ["app", "space / project"]);
   assert.equal(existsSync(join(dir, "projects", "app", "open")), true);
   assert.equal(existsSync(join(dir, "projects", "app", "project.json")), true);
 });
 
-test("registro de projeto é upsert: regravar atualiza o repo", () => {
+test("config legado sem concern lê como LOW em read e list", () => {
+  const dir = root();
+  const queue = new Queue(dir);
+  const legacy = join(dir, "projects", "legacy");
+  mkdirSync(legacy, { recursive: true });
+  writeFileSync(join(legacy, "project.json"), JSON.stringify({ name: "legacy", repo: "/tmp/legacy" }));
+  assert.deepEqual(queue.readProject("legacy"), { name: "legacy", repo: "/tmp/legacy", concern: "LOW" });
+  assert.deepEqual(queue.listProjects(), [{ name: "legacy", repo: "/tmp/legacy", concern: "LOW" }]);
+});
+
+test("registro de projeto é upsert: regravar atualiza repo e concern", () => {
   const queue = new Queue(root());
-  queue.writeProject({ name: "app", repo: "/tmp/repo" });
-  queue.writeProject({ name: "app", repo: "/tmp/outro" });
+  queue.writeProject({ name: "app", repo: "/tmp/repo", concern: "LOW" });
+  queue.writeProject({ name: "app", repo: "/tmp/outro", concern: "HIGH" });
   assert.equal(queue.readProject("app")?.repo, "/tmp/outro");
+  assert.equal(queue.readProject("app")?.concern, "HIGH");
 });
 
 test("oldestOpen usa timestamp de entrada em OPEN e desempate estável", () => {

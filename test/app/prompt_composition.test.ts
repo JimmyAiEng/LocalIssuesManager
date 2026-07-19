@@ -60,6 +60,36 @@ test("cada action recebe o seu contrato: entrega própria + rota de abandono (De
   }
 });
 
+// Issue que passou por APPROVED reentrou na fila: o contrato da action é trocado pelo de execução do
+// handoff — busca pelo comando (sem inline), executa os próximos passos e fecha direto com evidência.
+const approvedPhases = [
+  { status: "OPEN" as const, timestamp: "2026-07-19T00:00:00.000Z" },
+  { status: "APPROVED" as const, timestamp: "2026-07-19T01:00:00.000Z" },
+];
+
+test("Issue com fase APPROVED usa o contrato de execução do handoff no lugar do contrato da action", () => {
+  const view = makeView("Implement", { owner: "claude-code", phases: approvedPhases });
+  const text = composePrompt(view);
+  assert.match(text, /## Entrega desta Issue \(Issue APROVADA/);
+  assert.match(text, /já foi APROVADA pelo humano/);
+  assert.ok(text.includes(`issues handoff --id ${view.id}`), "instrui buscar o handoff pelo comando");
+  assert.ok(text.includes(`issues status --id ${view.id} --agent claude-code --status CLOSED`), "fecha com evidência");
+  assert.match(text, /--reason concluido/);
+  // Troca o contrato da action: nada do contrato normal de Implement nem da rota de abandono.
+  assert.doesNotMatch(text, /## Entrega desta Issue \(action Implement\)/);
+  assert.doesNotMatch(text, /git worktree add/);
+  assert.doesNotMatch(text, /--reason obsoleto/);
+  // A trava humana já foi dispensada pelo app pós-APPROVED: o contrato não promete AWAITING.
+  assert.doesNotMatch(text, /--status AWAITING/);
+});
+
+test("Issue sem fase APPROVED mantém o contrato da action de hoje", () => {
+  const text = composePrompt(makeView("Implement", { owner: "claude-code" }));
+  assert.match(text, /## Entrega desta Issue \(action Implement\)/);
+  assert.match(text, /git worktree add/);
+  assert.doesNotMatch(text, /Issue APROVADA/);
+});
+
 // O concern do Projeto ramifica o passo de encerramento de Planning/Design no contrato do prompt:
 // em HIGH o gate recusa o CLOSED por agente, então o contrato já manda fechar por AWAITING.
 const closeCommand: Record<"Planning" | "Design", string> = {

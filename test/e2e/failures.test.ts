@@ -166,25 +166,11 @@ test("falha: abandono com reason fora do enum — CLI", () => {
   assert.match(stderr, /Invalid closed reason: porque-sim/);
 });
 
-test("falha: Issue Implement não conclui sem worktree — CLI", () => {
+test("Implement: sem gate de entrega, a IA fecha só com a evidência — CLI", () => {
   const root = newRoot();
   const id = claimedIssueCLI(root, ["--action", "Implement"]);
-  const { status, stderr } = fail(["status", "--id", id, "--agent", "pi", "--status", "CLOSED", "--comment", "feito", "--reason", "concluido"], root);
-  assert.notEqual(status, 0);
-  assert.match(stderr, /exige worktree/);
-});
-
-test("falha: check do projeto reprovado bloqueia a conclusão de Implement — CLI", () => {
-  const root = newRoot();
-  run(["project", "create", "--name", "demo", "--repo", root, "--check", "exit 7"], root); // upsert com check que falha
-  const id = claimedIssueCLI(root, ["--action", "Implement"]);
-  const queue = new Queue(root);
-  const issue = queue.loadRequired(id);
-  issue.setWorktree({ path: root, branch: "issue/x" });
-  queue.save(issue);
-  const { status, stderr } = fail(["status", "--id", id, "--agent", "pi", "--status", "CLOSED", "--comment", "feito", "--reason", "concluido"], root);
-  assert.notEqual(status, 0);
-  assert.match(stderr, /Check do projeto falhou \(exit 7\)/);
+  const closed = JSON.parse(run(["status", "--id", id, "--agent", "pi", "--status", "CLOSED", "--comment", "feito", "--reason", "concluido"], root)) as { status: string };
+  assert.equal(closed.status, "CLOSED");
 });
 
 // ─────────────────────────── Decisões e status ───────────────────────────

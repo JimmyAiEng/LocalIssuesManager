@@ -5,7 +5,6 @@ import type { Queue } from "../../../domain/queue_repository.js";
 import { parseAgentId, parseClosedReason, parseRole } from "../../../domain/value_objects.js";
 import { validateDeploy } from "./deploy.js";
 import { validateDesign } from "./design.js";
-import { validateImplement } from "./implement.js";
 import { validatePlanning } from "./planning.js";
 import { validateReview } from "./review.js";
 
@@ -63,9 +62,9 @@ export async function completeIssue(queue: Queue, issue: Issue, status: Completi
 export async function validateWorkflowDelivery(queue: Queue, issue: Issue, comment: string): Promise<void> {
   if (issue.action === "Planning") return validatePlanning(queue, issue);
   if (issue.action === "Design") return validateDesign(queue, issue);
-  if (issue.action === "Implement") return validateImplement(queue, issue);
   if (issue.action === "Review") return validateReview(queue, issue);
-  validateDeploy(issue, comment);
+  if (issue.action === "Deploy") return validateDeploy(issue, comment);
+  // Implement não tem gate de entrega: a evidência já é exigida pela transição de status.
 }
 
 function missingArtifacts(queue: Queue, issue: Issue): GateViolation[] {

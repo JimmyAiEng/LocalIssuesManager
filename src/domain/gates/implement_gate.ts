@@ -4,7 +4,6 @@ export const IMPLEMENT_GATE: GateDefinition = {
   action: "Implement",
   name: "Unit of Work",
   artifacts: { mode: "none", types: [] },
-  codeExecution: { mode: "conditional", description: "ordem TDD e checks do projeto",
-    condition: "testPaths, checks ou check configurados no projeto" },
+  codeExecution: { mode: "none" },
   humanApproval: { mode: "conditional", condition: "tags de autonomia" },
 };

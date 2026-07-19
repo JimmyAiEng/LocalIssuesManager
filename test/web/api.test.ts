@@ -32,10 +32,10 @@ test("API cria, lista por tipo, lê e fecha pela camada app", async () => withWe
 
 test("API registra projeto e o lista — o painel deixa de depender do CLI para começar", async () => withWeb(async (url, root) => {
   assert.deepEqual(await projectNames(url), ["web"]);
-  const created = await request(url, "POST", "/api/projects", { name: "novo", repo: root, check: "npm test" });
+  const created = await request(url, "POST", "/api/projects", { name: "novo", repo: root });
   assert.equal(created.status, 201);
   assert.equal(created.body.name, "novo");
-  assert.equal(created.body.check, "npm test");
+  assert.equal(created.body.repo, root);
   assert.deepEqual((await projectNames(url)).sort(), ["novo", "web"]);
   // e a Issue passa a nascer nele: era exatamente o que travava quem só usa o web
   assert.equal((await request(url, "POST", "/api/issues", { ...input, project: "novo" })).status, 201);

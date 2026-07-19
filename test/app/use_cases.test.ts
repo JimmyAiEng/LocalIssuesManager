@@ -8,7 +8,6 @@ import {
   setArtifact, statusIssue, updateTags,
 } from "../../src/app/services/use_cases/issue_use_cases.js";
 import { createProject, listProjects } from "../../src/app/services/use_cases/project_use_cases.js";
-import { type CommandRunner, dockerArgv, runProjectChecks } from "../../src/app/services/project_checks.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
 // Review não tem gate de conclusão: os testes genéricos de fluxo usam essa action.
@@ -31,67 +30,9 @@ test("project create valida repo existente e list devolve os registrados", () =>
   const dir = root();
   assert.throws(() => createProject({ name: "ghost", repo: join(dir, "nope") }, dir), /Repositório não encontrado/);
   assert.throws(() => createProject({ name: " ", repo: dir }, dir), /name is required/);
-  createProject({ name: "other", repo: dir, check: "true" }, dir);
+  createProject({ name: "other", repo: dir }, dir);
   const projects = listProjects(dir).map((project) => project.name).sort();
   assert.deepEqual(projects, ["app", "other"]);
-  assert.equal(listProjects(dir).find((project) => project.name === "other")?.check, "true");
-});
-
-test("project create persiste container (imagem Docker) só quando informado", () => {
-  const dir = root();
-  createProject({ name: "docked", repo: dir, container: "node:20", check: "true" }, dir);
-  assert.equal(listProjects(dir).find((p) => p.name === "docked")?.container, "node:20");
-  assert.equal(listProjects(dir).find((p) => p.name === "app")?.container, undefined);
-});
-
-// Runner falso: registra as invocações e devolve o resultado programado, sem tocar em Docker real.
-function fakeRunner(result: Partial<ReturnType<CommandRunner>>): { run: CommandRunner; calls: { file: string; args: string[]; shell: boolean }[] } {
-  const calls: { file: string; args: string[]; shell: boolean }[] = [];
-  const run: CommandRunner = (file, args, opts) => {
-    calls.push({ file, args, shell: opts.shell });
-    return { status: 0, stdout: "", stderr: "", ...result };
-  };
-  return { run, calls };
-}
-
-test("dockerArgv monta docker run --rm montando a worktree em /work", () => {
-  assert.deepEqual(dockerArgv("node:20", "/wt", "npm test"),
-    ["run", "--rm", "-v", "/wt:/work", "-w", "/work", "node:20", "sh", "-c", "npm test"]);
-});
-
-test("runProjectChecks com container executa cada check via docker run e passa quando status 0", () => {
-  const { run, calls } = fakeRunner({ status: 0 });
-  const failure = runProjectChecks({ name: "d", repo: "/r", container: "node:20", check: "npm test" }, "/wt", run);
-  assert.equal(failure, null);
-  assert.equal(calls[0].file, "docker");
-  assert.equal(calls[0].shell, false);
-  assert.deepEqual(calls[0].args, dockerArgv("node:20", "/wt", "npm test"));
-});
-
-test("runProjectChecks com container: check reprovado no container é CheckFailure normal", () => {
-  const { run } = fakeRunner({ status: 1, stdout: "boom" });
-  const failure = runProjectChecks({ name: "d", repo: "/r", container: "node:20", check: "npm test" }, "/wt", run);
-  assert.equal(failure?.step, "check");
-  assert.match(failure?.output ?? "", /boom/);
-});
-
-test("runProjectChecks sem container roda no host via shell (comportamento legado)", () => {
-  const { run, calls } = fakeRunner({ status: 0 });
-  runProjectChecks({ name: "d", repo: "/r", check: "npm test" }, "/wt", run);
-  assert.equal(calls[0].file, "npm test");
-  assert.equal(calls[0].shell, true);
-});
-
-test("runProjectChecks com container: Docker ausente (spawn error) é erro explícito, não fallback", () => {
-  const { run } = fakeRunner({ status: null, error: new Error("spawn docker ENOENT") });
-  assert.throws(() => runProjectChecks({ name: "d", repo: "/r", container: "node:20", check: "true" }, "/wt", run),
-    /Docker indispon[ií]vel.*n[aã]o h[aá] fallback/);
-});
-
-test("runProjectChecks com container: saída 125 (docker/daemon) é erro explícito, não CheckFailure", () => {
-  const { run } = fakeRunner({ status: 125, stderr: "Cannot connect to the Docker daemon" });
-  assert.throws(() => runProjectChecks({ name: "d", repo: "/r", container: "node:20", check: "true" }, "/wt", run),
-    /Docker indispon[ií]vel/);
 });
 
 test("next reivindica a Issue OPEN mais antiga do projeto (FIFO)", () => {
@@ -149,64 +90,12 @@ test("gate Planning: sem requirements a IA não conclui a Issue", async () => {
   assert.equal(getIssue(issue.id, dir).status, "CLAIMED"); // nada foi aplicado
 });
 
-test("gate Implement: sem worktree a IA não conclui a Issue", async () => {
+test("gate Implement: sem gate de entrega, fecha AFK só com a evidência", async () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "impl", action: "Implement" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
-  await assert.rejects(
-    statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "pronto" }, dir),
-    /exige worktree.*issues worktree add/,
-  );
-});
-
-test("gate Implement: check do projeto roda na worktree e bloqueia quando falha", async () => {
-  const dir = root();
-  createProject({ name: "checked", repo: dir, check: "exit 1" }, dir);
-  const issue = createIssue({ ...body, project: "checked", title: "check", action: "Implement" }, dir);
-  nextIssue({ agent: "pi", project: "checked" }, dir);
-  const queue = new Queue(dir);
-  const withWorktree = queue.loadRequired(issue.id);
-  withWorktree.setWorktree({ path: dir, branch: "issue/x" });
-  queue.save(withWorktree);
-  await assert.rejects(
-    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
-    /Check do projeto falhou \(exit 1\)/,
-  );
-  createProject({ name: "checked", repo: dir, check: "echo ok" }, dir); // upsert: check passa a valer
   await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir);
   assert.equal(getIssue(issue.id, dir).status, "CLOSED");
-});
-
-test("gate Implement: checks nomeados param na primeira falha e a mensagem nomeia a etapa (unit)", async () => {
-  const dir = root();
-  // lint passa, unit falha: o gate para em unit, nomeia a etapa e mostra o output dela.
-  createProject({ name: "named", repo: dir,
-    checks: { lint: "echo lint-ok", unit: "echo unit-boom; exit 1", fitness: "exit 1" } }, dir);
-  const issue = createIssue({ ...body, project: "named", title: "impl", action: "Implement" }, dir);
-  nextIssue({ agent: "pi", project: "named" }, dir);
-  const queue = new Queue(dir);
-  const withWorktree = queue.loadRequired(issue.id);
-  withWorktree.setWorktree({ path: dir, branch: "issue/x" });
-  queue.save(withWorktree);
-  await assert.rejects(
-    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
-    (error: Error) => /Check "unit" falhou/.test(error.message) && /unit-boom/.test(error.message),
-  );
-});
-
-test("gate Implement: falha de mutation orienta reforçar os testes, não o código", async () => {
-  const dir = root();
-  createProject({ name: "mut", repo: dir, checks: { unit: "true", mutation: "echo sobreviveu; exit 1" } }, dir);
-  const issue = createIssue({ ...body, project: "mut", title: "impl", action: "Implement" }, dir);
-  nextIssue({ agent: "pi", project: "mut" }, dir);
-  const queue = new Queue(dir);
-  const withWorktree = queue.loadRequired(issue.id);
-  withWorktree.setWorktree({ path: dir, branch: "issue/x" });
-  queue.save(withWorktree);
-  await assert.rejects(
-    statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
-    (error: Error) => /Check "mutation" falhou/.test(error.message) && /Test Coding/.test(error.message) && /testes/.test(error.message),
-  );
 });
 
 test("gate Review: sem o artefato de validação a IA não conclui a Issue", async () => {

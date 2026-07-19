@@ -82,8 +82,16 @@ test("CLI project create/list registram repo", () => {
   const created = JSON.parse(run(["project", "create", "--name", "outro",
     "--repo", vars.ISSUES_ROOT as string], vars));
   assert.equal(created.repo, vars.ISSUES_ROOT);
+  assert.equal(created.concern, "LOW"); // sem --concern: default LOW
+  const alta = JSON.parse(run(["project", "create", "--name", "alta",
+    "--repo", vars.ISSUES_ROOT as string, "--concern", "HIGH"], vars));
+  assert.equal(alta.concern, "HIGH");
+  const invalido = spawnSync(bin, ["project", "create", "--name", "x",
+    "--repo", vars.ISSUES_ROOT as string, "--concern", "MEDIUM"], { env: vars, encoding: "utf8" });
+  assert.notEqual(invalido.status, 0);
+  assert.match(invalido.stderr, /concern inválido/);
   const listed = JSON.parse(run(["project", "list"], vars));
-  assert.deepEqual(listed.map((project: { name: string }) => project.name).sort(), ["demo", "outro"]);
+  assert.deepEqual(listed.map((project: { name: string }) => project.name).sort(), ["alta", "demo", "outro"]);
   const bogus = spawnSync(bin, ["project", "bogus"], { env: vars, encoding: "utf8" });
   assert.notEqual(bogus.status, 0);
   assert.match(bogus.stderr, /Usage: issues project/);

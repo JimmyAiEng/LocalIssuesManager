@@ -210,13 +210,23 @@ export function artifactFromFile(path: string): string {
   return readFileSync(path, "utf8");
 }
 
-// Grava/substitui o Artifact doc da Issue; não persiste o JSON da Issue.
-export function setArtifact(input: { issueId: string; content: string }, root?: string): void {
+// Grava/substitui um Artifact doc da Issue; não persiste o JSON da Issue. Com `name`, grava um
+// documento nomeado (intent.md, evidence-*.md); sem, o artefato legado. O nome vem do --name da CLI,
+// então é trust boundary: o store faz `join`, aqui barramos travessia de path.
+export function setArtifact(input: { issueId: string; content: string; name?: string }, root?: string): void {
   const queue = new Queue(root);
   const issue = queue.loadRequired(input.issueId);
   if (issue.status === "CLOSED") throw new DomainError("CLOSED aggregate is immutable");
   DocumentArtifact.validate(input.content);
-  queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "document" }, input.content);
+  const name = input.name === undefined ? undefined : validArtifactName(input.name);
+  queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "document", name }, input.content);
+}
+
+function validArtifactName(name: string): string {
+  if (!name.endsWith(".md") || name.includes("/") || name.includes("..")) {
+    throw new DomainError(`Nome de artefato inválido "${name}": use um arquivo .md sem '/' nem '..'`);
+  }
+  return name;
 }
 
 export type CommentInput = {

@@ -22,11 +22,20 @@ const createRequired = ["create", "--title", "Bug X", "--project", "demo", "--ty
   "--action", "Review", "--problem", "quebra ao salvar", "--agent", "pi"];
 const createFull = createRequired.concat("--acceptance-criteria", "salva sem erro");
 
-// createRequired cria Issues Review: o gate de conclusão exige o Artefato .md. Semeia-o nos testes
-// que transicionam a Issue (AWAITING/CLOSED) pela IA.
-const qaArtifactFile = join(mkdtempSync(join(tmpdir(), "issues-e2e-qa-")), "qa.md");
-writeFileSync(qaArtifactFile, "# Review ok");
-const seedQa = (vars: NodeJS.ProcessEnv, id: string): string => run(["artifact", "--id", id, "--file", qaArtifactFile], vars);
+// createRequired cria Issues Review: o gate exige intent + 2 evidence + veredito. Semeia o conjunto
+// nos testes que transicionam a Issue (AWAITING/CLOSED) pela IA.
+const qaDir = mkdtempSync(join(tmpdir(), "issues-e2e-qa-"));
+const qaFile = (name: string, content: string): string => { const p = join(qaDir, name); writeFileSync(p, content); return p; };
+const intentFile = qaFile("intent.md", "# intenção");
+const evAFile = qaFile("evidence-a.md", "# evidência a");
+const evBFile = qaFile("evidence-b.md", "# evidência b");
+const verdictFile = qaFile("verdict.md", "APROVADO revisão ok");
+const seedQa = (vars: NodeJS.ProcessEnv, id: string): void => {
+  run(["artifact", "--id", id, "--name", "intent.md", "--file", intentFile], vars);
+  run(["artifact", "--id", id, "--name", "evidence-a.md", "--file", evAFile], vars);
+  run(["artifact", "--id", id, "--name", "evidence-b.md", "--file", evBFile], vars);
+  run(["artifact", "--id", id, "--file", verdictFile], vars);
+};
 const diskPath = (vars: NodeJS.ProcessEnv, folder: string, id: string) =>
   join(vars.ISSUES_ROOT as string, "projects", "demo", folder, `${id}.json`);
 

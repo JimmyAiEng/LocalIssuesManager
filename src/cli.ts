@@ -117,7 +117,7 @@ function create(options: Options): Result {
 
 function issueArtifact(options: Options): Result {
   const id = value(options, "id");
-  setArtifact({ issueId: id, content: artifactFromFile(value(options, "file")) });
+  setArtifact({ issueId: id, content: artifactFromFile(value(options, "file")), name: optional(options, "name") });
   return { ok: true, id };
 }
 

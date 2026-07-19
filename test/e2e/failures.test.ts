@@ -35,15 +35,22 @@ const createArgs = [
   "--problem", "problema", "--agent", "pi",
 ];
 
-// Artefato de Review fixo: createArgs cria Issues Review, cujo gate de conclusão exige o .md persistido.
-// Semeá-lo aqui deixa as falhas testadas (estado, owner, reason) aflorarem — e é inócuo para os
-// gates de Planning/Implement quando `extra` troca a action.
-const qaArtifactFile = join(mkdtempSync(join(tmpdir(), "issues-fail-qa-")), "qa.md");
-writeFileSync(qaArtifactFile, "# Review ok");
+// Conjunto de Review fixo: createArgs cria Issues Review, cujo gate exige intent + 2 evidence +
+// veredito. Semeá-los aqui deixa as falhas testadas (estado, owner, reason) aflorarem — e é inócuo
+// para os gates de Planning/Implement quando `extra` troca a action.
+const qaDir = mkdtempSync(join(tmpdir(), "issues-fail-qa-"));
+const qaFile = (name: string, content: string): string => { const p = join(qaDir, name); writeFileSync(p, content); return p; };
+const intentFile = qaFile("intent.md", "# intenção");
+const evAFile = qaFile("evidence-a.md", "# evidência a");
+const evBFile = qaFile("evidence-b.md", "# evidência b");
+const verdictFile = qaFile("verdict.md", "APROVADO revisão ok");
 
 function createIssueCLI(root: string, extra: string[] = []): string {
   const id = (JSON.parse(run([...createArgs, ...extra], root)) as { id: string }).id;
-  run(["artifact", "--id", id, "--file", qaArtifactFile], root);
+  run(["artifact", "--id", id, "--name", "intent.md", "--file", intentFile], root);
+  run(["artifact", "--id", id, "--name", "evidence-a.md", "--file", evAFile], root);
+  run(["artifact", "--id", id, "--name", "evidence-b.md", "--file", evBFile], root);
+  run(["artifact", "--id", id, "--file", verdictFile], root);
   return id;
 }
 function claimedIssueCLI(root: string, extra: string[] = []): string {

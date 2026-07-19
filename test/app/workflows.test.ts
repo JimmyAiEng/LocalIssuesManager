@@ -19,6 +19,14 @@ function context(action: ActionType): { root: string; queue: Queue; issue: Issue
   return { root, queue, issue };
 }
 
+// Conjunto de documentos de uma Review válida: intent + 2 evidence + veredito no artefato legado.
+function seedReview(queue: Queue, issue: Issue, verdict = "APROVADO revisão ok"): void {
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "intent.md" }, "# intenção");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "evidence-a.md" }, "# evidência a");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "evidence-b.md" }, "# evidência b");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, verdict);
+}
+
 test("dispatcher seleciona Planning; Implement não tem gate de entrega", async () => {
   const planning = context("Planning");
   await assert.rejects(completeIssue(planning.queue, planning.issue, "CLOSED", "fim"), /sem requisitos/);
@@ -32,12 +40,44 @@ test("dispatcher preserva DesignGateError estruturado", async () => {
     (error: unknown) => error instanceof DesignGateError && error.errors[0]?.code === "decision_required");
 });
 
-test("Review exige doc próprio, revalida corrupção e depois aprova", async () => {
+test("Review exige intent + ≥2 evidence + veredito válido e depois aprova", async () => {
   const { queue, issue } = context("Review");
-  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /sem o artefato/);
-  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, Array(301).fill("x").join(" "));
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /sem intent\.md/);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "intent.md" }, "# intenção");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /duas evidence/);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "evidence-a.md" }, "# a");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /duas evidence/); // só uma evidence
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "evidence-b.md" }, "# b");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /sem o veredito/);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "Talvez sim");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /deve começar por APROVADO/);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "APROVADO com ressalva: ok");
+  await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
+});
+
+test("Review rejeita documento acima de 300 palavras", async () => {
+  const { queue, issue } = context("Review");
+  seedReview(queue, issue);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "intent.md" }, Array(301).fill("x").join(" "));
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /limite 300/);
-  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "# Review");
+});
+
+// Veredito REPROVADO só conclui com retrabalho vivo: uma Issue relacionada Implement/Design fora de
+// CLOSED, distinta das Issues revisadas (já fechadas).
+test("Review REPROVADO exige Issue Implement/Design vinculada e não-CLOSED", async () => {
+  const { queue, issue } = context("Review");
+  seedReview(queue, issue, "REPROVADO: precisa refazer o gate");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /retrabalho vivo/);
+
+  const revisada = Issue.create({ title: "revisada", project: "p", type: "Feat", action: "Implement", problem: "p" }, "pi");
+  revisada.closeByHuman("revisada e fechada", "concluido"); // CLOSED: não conta como retrabalho vivo
+  queue.save(revisada);
+  issue.relate([{ id: revisada.id, kind: "see-also" }]);
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /retrabalho vivo/);
+
+  const rework = Issue.create({ title: "retrabalho", project: "p", type: "Fix", action: "Implement", problem: "p" }, "pi");
+  queue.save(rework); // OPEN: retrabalho vivo
+  issue.relate([{ id: rework.id, kind: "see-also" }]);
   await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
 });
 
@@ -50,7 +90,7 @@ test("Deploy força humano antes de validar evidência", async () => {
 
 test("GatePolicy impede CLOSED com supervisão e permite AWAITING", async () => {
   const { queue, issue } = context("Review");
-  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "# Review");
+  seedReview(queue, issue);
   issue.tag({ risk: "ALTO" }, "human");
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /decisão humana/);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
@@ -85,7 +125,7 @@ test("abandono não afrouxa o gate de entrega nem a decisão humana", async () =
 test("fechamento humano concluido exige entrega; cancelamento preserva override", async () => {
   const concluded = context("Review");
   await assert.rejects(statusIssue({ id: concluded.issue.id, human: true, status: "CLOSED",
-    comment: "feito", closed_reason: "concluido" }, concluded.root), /sem o artefato/);
+    comment: "feito", closed_reason: "concluido" }, concluded.root), /sem intent\.md/);
   const obsolete = context("Review");
   const closed = await statusIssue({ id: obsolete.issue.id, human: true, status: "CLOSED",
     comment: "cancelada", closed_reason: "obsoleto" }, obsolete.root);

@@ -10,7 +10,8 @@ import {
 import { createProject, listProjects } from "../../src/app/services/use_cases/project_use_cases.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
-// Review não tem gate de conclusão: os testes genéricos de fluxo usam essa action.
+// Os testes genéricos de fluxo usam a action Review; seu gate de conclusão exige o conjunto de
+// documentos da revisão, semeado por seedReview() nos testes que transicionam a Issue.
 const body = { project: "app", type: "Feat" as const, action: "Review", problem: "p", actor: "human" as const };
 const longText = Array(301).fill("x").join(" ");
 
@@ -18,6 +19,15 @@ const root = () => {
   const dir = mkdtempSync(join(tmpdir(), "issues-test-"));
   createProject({ name: "app", repo: dir }, dir);
   return dir;
+};
+
+// Conjunto de documentos de uma Review válida (intent + 2 evidence nomeadas + veredito APROVADO no
+// artefato legado), gravado pela superfície real setArtifact (exercita a flag --name).
+const seedReview = (dir: string, id: string): void => {
+  setArtifact({ issueId: id, content: "# intenção", name: "intent.md" }, dir);
+  setArtifact({ issueId: id, content: "# evidência a", name: "evidence-a.md" }, dir);
+  setArtifact({ issueId: id, content: "# evidência b", name: "evidence-b.md" }, dir);
+  setArtifact({ issueId: id, content: "APROVADO revisão ok" }, dir);
 };
 
 test("createIssue exige projeto registrado, com orientação de como criar", () => {
@@ -59,16 +69,18 @@ test("next --id reivindica a Issue específica; inexistente lança NotFound", ()
 
 test("ciclo AFK: IA reivindica, entrega evidência e fecha direto", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "afk", artifact: "# qa ok" }, dir); // body é Review: satisfaz o gate
+  const issue = createIssue({ ...body, title: "afk" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
+  seedReview(dir, issue.id); // body é Review: satisfaz o gate
   await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito: passos e decisões", closed_reason: "concluido" }, dir);
   assert.equal(getIssue(issue.id, dir).status, "CLOSED");
 });
 
 test("ciclo HITL: IA envia para AWAITING e o humano decide", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "hitl", human_need: "HITL", artifact: "# qa ok" }, dir);
+  const issue = createIssue({ ...body, title: "hitl", human_need: "HITL" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
+  seedReview(dir, issue.id); // gate satisfeito: a rejeição abaixo é da supervisão humana, não do gate
   await assert.rejects(
     statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
     /decisão humana/,
@@ -98,16 +110,16 @@ test("gate Implement: sem gate de entrega, fecha AFK só com a evidência", asyn
   assert.equal(getIssue(issue.id, dir).status, "CLOSED");
 });
 
-test("gate Review: sem o artefato de validação a IA não conclui a Issue", async () => {
+test("gate Review: sem intent/evidence/veredito a IA não conclui a Issue", async () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "qa", action: "Review" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
   await assert.rejects(
     statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir),
-    /sem o artefato de validação.*issues artifact/,
+    /sem intent\.md.*issues artifact/,
   );
   assert.equal(getIssue(issue.id, dir).status, "CLAIMED"); // nada foi aplicado
-  setArtifact({ issueId: issue.id, content: "# Review\nrequisito × comportamento: ok" }, dir);
+  seedReview(dir, issue.id);
   await statusIssue({ id: issue.id, agent: "pi", status: "CLOSED", comment: "feito", closed_reason: "concluido" }, dir);
   assert.equal(getIssue(issue.id, dir).status, "CLOSED");
 });
@@ -227,8 +239,9 @@ test("claimIssue humano leva OPEN a CLAIMED (teclado da web)", () => {
 
 test("decideIssue rejeita status inválido e exige --human", async () => {
   const dir = root();
-  const issue = createIssue({ ...body, title: "gate2", artifact: "# qa ok" }, dir);
+  const issue = createIssue({ ...body, title: "gate2" }, dir);
   nextIssue({ agent: "pi", project: "app" }, dir);
+  seedReview(dir, issue.id);
   await statusIssue({ id: issue.id, agent: "pi", status: "AWAITING", comment: "evidência" }, dir);
   assert.throws(() => decideIssue({ id: issue.id, human: true, status: "AWAITING", comment: "x" }, dir), /Invalid decision/);
   assert.throws(() => decideIssue({ id: issue.id, human: false, status: "OPEN", comment: "x" }, dir), /Decide requires --human/);
@@ -247,7 +260,8 @@ test("reset humano limpa o claim da Issue CLAIMED", () => {
 test("devolução para OPEN carrega imagem: reset e decide-open", async () => {
   const dir = root();
   const img = () => ({ filename: "shot.png", mediaType: "image/png", bytes: Buffer.from([137, 80, 78, 71, 3]) });
-  const issue = createIssue({ ...body, actor: "pi", title: "dev", artifact: "# qa ok" }, dir);
+  const issue = createIssue({ ...body, actor: "pi", title: "dev" }, dir);
+  seedReview(dir, issue.id);
   nextIssue({ agent: "pi", project: "app" }, dir); // -> CLAIMED
   const afterReset = resetClaim({ id: issue.id, human: true, comment: "liberar", attachments: [img()] }, dir);
   const resetEntry = afterReset.thread.at(-1)!;
@@ -293,6 +307,18 @@ test("setArtifact grava o .md da Issue; artefato na criação idem; view injeta"
   assert.equal(queue.artifacts.readText("app", { issueId: issue.id, type: "document" }), "# issue doc");
   assert.equal(getIssue(issue.id, dir).artifact, "# issue doc");
   assert.equal(getIssue(createIssue({ ...body, title: "sem art" }, dir).id, dir).artifact, null);
+});
+
+test("setArtifact --name grava documento nomeado e barra nome inseguro (trust boundary)", () => {
+  const dir = root();
+  const issue = createIssue({ ...body, title: "named" }, dir);
+  const queue = new Queue(dir);
+  setArtifact({ issueId: issue.id, content: "# intenção", name: "intent.md" }, dir);
+  assert.equal(queue.artifacts.readText("app", { issueId: issue.id, type: "document", name: "intent.md" }), "# intenção");
+  assert.equal(queue.artifacts.readText("app", { issueId: issue.id, type: "document" }), null); // não tocou o legado
+  for (const bad of ["../escapa.md", "sub/dir.md", "semext", "..", "evidence.txt"]) {
+    assert.throws(() => setArtifact({ issueId: issue.id, content: "x", name: bad }, dir), /Nome de artefato inválido/);
+  }
 });
 
 test("limite de 300 palavras vale para artefato (criação e setArtifact)", () => {

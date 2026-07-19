@@ -19,14 +19,24 @@ const env = () => {
   return vars;
 };
 
-// Os fluxos genéricos usam a action Review; seu gate de conclusão exige o Artefato .md, semeado
-// via qaArtifactFile nos testes que concluem a Issue.
+// Os fluxos genéricos usam a action Review; seu gate exige intent + 2 evidence + veredito, semeados
+// via seedReview nos testes que concluem a Issue.
 const createArgs = [
   "create", "--title", "CLI issue", "--project", "demo", "--type", "Feat", "--action", "Review",
   "--problem", "problem", "--acceptance-criteria", "done", "--agent", "pi",
 ];
-const qaArtifactFile = join(mkdtempSync(join(tmpdir(), "issues-cli-qa-")), "qa.md");
-writeFileSync(qaArtifactFile, "# Review ok");
+const qaDir = mkdtempSync(join(tmpdir(), "issues-cli-qa-"));
+const qaFile = (name: string, content: string): string => { const p = join(qaDir, name); writeFileSync(p, content); return p; };
+const intentFile = qaFile("intent.md", "# intenção");
+const evAFile = qaFile("evidence-a.md", "# evidência a");
+const evBFile = qaFile("evidence-b.md", "# evidência b");
+const verdictFile = qaFile("verdict.md", "APROVADO revisão ok");
+const seedReview = (vars: NodeJS.ProcessEnv, id: string): void => {
+  run(["artifact", "--id", id, "--name", "intent.md", "--file", intentFile], vars);
+  run(["artifact", "--id", id, "--name", "evidence-a.md", "--file", evAFile], vars);
+  run(["artifact", "--id", id, "--name", "evidence-b.md", "--file", evBFile], vars);
+  run(["artifact", "--id", id, "--file", verdictFile], vars);
+};
 
 test("CLI retorna JSON por padrão e next devolve a IssueView reivindicada", () => {
   const vars = env();
@@ -121,7 +131,7 @@ test("e2e: ciclo AFK via CLI — IA reivindica, entrega evidência e fecha", () 
   const vars = env();
   const created = JSON.parse(run(createArgs, vars));
   run(["next", "--agent", "pi", "--project", "demo"], vars);
-  run(["artifact", "--id", created.id, "--file", qaArtifactFile], vars);
+  seedReview(vars, created.id);
   const closed = JSON.parse(run(["status", "--id", created.id, "--agent", "pi",
     "--status", "CLOSED", "--comment", "feito: passos e decisões", "--reason", "concluido"], vars));
   assert.equal(closed.status, "CLOSED");
@@ -131,7 +141,7 @@ test("e2e: ciclo HITL via CLI — AWAITING pela IA, decisão humana fecha", () =
   const vars = env();
   const created = JSON.parse(run(createArgs.concat("--human-need", "HITL"), vars));
   run(["next", "--agent", "pi", "--project", "demo"], vars);
-  run(["artifact", "--id", created.id, "--file", qaArtifactFile], vars);
+  seedReview(vars, created.id);
   const denied = spawnSync(bin, ["status", "--id", created.id, "--agent", "pi",
     "--status", "CLOSED", "--comment", "feito", "--reason", "concluido"], { env: vars, encoding: "utf8" });
   assert.notEqual(denied.status, 0);
@@ -354,7 +364,10 @@ test("in-process: main() cobre status/decide/reset e o gate assíncrono de statu
   await withIssuesRoot(root, async () => {
     const forStatus = JSON.parse((await captureMain(createArgs)).stdout);
     await captureMain(["next", "--id", forStatus.id, "--agent", "pi"]);
-    await captureMain(["artifact", "--id", forStatus.id, "--file", qaArtifactFile]); // gate Review
+    await captureMain(["artifact", "--id", forStatus.id, "--name", "intent.md", "--file", intentFile]); // gate Review
+    await captureMain(["artifact", "--id", forStatus.id, "--name", "evidence-a.md", "--file", evAFile]);
+    await captureMain(["artifact", "--id", forStatus.id, "--name", "evidence-b.md", "--file", evBFile]);
+    await captureMain(["artifact", "--id", forStatus.id, "--file", verdictFile]);
     const closed = JSON.parse((await captureMain(["status", "--id", forStatus.id, "--agent", "pi",
       "--status", "CLOSED", "--comment", "feito", "--reason", "concluido"])).stdout);
     assert.equal(closed.status, "CLOSED"); // runStatus() assíncrono
@@ -366,7 +379,10 @@ test("in-process: main() cobre status/decide/reset e o gate assíncrono de statu
 
     const forDecide = JSON.parse((await captureMain(createArgs.concat("--human-need", "HITL"))).stdout);
     await captureMain(["next", "--id", forDecide.id, "--agent", "pi"]);
-    await captureMain(["artifact", "--id", forDecide.id, "--file", qaArtifactFile]); // gate Review
+    await captureMain(["artifact", "--id", forDecide.id, "--name", "intent.md", "--file", intentFile]); // gate Review
+    await captureMain(["artifact", "--id", forDecide.id, "--name", "evidence-a.md", "--file", evAFile]);
+    await captureMain(["artifact", "--id", forDecide.id, "--name", "evidence-b.md", "--file", evBFile]);
+    await captureMain(["artifact", "--id", forDecide.id, "--file", verdictFile]);
     await captureMain(["status", "--id", forDecide.id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência"]);
     const decided = JSON.parse((await captureMain(["decide", "--id", forDecide.id, "--human",
       "--status", "CLOSED", "--comment", "aceito", "--reason", "concluido"])).stdout);

@@ -1,0 +1,5 @@
+1. Formato dos artefatos não está definido na SKILL. Assim, as IAs ficam presas tentando resolver isso (inclusive com o nome). 
+2. Se não exigido, a IA continuará trabalhando nas próximas issues (mesmo com contexto repleto). Precisa-se de algum controle para restringi-la até 40% do contexto (para fzer no pi)
+3. Se o agente errar na criação das issues (por exemplo, sem relacionar adequadamente), ele não poderá modificar (ou não recebe o comando para isso via Skill) as issues abertas, gerando várias issues órfãs. 
+4. Remover as indicações de "buscar nova issue" de dentro da mensagem de retorno da issue next ou de conclusões. Idealmente, as skills apenas devem dizer o fluxo e o formato, e é o loop em si (ou seja, fora do escopo do sistema) que deve informar se é ou não para trabalhar na próxima issue
+

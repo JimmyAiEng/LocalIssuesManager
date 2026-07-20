@@ -36,7 +36,8 @@ export function deleteIssues(
 // BFS sobre `relates` nos DOIS sentidos, ignorando o kind: `create --relates` grava a aresta só na Issue
 // nova, então olhar apenas as de saída deixa a linhagem viva invisível ao pai. O Set de visitados garante
 // terminação sem teto artificial de profundidade; Issue ausente do disco não entra (relates pendente não bloqueia).
-// ponytail: varre a fila inteira uma vez por remoção — remoção é rara e manual; indexar se doer.
+// ponytail: varre a fila inteira uma vez por remoção, e a limpeza em massa dispara N dessas num clique —
+// O(n²) no tamanho da fila. Indexar relates por id se a limpeza começar a doer num quadro grande.
 function requireClosedTree(queue: Queue, root: Issue): void {
   const all = queue.list();
   const visited = new Set([root.id]);

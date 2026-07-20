@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { deleteIssue } from "../../src/app/services/use_cases/deletion_use_cases.js";
+import { deleteIssue, deleteIssues } from "../../src/app/services/use_cases/deletion_use_cases.js";
 import { createIssue, nextIssue, relateIssues, setArtifact, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
 import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { DomainError, NotFoundError } from "../../src/domain/domain_error.js";
@@ -88,6 +88,35 @@ test("relates pendente para Issue já removida não bloqueia nem quebra", async 
 
 test("id inexistente é NotFoundError", () => {
   assert.throws(() => deleteIssue({ issueId: "nope" }, root()), NotFoundError);
+});
+
+test("remoção em massa apaga todas as elegíveis", async () => {
+  const dir = root();
+  const ids = [await closed(dir, "a"), await closed(dir, "b"), await closed(dir, "c")];
+
+  assert.deepEqual(deleteIssues({ ids }, dir), { removed: ids, blocked: [] });
+  const queue = new Queue(dir);
+  for (const id of ids) assert.equal(queue.load(id), null);
+});
+
+test("remoção em massa mantém a bloqueada por linhagem e a reporta com título e motivo", async () => {
+  const dir = root();
+  const livre = await closed(dir, "livre");
+  const presa = await closed(dir, "presa");
+  const viva = open(dir, "filha viva");
+  relateIssues({ id: presa, relates: [viva], kind: "child" }, dir);
+
+  const result = deleteIssues({ ids: [livre, presa] }, dir);
+  assert.deepEqual(result.removed, [livre]);
+  assert.equal(result.blocked.length, 1);
+  assert.equal(result.blocked[0].id, presa);
+  assert.equal(result.blocked[0].title, "presa");
+  assert.match(result.blocked[0].reason, /só remove com a árvore de relates toda CLOSED/);
+  assert.equal(new Queue(dir).load(presa)?.id, presa);
+});
+
+test("remoção em massa de lista vazia devolve listas vazias", () => {
+  assert.deepEqual(deleteIssues({ ids: [] }, root()), { removed: [], blocked: [] });
 });
 
 // Aresta legada gravada só de um lado (antes de `create --relates` delegar a relateIssues): o scan

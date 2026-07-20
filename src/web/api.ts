@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { deleteIssue } from "../app/services/use_cases/deletion_use_cases.js";
+import { deleteIssue, deleteIssues } from "../app/services/use_cases/deletion_use_cases.js";
 import { getDesignPackage } from "../app/services/use_cases/design_use_cases.js";
 import {
   addComment, claimIssue as claimIssueCase, createIssue, decideIssue, getIssue, type IncomingAttachment,
@@ -38,9 +38,12 @@ async function dispatch(request: IncomingMessage, response: ServerResponse, root
   }
   if (url.pathname === "/api/projects") return projectAction(request, response, root);
   const route = routeParts(url.pathname);
-  // Trava de travessia: o id vem cru da URL e vira caminho em disco lá no Queue#findPath (`${id}.json`).
-  // Guarda única no funil por onde TODA rota de Issue passa — /delete e irmãs — em vez de remendo por rota.
-  // O UUID já barra `/`, `\`, `..` e o que vier de percent-encoding (o decode acontece antes, no routeParts).
+  // Rota de coleção: vem antes da guarda de UUID (que só aceita id no route[0]); os ids vêm no corpo
+  // e o bulkDelete valida um a um, então a trava de travessia continua valendo.
+  const bulk = request.method === "POST" && route.length === 1 && route[0] === "bulk-delete";
+  if (bulk) return bulkDelete(response, await readBody(request), root);
+  // Trava de travessia: o id vem cru da URL e vira caminho em disco no Queue#findPath (`${id}.json`).
+  // Guarda única no funil de TODA rota de Issue (/delete e irmãs); o UUID barra `/`, `\`, `..` e percent-encoding.
   if (route.length > 0 && !UUID.test(route[0])) return respond(response, 404, { error: "Not found" });
   if (request.method === "GET") return getAction(request, response, url, route, root);
   const body = await readBody(request);
@@ -77,6 +80,14 @@ function issueAction(response: ServerResponse, route: string[], body: Body, root
   // DomainError vira 400 no respondError.
   if (route[1] === "delete") return respond(response, 200, deleteIssue({ issueId: route[0] }, root));
   respond(response, 404, { error: "Not found" });
+}
+
+function bulkDelete(response: ServerResponse, body: Body, root?: string): void {
+  const ids = body.ids;
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || !UUID.test(id))) {
+    throw new RequestError("Invalid ids");
+  }
+  respond(response, 200, deleteIssues({ ids: ids as string[] }, root));
 }
 
 // Projetos: sem isso o painel não se sustenta sozinho — Issue só nasce em projeto registrado, e

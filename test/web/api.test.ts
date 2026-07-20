@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { addDesignDiagram, setDesignDoc } from "../../src/app/services/use_cases/design_use_cases.js";
-import { nextIssue, setArtifact, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
+import { nextIssue, relateIssues, setArtifact, statusIssue } from "../../src/app/services/use_cases/issue_use_cases.js";
 import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
 import { setRequirements } from "../../src/app/services/use_cases/requirements_use_cases.js";
 import { ArtifactStore } from "../../src/domain/artifacts/artifact_store.js";
@@ -322,6 +322,35 @@ test("API recusa id fora do formato UUID: travessia no /delete não apaga arquiv
     assert.equal((await request(url, "GET", `/api/issues/${id}`)).status, 404, id);
     assert.equal(existsSync(victim), true, id);
   }
+}));
+
+test("API remove em massa: elegível some, bloqueada por linhagem fica listada com motivo", async () => withWeb(async (url, root) => {
+  const livre = (await request(url, "POST", "/api/issues", input)).body.id as string;
+  const presa = (await request(url, "POST", "/api/issues", { ...input, title: "Presa" })).body.id as string;
+  const viva = (await request(url, "POST", "/api/issues", input)).body.id as string;
+  relateIssues({ id: presa, relates: [viva], kind: "child" }, root);
+  for (const id of [livre, presa]) {
+    seedReview(root, id);
+    await request(url, "POST", `/api/issues/${id}/close`, { comment: "feito", closed_reason: "concluido" });
+  }
+
+  const res = await request(url, "POST", "/api/issues/bulk-delete", { ids: [livre, presa] });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.removed, [livre]);
+  const blocked = res.body.blocked as unknown as { id: string; title: string; reason: string }[];
+  assert.equal(blocked.length, 1);
+  assert.equal(blocked[0].id, presa);
+  assert.equal(blocked[0].title, "Presa");
+  assert.match(blocked[0].reason, /só remove com a árvore de relates toda CLOSED/);
+  assert.equal((await request(url, "GET", `/api/issues/${livre}`)).status, 404);
+  assert.equal((await request(url, "GET", `/api/issues/${presa}`)).status, 200);
+}));
+
+test("API recusa com 400 id fora do formato UUID na remoção em massa", async () => withWeb(async (url) => {
+  for (const ids of [["../../vitima"], ["nao-e-uuid"], "nao-e-lista", [42]]) {
+    assert.equal((await request(url, "POST", "/api/issues/bulk-delete", { ids })).status, 400, String(ids));
+  }
+  assert.deepEqual((await request(url, "POST", "/api/issues/bulk-delete", { ids: [] })).body, { removed: [], blocked: [] });
 }));
 
 async function withWeb(run: (url: string, root: string) => Promise<void>): Promise<void> {

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { dirname, join, resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import { Queue } from "../../src/domain/queue_repository.js";
@@ -131,6 +132,52 @@ test("UI-01: quadro mostra as 5 colunas com contagem por Status e os cards mais 
     assert.deepEqual(openTitles, ["Login quebrado", "Cadastro novo"]);
   }));
 
+// Encher a coluna CLOSED pela CLI custaria dezenas de processos: clona no disco a Issue já fechada.
+function cloneClosed(root: string, id: string, times: number): void {
+  const file = findIssueFile(root, id);
+  const data = JSON.parse(readFileSync(file, "utf8"));
+  for (let i = 0; i < times; i++) {
+    const clone = { ...data, id: randomUUID(), title: `Encerrada ${i}` };
+    writeFileSync(join(dirname(file), `${clone.id}.json`), JSON.stringify(clone, null, 2));
+  }
+}
+
+function boardWithManyClosed(root: string): void {
+  fullBoard(root);
+  cloneClosed(root, closed(root, { title: "Encerrada base", project: "legacy", type: "Fix" }), 14);
+}
+
+test("UI-01c: painel único — CLOSED ocupa a linha própria de largura total e rola por conta própria", async () =>
+  withUI(boardWithManyClosed, async (page, url) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${url}/`);
+    const closedColumn = page.locator(".column.status-CLOSED");
+    await closedColumn.waitFor();
+
+    // Toda coluna tem descrição: APPROVED renderizava "undefined" por falta da chave no mapa labels.
+    const descriptions = await page.locator(".board .column > p").allInnerTexts();
+    assert.equal(descriptions.length, 5);
+    assert.equal(descriptions.some((text) => text.includes("undefined")), false);
+
+    // As quatro colunas ativas ficam lado a lado; CLOSED cai na linha seguinte.
+    const open = (await page.locator(".column.status-OPEN").boundingBox())!;
+    const approved = (await page.locator(".column.status-APPROVED").boundingBox())!;
+    const closedBox = (await closedColumn.boundingBox())!;
+    assert.equal(approved.y, open.y, "APPROVED fica na mesma faixa de OPEN");
+    assert.ok(closedBox.y >= open.y + open.height, "CLOSED começa abaixo das colunas ativas");
+    assert.ok(closedBox.width >= approved.x + approved.width - open.x - 1, "CLOSED cobre a largura do painel");
+
+    // A área dos cards estoura o max-height e rola sozinha, sem alongar a coluna nem a página.
+    const cards = page.locator(".column.status-CLOSED .cards");
+    const box = await cards.evaluate((el) => ({
+      scroll: el.scrollHeight, client: el.clientHeight,
+      overflowY: getComputedStyle(el).overflowY, maxHeight: parseFloat(getComputedStyle(el).maxHeight),
+    }));
+    assert.equal(box.overflowY, "auto");
+    assert.ok(box.scroll > box.client, `os 15 cards deveriam estourar a área: ${box.scroll} vs ${box.client}`);
+    assert.ok(box.client <= box.maxHeight, "a área dos cards para no max-height em vez de alongar a página");
+  }));
+
 // =====================================================================================
 // Item 2 — Card (título, projeto, tipo, action, owner, tempo no Status) + clique abre detalhe
 // =====================================================================================
@@ -175,6 +222,34 @@ test("UI-03: filtra por título/projeto/tipo, limpa filtros e mostra Atualizar c
     await page.locator("#clear").click();
     await page.locator("#refresh").click(); // botão Atualizar
     assert.match(await page.locator(".toolbar output").innerText(), /Atualizado às \d/);
+  }));
+
+test("UI-03b: sidebar abre visível, alterna pelo botão fora dela e preserva os filtros", async () =>
+  withUI(fullBoard, async (page, url) => {
+    await page.goto(`${url}/`);
+    const sidebar = page.locator("#sidebar");
+    const toggle = page.locator("#toggle-sidebar");
+    await sidebar.waitFor(); // ao carregar, a sidebar está visível
+    assert.equal(await toggle.getAttribute("aria-expanded"), "true");
+    assert.equal(await toggle.getAttribute("aria-controls"), "sidebar");
+
+    await page.fill("#title", "Login");
+    await toggle.click(); // oculta
+    await sidebar.waitFor({ state: "hidden" });
+    assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+    await toggle.waitFor(); // o botão continua acessível com a sidebar oculta
+    assert.deepEqual(await page.locator(".card strong").allInnerTexts(), ["Login quebrado"]); // filtro segue valendo
+
+    await toggle.click(); // revela
+    await sidebar.waitFor();
+    assert.equal(await page.locator("#title").inputValue(), "Login");
+
+    // atalho "/" não pode morrer com a sidebar oculta: revela e foca a busca
+    await toggle.click();
+    await sidebar.waitFor({ state: "hidden" });
+    await page.keyboard.press("/");
+    await sidebar.waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "title");
   }));
 
 // =====================================================================================
@@ -236,6 +311,50 @@ test("UI-04d: remover Issue CLOSED pede confirmação, apaga do disco e volta ao
       assert.deepEqual(readdirSync(join(root, "projects", "legacy", "closed")), []);
       assert.equal(await page.locator(".card").count(), 0);
     }));
+
+// =====================================================================================
+// Item 4e — Limpeza em massa das Issues CLOSED visíveis no quadro
+// =====================================================================================
+test("UI-04e: sem Issue CLOSED visível o botão de limpeza mostra zero e fica desabilitado", async () =>
+  withUI((root) => { createIssue(root, { title: "Ainda aberta", project: "web", type: "Fix" }); },
+    async (page, url) => {
+      await page.goto(`${url}/`);
+      const button = page.getByRole("button", { name: "Limpar encerradas (0)" });
+      await button.waitFor();
+      assert.equal(await button.isDisabled(), true);
+    }));
+
+test("UI-04e2: cancelar a confirmação da limpeza não remove nada", async () =>
+  withUI((root) => { closed(root, { title: "Fica viva", project: "legacy", type: "Fix" }); },
+    async (page, url, root) => {
+      await page.goto(`${url}/`);
+      await page.getByRole("button", { name: "Limpar encerradas (1)" }).click();
+      const dialog = page.getByRole("alertdialog", { name: "Confirmar limpeza" });
+      await dialog.waitFor();
+      await dialog.getByRole("button", { name: "Cancelar" }).click();
+      await page.getByRole("button", { name: "Limpar encerradas (1)" }).waitFor(); // volta ao estado anterior
+      assert.equal(readdirSync(join(root, "projects", "legacy", "closed")).length, 1);
+    }));
+
+// Remoção parcial: a bloqueada tem uma Issue OPEN na sua linha de relates, então requireClosedTree recusa.
+test("UI-04e3: confirmar remove as CLOSED elegíveis e lista as bloqueadas pela linhagem", async () =>
+  withUI((root) => {
+    closed(root, { title: "Some no lote", project: "legacy", type: "Fix" });
+    const presa = closed(root, { title: "Presa na linhagem", project: "legacy", type: "Fix" });
+    const viva = createIssue(root, { title: "Ainda viva", project: "legacy", type: "Fix" });
+    cli(["relate", "--id", presa, "--relates", viva], root);
+  }, async (page, url, root) => {
+    await page.goto(`${url}/`);
+    await page.getByRole("button", { name: "Limpar encerradas (2)" }).click();
+    await page.getByRole("button", { name: "Limpar definitivamente" }).click();
+    const feedback = page.locator(".feedback");
+    await feedback.waitFor();
+    const text = await feedback.innerText();
+    assert.match(text, /1 Issue removida/);
+    assert.match(text, /1 bloqueada pela linhagem: Presa na linhagem/);
+    assert.deepEqual(readdirSync(join(root, "projects", "legacy", "closed")).length, 1);
+    await page.getByRole("button", { name: "Limpar encerradas (1)" }).waitFor(); // contador reflete o que sobrou
+  }));
 
 // =====================================================================================
 // Item 5 — Voltar ao quadro preservando filtros
@@ -415,12 +534,9 @@ test("UI-10a: quadro mostra o inbox de Decisões pendentes para Issues AWAITING"
   withUI((root) => { awaiting(root, { title: "Precisa decidir", project: "ops", type: "Fix" }); },
     async (page, url) => {
       await page.goto(`${url}/`);
-      const badge = page.locator("#toggle-decisions");
-      await badge.waitFor();
-      assert.match(await badge.innerText(), /1 decisão/);
-      await badge.click();
-      await page.locator(".decisions-inbox").waitFor();
-      assert.match(await page.locator(".decisions-inbox").innerText(), /Precisa decidir/);
+      // Decisões pendentes são seção fixa da sidebar: aparecem sem nenhum clique.
+      await page.locator("#sidebar .decisions-inbox").waitFor();
+      assert.match(await page.locator(".decisions-inbox").innerText(), /1[\s\S]*Precisa decidir/);
     }));
 
 test("UI-10b: detalhe mostra as Issues relacionadas com os artefatos (linhagem navegável)", async () => {

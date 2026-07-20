@@ -3,8 +3,8 @@ import { api } from "./http.js";
 import { renderBoard, renderError, renderLoading, renderNewIssue, renderNewProject, root } from "./view.js";
 import { renderDetail } from "./detail_view.js";
 import {
-  claimIssue, fetchDesign, fetchDocuments, fetchRequirements, performClose, performDelete, readForm, refreshIssue,
-  submitAction, submitComment, submitCreate, submitCreateProject, submitTags,
+  claimIssue, fetchDesign, fetchDocuments, fetchRequirements, performBulkDelete, performClose, performDelete,
+  readForm, refreshIssue, submitAction, submitComment, submitCreate, submitCreateProject, submitTags,
 } from "./mutations.js";
 
 export async function refresh() {
@@ -49,6 +49,9 @@ export function handleClick(event) {
   if (target.id === "refresh-issue") return refreshIssue();
   if (target.id === "clear") { state.filters = emptyFilters(); saveFilters(); return renderBoard(); }
   if (target.id === "toggle-sidebar") { state.sidebarOpen = !state.sidebarOpen; return renderBoard(); }
+  if (target.id === "bulk-clean") { state.confirmBulk = true; state.feedback = null; return renderBoard(); }
+  if (target.dataset.cancelBulk) { state.confirmBulk = false; return renderBoard(); }
+  if (target.dataset.confirmBulk) return performBulkDelete();
   if (target.dataset.openPanel) {
     state.panel = target.dataset.openPanel;
     state.confirmClose = false;
@@ -157,7 +160,12 @@ async function pollBoard() {
 export function handleKeydown(event) {
   if (location.pathname !== "/" || isEditing(event.target)) return;
   if (event.key === "c") { history.pushState({}, "", "/issues/new"); renderRoute(); }
-  if (event.key === "/") { event.preventDefault(); document.querySelector("#title")?.focus(); }
+  // "/" busca o campo de título: com a sidebar oculta ele não existe no DOM, então revela antes de focar.
+  if (event.key === "/") {
+    event.preventDefault();
+    if (!state.sidebarOpen) { state.sidebarOpen = true; renderBoard(); }
+    document.querySelector("#title")?.focus();
+  }
 }
 
 function isEditing(element) {

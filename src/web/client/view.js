@@ -1,7 +1,7 @@
 import {
   CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, ACTION_TYPES, TAG_VALUES, CONCERN_LEVELS, attachmentsMarkup, escapeHtml,
   filterIssues, groupIssues, hasPendingDecision, isStale, isUnclassified, options, pendingDecisions,
-  statusAge, statusAgeFrom,
+  statusAge, statusAgeFrom, visibleClosed,
 } from "./view_model.js";
 import { state } from "./state.js";
 
@@ -10,22 +10,35 @@ export function renderBoard() {
   const columns = groupIssues(filtered);
   const decisions = pendingDecisions(state.issues);
   document.title = "Issues locais";
-  root().innerHTML = `${boardControls(decisions)}${decisionsPanel(decisions)}<section class="board">${ISSUE_STATUSES.map((status) => column(status, columns[status])).join("")}</section>`;
+  root().innerHTML = `${topbar()}<div class="layout">${sidebar(decisions)}<section class="board">${ISSUE_STATUSES.map((status) => column(status, columns[status])).join("")}</section></div>`;
   restoreScroll();
 }
 
-function boardControls(decisions) {
+// O botão de alternar mora aqui, fora do <aside>: é o único caminho de volta quando a sidebar está oculta.
+function topbar() {
+  const updated = state.refreshedAt ? state.refreshedAt.toLocaleTimeString() : "ainda não atualizado";
+  return `<header class="toolbar"><button type="button" id="toggle-sidebar" aria-expanded="${state.sidebarOpen}" aria-controls="sidebar">${state.sidebarOpen ? "☰ Ocultar filtros" : "☰ Mostrar filtros"}</button><h1>Issues</h1><button type="button" id="refresh">Atualizar quadro</button><output aria-live="polite">Atualizado às ${updated}</output></header>`;
+}
+
+// `hidden` nativo: tira o aside da tela e da árvore de acessibilidade de uma vez.
+// Os filtros sobrevivem à alternância porque moram em state.filters (sessionStorage), não no DOM.
+function sidebar(decisions) {
   const projects = selectOptions(options(state.issues, "project"), state.filters.project, "Todos os Projetos");
   const types = selectOptions(options(state.issues, "type"), state.filters.type, "Todos os Tipos");
   const owners = selectOptions(ownerValues(state.issues), state.filters.owner, "Todos os Owners");
-  const updated = state.refreshedAt ? state.refreshedAt.toLocaleTimeString() : "ainda não atualizado";
-  const decisionsBtn = decisions.length
-    ? `<button type="button" id="toggle-decisions" class="decisions-badge" aria-expanded="${state.decisionsOpen}">⚠ ${decisions.length} ${decisions.length === 1 ? "decisão" : "decisões"}</button>` : "";
-  return `<header class="toolbar"><h1>Issues</h1><a class="button" href="/issues/new">+ Nova Issue</a><a class="button" href="/projects/new">+ Novo Projeto</a>${decisionsBtn}<label>Buscar título <input id="title" value="${escapeHtml(state.filters.title)}"></label><label>Projeto <select id="project">${projects}</select></label><label>Tipo <select id="type">${types}</select></label><label>Owner <select id="owner">${owners}</select></label><button type="button" id="clear" ${hasFilters() ? "" : "disabled"}>Limpar filtros</button><button type="button" id="refresh">Atualizar quadro</button><output aria-live="polite">Atualizado às ${updated}</output></header>`;
+  const closed = visibleClosed(state.issues, state.filters).length;
+  return `<aside id="sidebar" class="sidebar" aria-label="Filtros e ações"${state.sidebarOpen ? "" : " hidden"}><label>Buscar título <input id="title" value="${escapeHtml(state.filters.title)}"></label><label>Projeto <select id="project">${projects}</select></label><label>Tipo <select id="type">${types}</select></label><label>Owner <select id="owner">${owners}</select></label><button type="button" id="clear" ${hasFilters() ? "" : "disabled"}>Limpar filtros</button><button type="button" id="bulk-clean" class="danger" ${closed ? "" : "disabled"}>Limpar encerradas (${closed})</button>${bulkConfirm(closed)}${feedback()}<a class="button" href="/issues/new">+ Nova Issue</a><a class="button" href="/projects/new">+ Novo Projeto</a>${decisionsPanel(decisions)}</aside>`;
+}
+
+// Limpeza em massa: o clique só abre isto; apagar mesmo é só no data-confirm-bulk.
+// O escopo é o quadro filtrado, então a contagem tem que aparecer aqui — é o que o humano confirma.
+function bulkConfirm(closed) {
+  if (!state.confirmBulk) return "";
+  return `<div class="confirm-close" role="alertdialog" aria-label="Confirmar limpeza"><p>Remover ${closed} Issue${closed === 1 ? "" : "s"} CLOSED do quadro filtrado? Os arquivos serão apagados do disco e não poderão ser recuperados.</p><div class="form-actions"><button type="button" data-cancel-bulk="1">Cancelar</button><button type="button" class="danger" data-confirm-bulk="1" ${state.busy ? "disabled" : ""}>Limpar definitivamente</button></div></div>`;
 }
 
 function decisionsPanel(decisions) {
-  if (!state.decisionsOpen || !decisions.length) return "";
+  if (!decisions.length) return "";
   const items = decisions.map((decision) =>
     `<li><a href="/issues/${decision.issueId}" data-issue-id="${decision.issueId}"><span class="badge status-AWAITING">${escapeHtml(decision.action)}</span> <strong>${escapeHtml(decision.issueTitle)}</strong> <span class="dim">${escapeHtml(decision.project)} · ${statusAgeFrom(decision.since)}</span></a></li>`).join("");
   return `<section class="decisions-inbox" aria-label="Decisões pendentes"><h2>Decisões pendentes <small>${decisions.length}</small></h2><ul>${items}</ul></section>`;
@@ -33,7 +46,7 @@ function decisionsPanel(decisions) {
 
 function column(status, issues) {
   const cards = issues.length ? issues.map(card).join("") : `<p class="empty">Nenhuma Issue ${status}</p>`;
-  return `<section class="column status-${status}" aria-labelledby="${status}"><h2 id="${status}">${status} <small>${issues.length}</small></h2><p>${labels[status]}</p>${cards}</section>`;
+  return `<section class="column status-${status}" aria-labelledby="${status}"><h2 id="${status}">${status} <small>${issues.length}</small></h2><p>${labels[status]}</p><div class="cards">${cards}</div></section>`;
 }
 
 function card(issue) {
@@ -176,5 +189,6 @@ function restoreScroll() { setTimeout(() => window.scrollTo(0, Number(sessionSto
 
 const labels = {
   OPEN: "Disponível na Fila", CLAIMED: "Em andamento",
-  AWAITING: "Requer sua Decisão", CLOSED: "Histórico encerrado",
+  AWAITING: "Requer sua Decisão", APPROVED: "Aprovada, pronta para seguir",
+  CLOSED: "Histórico encerrado",
 };

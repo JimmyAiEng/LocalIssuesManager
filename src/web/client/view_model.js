@@ -22,6 +22,12 @@ export function filterIssues(issues, filters) {
     && (!filters.owner || issue.owner === filters.owner));
 }
 
+// Escopo da limpeza em massa: as CLOSED que o quadro está mostrando agora, não todas do sistema.
+// Uma função só, usada pelo contador no botão e pelos ids do POST — senão os dois divergem.
+export function visibleClosed(issues, filters) {
+  return filterIssues(issues, filters).filter((issue) => issue.status === "CLOSED");
+}
+
 /**
  * Dentro de cada coluna: decisões pendentes primeiro, depois created_at ascendente.
  * @param {IssueCard[]} issues

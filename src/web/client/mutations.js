@@ -1,6 +1,6 @@
 import {
   classifyMutationError, humanActions,
-  validateClose, validateCreate, validateDecide, validateProject, validateReset,
+  validateClose, validateCreate, validateDecide, validateProject, validateReset, visibleClosed,
 } from "./view_model.js";
 import { clearActionState, emptyDraft, emptyProjectDraft, state } from "./state.js";
 import { api } from "./http.js";
@@ -159,6 +159,28 @@ export async function performDelete() {
   } catch (error) { failMutation(error); }
 }
 
+// Limpeza em massa das CLOSED visíveis. Remoção parcial: a API devolve o que saiu e o que a regra
+// de linhagem barrou, e o resumo lista as bloqueadas — senão elas somem da tela sem explicação.
+export async function performBulkDelete() {
+  const ids = visibleClosed(state.issues, state.filters).map((issue) => issue.id);
+  state.confirmBulk = false;
+  state.busy = true;
+  renderBoard();
+  try {
+    const { removed, blocked } = await api("/api/issues/bulk-delete", { method: "POST", body: { ids } });
+    await reloadIssues();
+    state.busy = false;
+    state.feedback = { kind: blocked.length ? "error" : "success", message: bulkSummary(removed, blocked) };
+    renderBoard();
+  } catch (error) { failMutation(error, renderBoard); }
+}
+
+function bulkSummary(removed, blocked) {
+  const head = `${removed.length} Issue${removed.length === 1 ? "" : "s"} removida${removed.length === 1 ? "" : "s"}.`;
+  if (!blocked.length) return head;
+  return `${head} ${blocked.length} bloqueada${blocked.length === 1 ? "" : "s"} pela linhagem: ${blocked.map((item) => item.title).join("; ")}`;
+}
+
 async function submitReset(form) {
   const result = validateReset({ comment: state.draft.comment });
   state.errors = result.errors;
@@ -207,10 +229,11 @@ async function finishMutation(successMessage) {
   renderDetail();
 }
 
-function failMutation(error) {
+// O render vem do chamador: a mesma falha aparece no detalhe ou no quadro, conforme de onde partiu.
+function failMutation(error, render = renderDetail) {
   state.busy = false;
   state.feedback = classifyMutationError(error.status ?? 500, error.message);
-  renderDetail();
+  render();
 }
 
 async function reloadIssues() {

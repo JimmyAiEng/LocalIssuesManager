@@ -13,6 +13,26 @@ export function deleteIssue(input: { issueId: string }, root?: string): { id: st
   return { id: issue.id };
 }
 
+// Limpeza em massa: cada id passa pela remoção unitária, então a regra de linhagem é a mesma —
+// aqui só se decide o que fazer com a recusa. Ordem não importa: apagar uma CLOSED nunca torna
+// a árvore de outra não-CLOSED.
+export function deleteIssues(
+  input: { ids: string[] }, root?: string,
+): { removed: string[]; blocked: { id: string; title: string; reason: string }[] } {
+  const removed: string[] = [];
+  const blocked: { id: string; title: string; reason: string }[] = [];
+  for (const id of input.ids) {
+    const title = new Queue(root).load(id)?.title ?? ""; // some junto com a Issue: leia antes de tentar
+    try {
+      removed.push(deleteIssue({ issueId: id }, root).id);
+    } catch (error) {
+      if (!(error instanceof DomainError)) throw error;
+      blocked.push({ id, title, reason: error.message });
+    }
+  }
+  return { removed, blocked };
+}
+
 // BFS sobre `relates` nos DOIS sentidos, ignorando o kind: `create --relates` grava a aresta só na Issue
 // nova, então olhar apenas as de saída deixa a linhagem viva invisível ao pai. O Set de visitados garante
 // terminação sem teto artificial de profundidade; Issue ausente do disco não entra (relates pendente não bloqueia).

@@ -89,16 +89,28 @@ export class Issue implements IssueData {
 
   // Liga esta Issue a outras (linhagem direcionada): quem reivindica uma Issue enxerga os
   // artefatos das relacionadas. A existência dos ids e o par recíproco (parent↔child na Issue
-  // alvo) são responsabilidade da camada de aplicação. Um id já ligado não muda de kind.
+  // alvo) são responsabilidade da camada de aplicação. O kind de um id já ligado é monotônico:
+  // see-also é o piso e sobe para parent/child; kind igual é no-op; rebaixar ou inverter é erro.
   // Sem guarda de CLOSED (diferente de comment/tag): a linhagem continua gravável
   // após o fechamento — adotar um filho num pai já CLOSED grava o par recíproco. Conteúdo segue
   // imutável; relate só acrescenta relações, nunca altera o que foi entregue.
-  relate(relations: Relation[]): void {
-    const existing = new Set(this.relates.map((r) => r.id));
-    const additions = normalizeRelations(relations).filter((r) => r.id !== this.id && !existing.has(r.id));
-    if (!additions.length) throw new DomainError("Nenhuma relação nova: informe ids de outras Issues");
-    this.relates.push(...additions);
-    this.#bumpRevision();
+  // Devolve se algo mudou, para a aplicação salvar só o lado alterado (salvar sem mudança é save stale).
+  relate(relations: Relation[]): boolean {
+    const wanted = normalizeRelations(relations).filter((r) => r.id !== this.id);
+    if (!wanted.length) throw new DomainError("Nenhuma relação nova: informe ids de outras Issues");
+    let changed = false;
+    for (const next of wanted) {
+      const current = this.relates.find((r) => r.id === next.id);
+      if (!current) { this.relates.push(next); changed = true; continue; }
+      if (current.kind === next.kind) continue; // no-op: re-executar o mesmo relate não é erro
+      if (current.kind !== "see-also") {
+        throw new DomainError(`Relação com ${next.id} já é ${current.kind}: relate promove see-also para parent/child, mas não rebaixa nem inverte. Não há como apagar uma aresta pelo CLI: crie a Issue de novo com a linhagem certa e abandone esta (issues status --reason errado)`);
+      }
+      current.kind = next.kind; // promoção monotônica
+      changed = true;
+    }
+    if (changed) this.#bumpRevision();
+    return changed;
   }
 
   // Entrega para decisão humana com a evidência obrigatória: relatório curto do que foi

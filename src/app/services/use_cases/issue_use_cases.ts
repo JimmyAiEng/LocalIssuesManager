@@ -34,14 +34,14 @@ export function createIssue(input: CreateInput, root?: string): Issue {
   const created = persistableAttachments(input.attachments, input.now); // valida antes de criar a Issue
   const issue = Issue.create({ title: input.title, project: input.project,
     type: parseIssueType(input.type), action: parseActionType(input.action), problem: input.problem,
-    acceptance_criteria: input.acceptance_criteria, relates: input.relates,
+    acceptance_criteria: input.acceptance_criteria, // relates fica com relateIssues, abaixo: aresta nos dois lados
     attachments: created.map(({ entity }) => entity.toJSON()) }, actor, input.now);
   const tags: TagUpdates = { complexity: input.complexity, human_need: input.human_need, risk: input.risk };
   if (Object.values(tags).some((value) => value !== undefined)) issue.tag(tags, actor); // reusa applyTags (valida enums)
   for (const { entity, bytes } of created) queue.artifacts.writeMedia(issue.project, entity, bytes);
   queue.save(issue);
   if (input.artifact) queue.artifacts.writeText(issue.project, { issueId: issue.id, type: "document" }, input.artifact);
-  return issue;
+  return input.relates?.length ? relateIssues({ id: issue.id, relates: input.relates }, root) : issue; // simetria é invariante de escrita: mesmo caminho de `issues relate` (recíproco see-also)
 }
 
 // Humano assume uma Issue OPEN pela web (OPEN->CLAIMED); o claim por IA continua via nextIssue.
@@ -220,17 +220,17 @@ export function resetClaim(input: { id: string; human: boolean; comment: string;
 }
 
 // Relaciona Issues (linhagem direcionada): ids devem existir; kind=child (default see-also) grava o par recíproco parent na alvo, tornando a linhagem navegável nos dois sentidos.
+// Aresta já existente sobe de kind (see-also → parent/child) nos dois lados; kind igual é no-op silencioso e rebaixar/inverter é erro — a regra vive em Issue.relate.
 export function relateIssues(input: { id: string; relates: string[]; kind?: string }, root?: string): Issue {
   const kind = input.kind ? parseRelationKind(input.kind) : "see-also";
   const queue = new Queue(root);
   const issue = queue.loadRequired(input.id);
-  const targets = input.relates.map((id) => queue.loadRequired(id));
-  issue.relate(input.relates.map((id) => ({ id, kind })));
-  for (const target of targets) {
-    target.relate([{ id: issue.id, kind: inverseKind(kind) }]); // par recíproco na alvo
-    queue.save(target);
-  }
-  queue.save(issue);
+  const ids = [...new Set(input.relates)].filter((id) => id !== issue.id); // dedup: id repetido carregaria a alvo 2x e o 2º save estouraria stale
+  const targets = ids.map((id) => queue.loadRequired(id)); // loadRequired em todos: id inexistente é typo
+  const changed = issue.relate(ids.map((id) => ({ id, kind }))); // lista vazia (ou só auto-relate) morre aqui
+  const dirty = targets.filter((t) => t.relate([{ id: issue.id, kind: inverseKind(kind) }])); // par recíproco; muta antes de salvar para um conflito não deixar meio gravado
+  for (const target of dirty) queue.save(target);
+  if (changed) queue.save(issue); // salvar sem mudança de revisão seria save stale
   return issue;
 }
 

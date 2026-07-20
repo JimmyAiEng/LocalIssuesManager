@@ -238,14 +238,30 @@ test("relate adiciona relações novas com kind, ignora o próprio id e deduplic
   issue.relate([{ id: "a", kind: "child" }, { id: "a", kind: "parent" }, { id: issue.id, kind: "child" }, { id: "b", kind: "see-also" }]);
   assert.deepEqual(issue.relates, [{ id: "a", kind: "child" }, { id: "b", kind: "see-also" }]);
   assert.equal(issue.revision, revision + 1);
-  issue.relate([{ id: "b", kind: "parent" }, { id: "c", kind: "parent" }]); // "b" já ligado: kind não muda
-  assert.deepEqual(issue.relates, [{ id: "a", kind: "child" }, { id: "b", kind: "see-also" }, { id: "c", kind: "parent" }]);
+  issue.relate([{ id: "b", kind: "parent" }, { id: "c", kind: "parent" }]); // "b" era see-also: promove
+  assert.deepEqual(issue.relates, [{ id: "a", kind: "child" }, { id: "b", kind: "parent" }, { id: "c", kind: "parent" }]);
+});
+
+// Promoção monotônica: see-also é o piso e sobe; parent/child nunca rebaixa nem inverte em silêncio.
+test("relate promove see-also para parent/child, repete como no-op e recusa rebaixar ou inverter", () => {
+  const issue = claimed();
+  issue.relate([{ id: "a", kind: "see-also" }]);
+  const revision = issue.revision;
+  assert.equal(issue.relate([{ id: "a", kind: "parent" }]), true); // promoção
+  assert.deepEqual(issue.relates, [{ id: "a", kind: "parent" }]);
+  assert.equal(issue.revision, revision + 1);
+  assert.equal(issue.relate([{ id: "a", kind: "parent" }]), false); // no-op silencioso: repetir não é erro
+  assert.equal(issue.revision, revision + 1);
+  assert.throws(() => issue.relate([{ id: "a", kind: "see-also" }]), /não rebaixa nem inverte/); // rebaixamento
+  // o remédio citado tem que existir no CLI: não há unrelate, então a saída é recriar a Issue e abandonar esta
+  assert.throws(() => issue.relate([{ id: "a", kind: "child" }]), /issues status --reason errado/); // inversão
+  assert.deepEqual(issue.relates, [{ id: "a", kind: "parent" }]);
 });
 
 test("relate sem novidade é rejeitado; em CLOSED a linhagem continua gravável", () => {
   const issue = claimed();
   issue.relate([{ id: "a", kind: "see-also" }]);
-  assert.throws(() => issue.relate([{ id: "a", kind: "see-also" }, { id: issue.id, kind: "child" }]), /Nenhuma relação nova/);
+  assert.throws(() => issue.relate([{ id: issue.id, kind: "child" }]), /Nenhuma relação nova/); // só auto-relate
   assert.throws(() => issue.relate([]), /Nenhuma relação nova/);
   const closed = Issue.create(input, "human");
   closed.closeByHuman("errada", "errado");

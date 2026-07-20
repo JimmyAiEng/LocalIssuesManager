@@ -232,12 +232,82 @@ test("relateIssues com kind=child grava a inversa parent na Issue alvo", () => {
   assert.deepEqual(getIssue(impl.id, dir).relates, [{ id: design.id, kind: "parent" }]); // recíproca
 });
 
+// Aresta legada de um lado só (gravada antes de `create --relates` delegar a relateIssues): a alvo
+// já cita a origem e quem falta é a origem. Simulada no store, porque `create` já grava os dois lados.
+const legacyEdge = (dir: string, from: string, to: string): void => {
+  const queue = new Queue(dir);
+  const issue = queue.loadRequired(from);
+  issue.relate([{ id: to, kind: "see-also" }]);
+  queue.save(issue);
+};
+
+test("relateIssues grava na origem mesmo quando a alvo já cita a origem (adoção de órfã)", () => {
+  const dir = root();
+  const parent = createIssue({ ...body, title: "parent", action: "Design" }, dir);
+  const child = createIssue({ ...body, title: "child", action: "Implement" }, dir);
+  legacyEdge(dir, child.id, parent.id); // aresta legada só na filha
+  relateIssues({ id: parent.id, relates: [child.id], kind: "child" }, dir); // recíproco já existe na alvo: não pode falhar
+  assert.deepEqual(getIssue(parent.id, dir).relates, [{ id: child.id, kind: "child" }]);
+  assert.deepEqual(getIssue(child.id, dir).relates, [{ id: parent.id, kind: "parent" }]); // see-also promovido ao recíproco
+  // repetir o comando é no-op silencioso
+  relateIssues({ id: parent.id, relates: [child.id], kind: "child" }, dir);
+  assert.deepEqual(getIssue(parent.id, dir).relates, [{ id: child.id, kind: "child" }]);
+});
+
+// Sentido documentado na skill: `issues relate --id <órfã> --relates <pai> --kind parent`.
+// A órfã (origem) já cita o pai por uma aresta legada de um lado só; quem falta é o pai.
+test("relateIssues adota a órfã no sentido documentado (origem já cita o pai)", () => {
+  const dir = root();
+  const parent = createIssue({ ...body, title: "parent", action: "Design" }, dir);
+  const orphan = createIssue({ ...body, title: "orphan", action: "Implement" }, dir);
+  legacyEdge(dir, orphan.id, parent.id);
+  relateIssues({ id: orphan.id, relates: [parent.id], kind: "parent" }, dir); // see-also da órfã sobe para parent
+  assert.deepEqual(getIssue(orphan.id, dir).relates, [{ id: parent.id, kind: "parent" }]);
+  assert.deepEqual(getIssue(parent.id, dir).relates, [{ id: orphan.id, kind: "child" }]); // recíproco gravado
+  relateIssues({ id: orphan.id, relates: [parent.id], kind: "parent" }, dir); // re-executar é no-op
+  assert.deepEqual(getIssue(orphan.id, dir).relates, [{ id: parent.id, kind: "parent" }]);
+  assert.throws(() => relateIssues({ id: orphan.id, relates: [parent.id] }, dir), /não rebaixa nem inverte/); // see-also sobre parent
+  assert.throws(() => relateIssues({ id: orphan.id, relates: [parent.id], kind: "child" }, dir), /não rebaixa nem inverte/); // inversão
+  assert.throws(() => relateIssues({ id: orphan.id, relates: [orphan.id] }, dir), /Nenhuma relação nova/); // auto-relate
+  assert.throws(() => relateIssues({ id: orphan.id, relates: ["ghost"] }, dir), /Issue not found: ghost/); // typo ainda falha
+});
+
 test("createIssue com relates valida existência e persiste a linhagem", () => {
   const dir = root();
   const parent = createIssue({ ...body, title: "parent" }, dir);
   assert.throws(() => createIssue({ ...body, title: "orphan", relates: ["ghost"] }, dir), /Issue not found: ghost/);
   const child = createIssue({ ...body, title: "child", relates: [parent.id] }, dir);
   assert.deepEqual(getIssue(child.id, dir).relates, [{ id: parent.id, kind: "see-also" }]);
+  assert.deepEqual(getIssue(parent.id, dir).relates, [{ id: child.id, kind: "see-also" }]); // par recíproco na alvo
+});
+
+// Id repetido carregava a alvo duas vezes e o 2º save estourava `Stale Issue save` — em `create`,
+// depois de a Issue já estar em disco, deixando o grafo assimétrico no sentido inverso.
+test("relates com id repetido grava uma aresta única nos dois lados, sem stale save", () => {
+  const dir = root();
+  const target = createIssue({ ...body, title: "target" }, dir);
+  const child = createIssue({ ...body, title: "child", relates: [target.id, target.id] }, dir);
+  assert.deepEqual(getIssue(child.id, dir).relates, [{ id: target.id, kind: "see-also" }]);
+  assert.deepEqual(getIssue(target.id, dir).relates, [{ id: child.id, kind: "see-also" }]);
+  const other = createIssue({ ...body, title: "other" }, dir);
+  relateIssues({ id: other.id, relates: [target.id, target.id] }, dir);
+  assert.deepEqual(getIssue(other.id, dir).relates, [{ id: target.id, kind: "see-also" }]);
+  assert.deepEqual(getIssue(target.id, dir).relates.filter((r) => r.id === other.id), [{ id: other.id, kind: "see-also" }]);
+});
+
+// `create --relates <review>` sozinho basta para o gate de REPROVADO enxergar o retrabalho:
+// o recíproco see-also nasce na Review, sem `issues relate` manual.
+test("createIssue com relates satisfaz o gate de REPROVADO da Review", async () => {
+  const dir = root();
+  const review = createIssue({ ...body, title: "review" }, dir);
+  nextIssue({ agent: "pi", project: "app" }, dir);
+  seedReview(dir, review.id);
+  setArtifact({ issueId: review.id, content: "REPROVADO: refazer a fatia" }, dir);
+  const close = () => statusIssue({ id: review.id, agent: "pi", status: "CLOSED", comment: "reprovado", closed_reason: "concluido" }, dir);
+  await assert.rejects(close, /retrabalho vivo/);
+  createIssue({ ...body, title: "rework", action: "Implement", relates: [review.id] }, dir);
+  await close();
+  assert.equal(getIssue(review.id, dir).status, "CLOSED");
 });
 
 test("issueView expõe a cadeia de ancestrais subindo os parent", () => {

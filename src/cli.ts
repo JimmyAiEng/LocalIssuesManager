@@ -9,6 +9,7 @@ import { createProject, listProjects } from "./app/services/use_cases/project_us
 import { getPlan, setPlan } from "./app/services/use_cases/plan_use_cases.js";
 import { composePrompt } from "./app/services/use_cases/prompt_composition.js";
 import { getRequirements, setRequirements } from "./app/services/use_cases/requirements_use_cases.js";
+import { usageFor } from "./app/services/use_cases/usage.js";
 import { printDesignPackage, reportCliError, runDesign } from "./cli_design.js";
 import { openBrowser, startWebServer } from "./web/server.js";
 
@@ -18,22 +19,28 @@ type Result = object | object[] | null;
 export function main(argv = process.argv.slice(2)): void | Promise<void> {
   try {
     const [command, ...raw] = argv;
+    // --help antes de qualquer parsing: o usage do subcomando não pode exigir os args que ele documenta.
+    if (!command || argv.includes("--help")) return void process.stdout.write(`${usageFor(command)}\n`);
     if (command === "project") return void runProject(raw);
     if (command === "requirements") return void runRequirements(raw);
     if (command === "plan") return void runPlan(raw);
     if (command === "design") return void runDesign(raw);
-    if (command === "get" && raw[0] && !raw[0].startsWith("--")) raw.unshift("--target"); // get DESIGN|REQUIREMENTS posicional
-    const options = parseOptions(raw);
-    if (command === "web") return void launchWeb(options);
-    if (command === "next" && options.prompt) return void nextPrompt(options);
-    if (command === "handoff") return void handoffDoc(options); // handoff.md cru (getHandoff), como nextPrompt
-    if (command === "get") assertNotOpen(value(options, "id")); // OPEN só pelo claim de `next`, com o contrato da action junto
-    if (command === "get" && options.target === "DESIGN") return void printDesignPackage(value(options, "id"), Boolean(options.pretty));
-    if (command === "status") return runStatus(options); // async pelo gate da action
-    print(execute(command, options), Boolean(options.pretty));
+    return route(command, raw);
   } catch (error) {
     reportCliError(error);
   }
+}
+
+function route(command: string, raw: string[]): void | Promise<void> {
+  if (command === "get" && raw[0] && !raw[0].startsWith("--")) raw.unshift("--target"); // get DESIGN|REQUIREMENTS posicional
+  const options = parseOptions(raw);
+  if (command === "web") return void launchWeb(options);
+  if (command === "next" && options.prompt) return void nextPrompt(options);
+  if (command === "handoff") return void handoffDoc(options); // handoff.md cru (getHandoff), como nextPrompt
+  if (command === "get") assertNotOpen(value(options, "id")); // OPEN só pelo claim de `next`, com o contrato da action junto
+  if (command === "get" && options.target === "DESIGN") return void printDesignPackage(value(options, "id"), Boolean(options.pretty));
+  if (command === "status") return runStatus(options); // async pelo gate da action
+  print(execute(command, options), Boolean(options.pretty));
 }
 
 // Gates de conclusão (requirements/design/check) falham como DomainError; DesignGateError
@@ -54,7 +61,7 @@ function runProject(raw: string[]): void {
 function project(sub: string | undefined, options: Options): Result {
   if (sub === "create") return createProject({ name: value(options, "name"), repo: value(options, "repo"), concern: optional(options, "concern") });
   if (sub === "list") return listProjects();
-  throw new Error("Usage: issues project <create|list> [--name <n> --repo <path> --concern LOW|HIGH]");
+  throw new Error(usageFor("project"));
 }
 
 function runRequirements(raw: string[]): void {
@@ -64,7 +71,7 @@ function runRequirements(raw: string[]): void {
 
 function requirements(sub: string | undefined, options: Options): Result {
   if (sub === "set") return setRequirements({ issueId: value(options, "id"), file: value(options, "file") });
-  throw new Error("Usage: issues requirements set --id <issueId> --file <req.jsonl>");
+  throw new Error(usageFor("requirements"));
 }
 
 function runPlan(raw: string[]): void {
@@ -74,7 +81,7 @@ function runPlan(raw: string[]): void {
 
 function plan(sub: string | undefined, options: Options): Result {
   if (sub === "set") return setPlan({ issueId: value(options, "id"), file: value(options, "file") });
-  throw new Error("Usage: issues plan set --id <issueId> --file <plan.json>");
+  throw new Error(usageFor("plan"));
 }
 
 function execute(command: string | undefined, options: Options): Result {
@@ -90,7 +97,7 @@ function execute(command: string | undefined, options: Options): Result {
   if (command === "list") return list(options);
   if (command === "artifact") return issueArtifact(options);
   if (command === "init") return init(options);
-  throw new Error("Usage: issues <create|next|handoff|comment|tag|status|decide|reset|relate|decompose|get|list|artifact|requirements|plan|design|project|web|init> [flags]");
+  throw new Error(usageFor(undefined));
 }
 
 function create(options: Options): Result {

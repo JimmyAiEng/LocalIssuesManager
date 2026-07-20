@@ -199,7 +199,7 @@ export function decideIssue(input: DecideInput, root?: string): Issue {
   if (!input.human) throw new DomainError("Decide requires --human");
   const queue = new Queue(root);
   const issue = queue.loadRequired(input.id);
-  if (input.status !== "OPEN" && input.status !== "APPROVED" && input.status !== "CLOSED") throw new DomainError("Invalid decision");
+  if (input.status !== "OPEN" && input.status !== "APPROVED" && input.status !== "CLOSED") throw new DomainError(`Invalid decision: ${input.status} (use OPEN|APPROVED|CLOSED)`);
   const reason = input.closed_reason ? parseClosedReason(input.closed_reason) : undefined;
   const created = persistableAttachments(input.attachments, input.now);
   issue.decide(input.status, input.comment, reason, input.now, created.map(({ entity }) => entity.toJSON()));

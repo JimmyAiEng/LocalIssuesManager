@@ -1,6 +1,7 @@
 import {
   addDesignDiagram, DesignGateError, getDesignPackage, setArchitectureChanged, setDesignDoc,
 } from "./app/services/use_cases/design_use_cases.js";
+import { usageFor } from "./app/services/use_cases/usage.js";
 
 type Flags = Record<string, string | boolean>;
 
@@ -29,7 +30,7 @@ async function design(sub: string | undefined, flags: Flags): Promise<object> {
     return setArchitectureChanged({ issueId: need(flags, "issue"), value: parseChanged(need(flags, "value")) });
   }
   if (sub !== "doc" && sub !== "add") {
-    throw new Error("Usage: issues design <doc|add|changed> --issue <issueId> [--kind <kind>] [--file <path>] [--value <true|false>]");
+    throw new Error(usageFor("design"));
   }
   const base = { issueId: need(flags, "issue"), file: need(flags, "file") };
   return sub === "doc" ? setDesignDoc(base) : addDesignDiagram({ ...base, kind: need(flags, "kind") });

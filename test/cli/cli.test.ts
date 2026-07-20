@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { USAGE } from "../../src/app/services/use_cases/usage.js";
 import { main } from "../../src/cli.js";
 import { Queue } from "../../src/domain/queue_repository.js";
 
@@ -224,6 +225,47 @@ test("e2e: tag insere complexidade/humano/risco; valor inválido falha", () => {
   const bad = spawnSync(bin, ["tag", "--id", created.id, "--risk", "ENORME", "--human"], { env: vars, encoding: "utf8" });
   assert.notEqual(bad.status, 0);
   assert.match(bad.stderr, /Invalid risk: ENORME/);
+});
+
+// O agente só descobria os enums lendo o fonte: o erro tem que trazer o remédio junto.
+test("e2e: erro de enum enumera os valores aceitos na própria mensagem", () => {
+  const vars = env();
+  const created = JSON.parse(run(createArgs, vars));
+  const cases: [string[], RegExp][] = [
+    [["tag", "--id", created.id, "--complexity", "LOW", "--human"], /Invalid complexity: LOW \(use BAIXA\|MEDIA\|ALTA\)/],
+    [["tag", "--id", created.id, "--risk", "HIGH", "--human"], /Invalid risk: HIGH \(use BAIXO\|MEDIO\|ALTO\)/],
+    [["tag", "--id", created.id, "--human-need", "MAYBE", "--human"], /Invalid human_need: MAYBE \(use HITL\|AFK\)/],
+    [createArgs.map((arg) => arg === "Feat" ? "Bug" : arg), /Invalid type: Bug \(use Fix\|Feat\|Research\|Refactor\)/],
+    [createArgs.map((arg) => arg === "Review" ? "Coding" : arg), /Invalid action: Coding \(use Planning\|Design\|Implement\|Review\|Deploy\)/],
+    [["comment", "--id", created.id, "--agent", "pi", "--comment", "x", "--role", "wizard"], /Invalid role: wizard \(use requirement\|/],
+    [["decide", "--id", created.id, "--human", "--status", "DONE", "--comment", "x"], /Invalid decision: DONE \(use OPEN\|APPROVED\|CLOSED\)/],
+  ];
+  for (const [args, expected] of cases) {
+    const result = spawnSync(bin, args, { env: vars, encoding: "utf8" });
+    assert.notEqual(result.status, 0, args.join(" "));
+    assert.match(result.stderr, expected, args.join(" "));
+  }
+});
+
+// `issues <sub> --help` devolvia o primeiro erro de argumento ("--id is required") em vez do usage.
+test("e2e: --help imprime o usage do subcomando sem exigir args, e o usage lista os enums", () => {
+  const vars = env();
+  for (const [command, usage] of Object.entries(USAGE)) {
+    const result = spawnSync(bin, [command, "--help"], { env: vars, encoding: "utf8" });
+    assert.equal(result.status, 0, `${command} --help deveria sair 0, stderr: ${result.stderr}`);
+    assert.equal(result.stdout, `Usage: ${usage}\n`);
+  }
+  // O usage não pode divergir do parser: os enums vêm do domínio, não de literais no texto.
+  assert.match(USAGE.create, /--type Fix\|Feat\|Research\|Refactor/);
+  assert.match(USAGE.tag, /--complexity BAIXA\|MEDIA\|ALTA/);
+  assert.match(USAGE.tag, /--risk BAIXO\|MEDIO\|ALTO/);
+  // Sem comando (ou comando desconhecido no --help) cai no índice, que aponta o help por comando.
+  for (const args of [[], ["--help"]]) {
+    const index = spawnSync(bin, args, { env: vars, encoding: "utf8" });
+    assert.equal(index.status, 0);
+    assert.match(index.stdout, /Usage: issues <create\|next\|/);
+    assert.match(index.stdout, /issues <comando> --help/);
+  }
 });
 
 test("CLI next --prompt (fila) retorna Markdown apontando sdlc-workflow, não JSON", () => {

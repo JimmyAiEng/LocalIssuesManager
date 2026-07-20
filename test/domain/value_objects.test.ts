@@ -3,7 +3,7 @@ import test from "node:test";
 import { DomainError } from "../../src/domain/domain_error.js";
 import {
   ACTION_TYPES, AGENT_IDS, CLOSED_REASONS, ISSUE_STATUSES, ISSUE_TYPES, MAX_DOC_WORDS, ROLES,
-  assertBrief, parseActionType, parseAgentId, parseClosedReason, parseIssueStatus, parseIssueType, parseRole, wasApproved, wordCount,
+  applyTags, assertBrief, parseActionType, parseAgentId, parseClosedReason, parseIssueStatus, parseIssueType, parseRole, wasApproved, wordCount,
 } from "../../src/domain/value_objects.js";
 
 const cases = [
@@ -38,12 +38,18 @@ test("VOs identificam o enum inválido nas mensagens de domínio", () => {
         && error.message === message,
     );
   };
-  invalid(parseAgentId, "Invalid IA: bad");
-  invalid(parseClosedReason, "Invalid closed reason: bad");
-  invalid(parseIssueStatus, "Invalid status: bad");
-  invalid(parseIssueType, "Invalid type: bad");
-  invalid(parseActionType, "Invalid action: bad");
-  invalid(parseRole, "Invalid role: bad");
+  // A mensagem enumera os aceitos: o agente que erra o enum acerta na tentativa seguinte sem ler o fonte.
+  invalid(parseAgentId, "Invalid IA: bad (use cursor|claude-code|codex|pi)");
+  invalid(parseClosedReason, "Invalid closed reason: bad (use obsoleto|duplicado|concluido|errado)");
+  invalid(parseIssueStatus, "Invalid status: bad (use OPEN|CLAIMED|AWAITING|APPROVED|CLOSED)");
+  invalid(parseIssueType, "Invalid type: bad (use Fix|Feat|Research|Refactor)");
+  invalid(parseActionType, "Invalid action: bad (use Planning|Design|Implement|Review|Deploy)");
+  invalid(parseRole, "Invalid role: bad (use requirement|breaking-issues|architect|test-coding|coding|review|pr-analysis)");
+});
+
+test("applyTags enumera os valores aceitos da categoria errada", () => {
+  assert.throws(() => applyTags({}, { complexity: "LOW" }), /Invalid complexity: LOW \(use BAIXA\|MEDIA\|ALTA\)/);
+  assert.throws(() => applyTags({}, { human_need: "MAYBE" }), /Invalid human_need: MAYBE \(use HITL\|AFK\)/);
 });
 
 test("wordCount conta palavras separadas por whitespace", () => {

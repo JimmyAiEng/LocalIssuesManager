@@ -82,7 +82,7 @@ export function applyTags(current: Tags, updates: TagUpdates): Tags {
   for (const category of Object.keys(TAG_VALUES) as TagCategory[]) {
     const value = updates[category];
     if (value === undefined) continue;
-    if (!TAG_VALUES[category].includes(value as never)) throw new DomainError(`Invalid ${category}: ${value}`);
+    if (!TAG_VALUES[category].includes(value as never)) throw new DomainError(`Invalid ${category}: ${value} (use ${TAG_VALUES[category].join("|")})`);
     result[category] = value as never;
     changed = true;
   }
@@ -184,6 +184,7 @@ export function normalizeRelations(relates: readonly (string | Relation)[] | und
 function parseEnum<const Values extends readonly string[]>(
   values: Values, value: string, label: string,
 ): Values[number] {
-  if (!values.includes(value)) throw new DomainError(`Invalid ${label}: ${value}`);
+  // O remédio vai na própria mensagem: quem erra o enum não deve precisar ler o fonte para acertar.
+  if (!values.includes(value)) throw new DomainError(`Invalid ${label}: ${value} (use ${values.join("|")})`);
   return value as Values[number];
 }

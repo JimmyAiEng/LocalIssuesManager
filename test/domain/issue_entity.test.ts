@@ -317,7 +317,7 @@ test("tag valida categoria/valor, mescla, incrementa a revisão e guarda CLOSED"
   assert.deepEqual(issue.tags, { complexity: "ALTA", human_need: "AFK", risk: "BAIXO" });
   assert.equal(issue.revision, 2);
   assert.throws(() => issue.tag({ risk: "GIGANTE" }, "human"), (error: unknown) =>
-    error instanceof DomainError && error.message === "Invalid risk: GIGANTE");
+    error instanceof DomainError && error.message === "Invalid risk: GIGANTE (use BAIXO|MEDIO|ALTO)");
   assert.throws(() => issue.tag({}, "human"), /At least one tag is required/);
   const closed = Issue.create(input, "human");
   closed.closeByHuman("errada", "errado");

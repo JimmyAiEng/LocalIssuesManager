@@ -130,6 +130,13 @@ export function wasApproved(phases: readonly { status: IssueStatus }[]): boolean
   return phases.some((phase) => phase.status === "APPROVED");
 }
 
+// Issue "viva" = ainda pode receber trabalho (OPEN na fila, CLAIMED por um agente). AWAITING e
+// APPROVED estão paradas na decisão humana e CLOSED acabou: nenhuma delas abre sequência, então
+// nenhuma satisfaz os gates que exigem a próxima etapa existindo de fato.
+export function isLive(status: IssueStatus): boolean {
+  return status === "OPEN" || status === "CLAIMED";
+}
+
 export function parseAgentId(value: string): AgentId {
   return parseEnum(AGENT_IDS, value, "IA");
 }

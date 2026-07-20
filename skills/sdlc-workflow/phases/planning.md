@@ -40,7 +40,41 @@ Regras que o validador cobra — o erro sempre cita o número da linha:
 
 Linhas em branco são ignoradas; cada Feature tem no máximo 300 palavras.
 
-## Entrega 2 — uma Issue Design por grupo de Features
+## Entrega 2 — o Artefato do alinhamento
+
+```bash
+issues artifact --id <id> --file ./artifact.md
+```
+
+O **nome do arquivo é irrelevante** (o conteúdo é gravado na Issue); use `./artifact.md` e não gaste tempo decidindo.
+Máximo 300 palavras.
+Esqueleto:
+
+```markdown
+# Alinhamento
+
+- Problema: <o problema real, em uma linha>
+- Escopo: <o que entra>
+- Fora de escopo: <o que não entra>
+
+## Decisões
+
+- <decisão tomada com o humano>
+
+## Dúvidas em aberto
+
+- <o que ficou pendente, ou "Nenhuma">
+```
+
+## Entrega 3 — uma Issue Design por grupo de Features
+
+**Quando decompor**: só no passo que **fecha** a Issue.
+
+- Vai encerrar por `AWAITING` (HITL, `risk=ALTO`, `complexity=ALTA` ou Projeto `concern=HIGH`)?
+  **Não decomponha agora**: ir para `AWAITING` com filha já criada é recusado.
+  Entregue os requisitos e o artefato, envie para decisão humana e deixe registrado no `handoff.md` que a decomposição ficou pendente.
+  Quando a Issue voltar `APPROVED`, decomponha e **só então** feche.
+- Vai fechar direto por `CLOSED` (AFK)? Decomponha antes de fechar, na mesma sessão — o caminho AFK não muda.
 
 ```bash
 issues decompose --id <id> --into ./decompose.json --agent <ia>
@@ -79,7 +113,8 @@ Regras que o validador cobra:
 3. `features` é obrigatório: array não vazio com os nomes das Features do pai, **exatamente** os valores do campo `feature` de cada linha do `req.jsonl` — não abrevie, não reescreva.
 4. Nome que não existe nos requisitos é recusado, e o erro lista os nomes disponíveis.
 5. A mesma Feature em duas filhas é recusada, inclusive entre chamadas: você pode chamar `decompose` outra vez para os grupos que faltam, mas nunca repetir Feature já coberta.
-6. O gate de fechamento cobra a **partição**: toda Feature do pai coberta por exatamente uma filha Design, nenhuma solta, nenhuma repetida.
+6. O gate cobra a **partição** na transição para `CLOSED`: toda Feature do pai coberta por exatamente uma filha Design, nenhuma solta, nenhuma repetida.
+   A filha também precisa estar **viva** (`OPEN` ou `CLAIMED`) — filha `CLOSED`, `AWAITING` ou `APPROVED` não cobre a Feature dela.
 
 O `title` é **livre** — nomeie o conceito do grupo (`Design: Autenticação`), não a Feature.
 O `decompose` grava as Features do grupo como os requisitos da própria filha, e ela as recebe no prompt sob `## Features desta Issue`.
@@ -93,32 +128,6 @@ Filha Design criada por fora (`issues create`) não cobre Feature nenhuma: as Fe
 Uma Design um pouco larga é barata, porque ela mesma se fatia em vários Implement depois.
 - Cada Feature pertence a exatamente um grupo.
 
-## Entrega 3 — o Artefato do alinhamento
-
-```bash
-issues artifact --id <id> --file ./artifact.md
-```
-
-O **nome do arquivo é irrelevante** (o conteúdo é gravado na Issue); use `./artifact.md` e não gaste tempo decidindo.
-Máximo 300 palavras.
-Esqueleto:
-
-```markdown
-# Alinhamento
-
-- Problema: <o problema real, em uma linha>
-- Escopo: <o que entra>
-- Fora de escopo: <o que não entra>
-
-## Decisões
-
-- <decisão tomada com o humano>
-
-## Dúvidas em aberto
-
-- <o que ficou pendente, ou "Nenhuma">
-```
-
 ## Encerramento
 
 ```bash
@@ -128,6 +137,12 @@ issues status --id <id> --agent <ia> --status CLOSED \
 
 Use `--status AWAITING` (sem `--reason`) se a Issue é HITL, `risk=ALTO` ou `complexity=ALTA`.
 **Toda saída por `AWAITING` exige o `handoff.md` gravado antes** — `issues artifact --id <id> --name handoff.md --file ./handoff.md` —, senão o `status` falha (veja "Handoff" na camada 0).
+Escreva nele que a decomposição em Issues Design ficou pendente, com o agrupamento que você já tem em mente: é o próximo passo concreto da sessão pós-`APPROVED`.
 Em Projeto `concern=HIGH`, Planning **não fecha por agente**: encerre sempre por `--status AWAITING` (sem `--reason concluido`) — o aceite é humano, no web — mesmo em Issue AFK.
-Sem requisitos válidos **e** toda Feature coberta por exatamente uma filha Design, o comando falha apontando a Feature descoberta ou repetida — entregue as duas antes.
+O gate se divide pelas duas saídas:
+
+- **`AWAITING`** cobra os **requisitos válidos** e recusa a Issue se ela já tiver qualquer filha — a decomposição é passo pós-aprovação.
+- **`CLOSED`** cobra os requisitos **e** a partição viva: toda Feature coberta por exatamente uma filha Design em `OPEN` ou `CLAIMED`.
+  O erro aponta a Feature descoberta, repetida ou coberta por filha que já saiu de circulação.
+
 Concluída a Issue, **encerre a sessão**: não busque outra Issue.

@@ -104,20 +104,21 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> Review 
   run(["design", "add", "--issue", designArch, "--kind", "state", "--file", fixture("s.puml", VALID_STATE)], vars);
   run(["design", "changed", "--issue", designArch, "--value", "true"], vars);
   run(["plan", "set", "--id", designArch, "--file", fixture("plan.json", PLAN)], vars);
-  const implA = decompose(vars, designArch, [
-    { title: "Impl auth 1", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) },
-    { title: "Impl auth 2", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) },
-  ]);
 
-  // Gate negativo: com tudo entregue mas arquitetura mudou, o agente NÃO fecha — vai a decisão humana.
+  // Gate negativo: arquitetura mudou, o agente NÃO fecha — e ouve isso antes de qualquer cobrança
+  // de decomposição, porque no caminho HITL as filhas só nascem depois da aprovação.
   const archClose = attempt(["status", "--id", designArch, "--agent", "pi", "--status", "CLOSED", "--comment", "fim", "--reason", "concluido"], vars);
   assert.equal(archClose.status, 1);
   assert.match(archClose.stderr, /não fecha por agente/);
   run(["artifact", "--id", designArch, "--name", "handoff.md", "--file", fixture("handoff.md", "# handoff")], vars);
   assert.equal(json(["status", "--id", designArch, "--agent", "pi", "--status", "AWAITING", "--comment", "design pronto"], vars).status, "AWAITING");
-  // Aprovação humana gera APPROVED; o agente reivindica a aprovada e a fecha (trava da arquitetura dispensada, gate revalida).
+  // Aprovação humana gera APPROVED; o agente reivindica a aprovada, SÓ ENTÃO decompõe e fecha.
   assert.equal(json(["decide", "--id", designArch, "--human", "--status", "APPROVED", "--comment", "aceito"], vars).status, "APPROVED");
   claim(vars, designArch);
+  const implA = decompose(vars, designArch, [
+    { title: "Impl auth 1", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) },
+    { title: "Impl auth 2", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) },
+  ]);
   assert.equal(closeAgent(vars, designArch).status, "CLOSED");
 
   // === DESIGN B (Registro): architecture_changed=false — atalho ao plano, fecha AFK ============

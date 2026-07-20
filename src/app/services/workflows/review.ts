@@ -2,19 +2,22 @@ import { DocumentArtifact } from "../../../domain/artifacts/document_artifact.js
 import { DomainError } from "../../../domain/domain_error.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import type { Queue } from "../../../domain/queue_repository.js";
-import { wasApproved } from "../../../domain/value_objects.js";
+import { isLive, wasApproved } from "../../../domain/value_objects.js";
+import type { CompletionStatus } from "./index.js";
 
 // Gate de conclusão de Review: exige o conjunto de documentos da revisão (intent + ≥2 evidence,
-// cada ≤300 palavras) e condiciona a conclusão ao veredito. Veredito REPROVADO só conclui com
-// retrabalho vivo — uma Issue relacionada Implement/Design fora de CLOSED, distinta das Issues
-// revisadas (já fechadas).
-export function validateReview(queue: Queue, issue: Issue): void {
+// cada ≤300 palavras) e o veredito nas duas saídas — é o que o humano lê para julgar. O retrabalho
+// do veredito REPROVADO só é cobrado no CLOSED: aprovar um REPROVADO é o humano concordando com a
+// reprovação, e só então o agente abre as Issues de correção e fecha a Review.
+export function validateReview(queue: Queue, issue: Issue, status: CompletionStatus): void {
   // Refactor troca a intenção pelo Diff Check declarado; o restante do gate é igual para todo type.
   const diffCheck = issue.type === "Refactor" ? requireDiffCheck(queue, issue) : null;
   if (diffCheck === null) requireIntent(queue, issue);
   requireEvidence(queue, issue);
-  if (parseVerdict(queue, issue) === "REPROVADO") requireLiveRework(queue, issue);
-  else if (diffCheck !== null) enforceDiffCheck(queue, issue, diffCheck);
+  const verdict = parseVerdict(queue, issue); // sempre cobrado: o veredito é o que o humano julga
+  if (verdict === "REPROVADO" && status === "CLOSED") requireLiveRework(queue, issue);
+  if (status === "AWAITING" && !wasApproved(issue.phases)) rejectEarlyRework(queue, issue);
+  if (verdict === "APROVADO" && diffCheck !== null) enforceDiffCheck(queue, issue, diffCheck);
 }
 
 function requireIntent(queue: Queue, issue: Issue): void {
@@ -98,15 +101,32 @@ function parseVerdict(queue: Queue, issue: Issue): "APROVADO" | "REPROVADO" {
   throw new DomainError(`Veredito de Review deve começar por APROVADO | APROVADO com ressalva | REPROVADO (recebido "${content.trim().split(/\s+/)[0]}")`);
 }
 
-// REPROVADO exige retrabalho vivo: ao menos uma Issue relacionada (qualquer kind) de action
-// Implement ou Design fora de CLOSED.
+// Retrabalho vivo: Issue relacionada (QUALQUER kind — o retrabalho nasce de `--relates`, cujo
+// default é see-also) de action Implement/Design em OPEN ou CLAIMED. As Issues revisadas estão
+// sempre CLOSED (revisa-se trabalho terminado), então relacionada viva só pode ser retrabalho.
+// Os dois gates da Review são o inverso um do outro sobre esta mesma busca.
+function liveRework(queue: Queue, issue: Issue): Issue | undefined {
+  return issue.relates
+    .map((relation) => queue.load(relation.id))
+    .find((related): related is Issue => related !== null && isLive(related.status)
+      && (related.action === "Implement" || related.action === "Design"));
+}
+
+// REPROVADO só FECHA com retrabalho vivo. Retrabalho parado em AWAITING/APPROVED ainda depende de
+// uma decisão humana e não corrige nada — não serve de sequência para a Review fechar em cima.
 function requireLiveRework(queue: Queue, issue: Issue): void {
-  const hasRework = issue.relates.some((relation) => {
-    const related = queue.load(relation.id);
-    return related !== null && related.status !== "CLOSED"
-      && (related.action === "Implement" || related.action === "Design");
-  });
-  if (!hasRework) throw new DomainError(`Review REPROVADO só conclui com retrabalho vivo: relacione ao menos uma Issue Implement ou Design fora de CLOSED (crie com '--relates ${issue.id}' ou use 'issues relate')`);
+  if (liveRework(queue, issue) !== undefined) return;
+  throw new DomainError(`Review REPROVADO só conclui com retrabalho vivo: relacione ao menos uma Issue Implement ou Design em OPEN ou CLAIMED (crie com '--relates ${issue.id}' ou use 'issues relate')`);
+}
+
+// Inverso: o retrabalho não pode existir ANTES da decisão humana. O veredito vai sozinho ao
+// humano — aprovar um REPROVADO é ele concordando com a reprovação, e só então o agente abre a
+// correção e fecha. A Review do ciclo seguinte nunca é criada à mão: afterIssueClosed a cria
+// quando a última Implement irmã fecha, e criá-la cedo trava esse gatilho.
+function rejectEarlyRework(queue: Queue, issue: Issue): void {
+  const rework = liveRework(queue, issue);
+  if (rework === undefined) return;
+  throw new DomainError(`Review não vai para AWAITING com retrabalho já criado (${rework.action} ${rework.id} em ${rework.status}): o veredito vai primeiro ao humano — aprovar um REPROVADO significa que ele concorda com a reprovação, e só então você cria as Issues Implement da correção e fecha esta Review. Abandone a criada cedo com 'issues status --id ${rework.id} --reason errado' e reenvie`);
 }
 
 function readDoc(queue: Queue, issue: Issue, name: string): string | null {

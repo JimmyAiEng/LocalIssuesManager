@@ -53,9 +53,45 @@ Os quatro campos são obrigatórios; `passos` e `arquivos` são arrays com ao me
 }
 ```
 
-## Entrega 3 — uma Issue Implement por fatia
+## Entrega 3 — o Artefato da spec
 
-O gate exige **ao menos uma filha `action=Implement`** antes de fechar.
+```bash
+issues artifact --id <id> --file ./artifact.md
+```
+
+O **nome do arquivo em disco é irrelevante**; use `./artifact.md`. Aqui **não** se passa `--name`: sem ele o comando grava o Artefato da Issue, que é o que se quer nesta entrega.
+É este texto que viaja no prompt das Issues filhas, então ele precisa estar gravado **antes** da decomposição. Máximo 300 palavras.
+
+```markdown
+# Spec congelada
+
+- Decisão de arquitetura: <muda / não muda> — <por quê>
+- Solução: <o desenho em 2 ou 3 linhas>
+
+## Fatias
+
+1. <fatia que virou Issue Implement>
+2. <fatia que virou Issue Implement>
+
+## Riscos
+
+- <risco conhecido, ou "Nenhum">
+```
+
+## Entrega 4 — uma Issue Implement por fatia
+
+O gate exige **ao menos uma filha `action=Implement` viva** (`OPEN` ou `CLAIMED`) na transição para `CLOSED`.
+Filha `CLOSED`, `AWAITING` ou `APPROVED` não satisfaz o gate.
+
+**Quando decompor**: só no passo que **fecha** a Issue.
+
+- Vai encerrar por `AWAITING` (`architecture_changed=true`, `type=Refactor`, HITL, `risk=ALTO`, `complexity=ALTA` ou Projeto `concern=HIGH`)?
+  **Não decomponha agora**: ir para `AWAITING` com filha já criada é recusado.
+  Congele a spec, envie para decisão humana e registre no `handoff.md` que a decomposição ficou pendente.
+  Quando a Issue voltar `APPROVED`, decomponha e **só então** feche.
+  Este é o caso da maioria dos Designs, então trate a decomposição como passo pós-aprovação por padrão.
+- Vai fechar direto por `CLOSED` (`architecture_changed=false`, AFK)? Decomponha antes de fechar, na mesma sessão — o caminho AFK não muda.
+
 Cada filha traz o seu **Small Plan** no campo `plan` (mesmo formato do `plan.json`, obrigatório): ele é persistido como o plano da filha e prevalece no prompt dela.
 
 ```bash
@@ -94,31 +130,6 @@ Fatie em Implements pequenos: cada um deve entregar uma fatia funcional/integrá
 O Design não cria a Issue `Review` do conjunto: ela é criada **pelo próprio sistema**, automaticamente, quando a última Implement irmã fecha por `concluido` — já ligada a este Design (`kind=parent`) e às Implement concluídas.
 Criar uma Review aqui a deixaria aberta antes de existir o que revisar e ainda bloquearia o gatilho, que não dispara com Review irmã fora de `CLOSED`.
 Filha de outra action (`Planning`, `Deploy`) também não sai do Design.
-
-## Entrega 4 — o Artefato da spec
-
-```bash
-issues artifact --id <id> --file ./artifact.md
-```
-
-O **nome do arquivo em disco é irrelevante**; use `./artifact.md`. Aqui **não** se passa `--name`: sem ele o comando grava o Artefato da Issue, que é o que se quer nesta entrega.
-É este texto que viaja no prompt das Issues filhas. Máximo 300 palavras.
-
-```markdown
-# Spec congelada
-
-- Decisão de arquitetura: <muda / não muda> — <por quê>
-- Solução: <o desenho em 2 ou 3 linhas>
-
-## Fatias
-
-1. <fatia que virou Issue Implement>
-2. <fatia que virou Issue Implement>
-
-## Riscos
-
-- <risco conhecido, ou "Nenhum">
-```
 
 ## Só quando `architecture_changed=true`
 
@@ -214,5 +225,11 @@ issues status --id <id> --agent <ia> --status AWAITING --comment "<evidência>"
 Sem ele o `status` falha com `Envio para AWAITING exige o handoff`.
 O `--name handoff.md` **não** é opcional: sem `--name`, o comando grava o Artefato da spec (Entrega 4), não o handoff — são arquivos distintos, e gravar um não satisfaz o outro.
 No handoff (≤300 palavras) escreva o que a sessão pós-aprovação precisa: o que ficou congelado, o que ficou pendente e o próximo passo. Detalhes na seção "Handoff" da camada 0.
-**Gate**: sem a decisão de arquitetura, sem plano válido e sem ao menos uma filha Implement, o comando sai com exit 1 e JSON `{"errors":[…]}` no stderr; a Issue permanece no status atual.
+Como a decomposição é passo pós-`APPROVED`, cite no handoff as fatias que virarão Issues Implement — é o próximo passo concreto de quem retomar.
+
+**Gate**, por saída — o comando sai com exit 1 e JSON `{"errors":[…]}` no stderr, e a Issue permanece no status atual:
+
+- **`AWAITING`** cobra a decisão de arquitetura, o plano válido e o pacote de design quando `architecture_changed=true`.
+  E recusa a Issue se ela já tiver qualquer filha: a decomposição vem depois da aprovação humana.
+- **`CLOSED`** cobra o mesmo conteúdo **mais** ao menos uma filha Implement viva (`OPEN` ou `CLAIMED`).
 Concluída a Issue, **encerre a sessão**: não busque outra Issue.

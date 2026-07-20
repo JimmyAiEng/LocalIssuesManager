@@ -86,11 +86,12 @@ test("gate: Issue Design não conclui sem plano válido, mesmo com doc+diagrama"
   );
 });
 
-test("gate: Issue Design conclui com doc+diagrama+plano e filha Implement", async () => {
+// A filha Implement é gate do CLOSED (ver workflows.test.ts); o AWAITING cobra doc+diagrama+plano
+// e recusa Issue já decomposta — a decomposição vem depois da aprovação humana.
+test("gate: Issue Design vai a AWAITING com doc+diagrama+plano, sem filha Implement", async () => {
   const dir = root();
   const issueId = await fullDesign(dir);
   setPlan({ issueId, file: planFile(dir) }, dir);
-  seedImplementChild(dir, issueId);
   seedHandoff(dir, issueId);
   const issue = await statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir);
   assert.equal(issue.status, "AWAITING");

@@ -7,7 +7,9 @@ import { UmlArtifact } from "../../../domain/artifacts/uml_artifact.js";
 import { DomainError, NotFoundError } from "../../../domain/domain_error.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import type { Queue } from "../../../domain/queue_repository.js";
+import { isLive } from "../../../domain/value_objects.js";
 import { checkSyntax } from "../uml-validation/plantuml_check.js";
+import type { CompletionStatus } from "./index.js";
 
 export type DesignPackage = {
   issueId: string;
@@ -18,12 +20,13 @@ export type DesignPackage = {
 };
 
 // Gate de conclusão de uma Issue Design: relê o pacote (re-checa a sintaxe de cada .puml) e o
-// plano; a trava de aceite humano com mudança de arquitetura fica no dispatcher de conclusão.
-export async function validateDesign(queue: Queue, issue: Issue): Promise<void> {
+// plano nas duas saídas — o humano precisa deles para julgar; a trava de aceite humano com mudança
+// de arquitetura fica no dispatcher. A decomposição em Implement só é cobrada no CLOSED.
+export async function validateDesign(queue: Queue, issue: Issue, status: CompletionStatus): Promise<void> {
   const { validation } = await designPackage(queue, issue);
   if (validation.errors.length > 0) throw new DesignGateError(validation.errors);
   requireValidPlan(queue, issue.project, issue.id); // plano é obrigatório nos dois caminhos
-  requireImplementChild(queue, issue); // trava de decomposição: o fan-out N→N×M exige ao menos uma filha Implement
+  if (status === "CLOSED") requireImplementChild(queue, issue); // fan-out N→N×M: ao menos uma filha Implement viva
 }
 
 // Pacote de design da Issue: o design.md, os diagramas por kind e o veredito do gate
@@ -55,11 +58,13 @@ export function requireValidPlan(queue: Queue, project: string, issueId: string)
 }
 
 // Trava de decomposição: uma Issue Design só fecha depois de gerar as Issues Implement (uma por
-// Small Plan). Sem nenhuma filha action=Implement, o fan-out para na Design — não fecha.
+// Small Plan) e com ao menos uma delas viva — filha já CLOSED (ou parada em AWAITING/APPROVED)
+// não continua o fan-out, então o Design fechar em cima dela pararia a sequência.
 function requireImplementChild(queue: Queue, issue: Issue): void {
   const hasImplement = issue.relates.filter((relation) => relation.kind === "child")
-    .some((relation) => queue.load(relation.id)?.action === "Implement");
-  if (!hasImplement) throw new DomainError(`Issue Design não fecha sem decompor em Implement: crie ao menos uma filha com 'issues decompose --id ${issue.id} --into <arquivo.json>' (uma por Small Plan)`);
+    .map((relation) => queue.load(relation.id))
+    .some((child) => child?.action === "Implement" && isLive(child.status));
+  if (!hasImplement) throw new DomainError(`Issue Design não fecha sem decompor em Implement viva (OPEN ou CLAIMED): crie ao menos uma filha com 'issues decompose --id ${issue.id} --into <arquivo.json>' (uma por Small Plan)`);
 }
 
 // Valida um .puml entregue: sintaxe (fail-fast) e compatibilidade kind↔diagramType.

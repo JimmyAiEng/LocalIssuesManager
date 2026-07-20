@@ -39,6 +39,9 @@ const planningClaimed = (dir: string): string => {
 // Handoff obrigatório ao enviar para AWAITING não-abandono.
 const seedHandoff = (dir: string, id: string): void =>
   new Queue(dir).artifacts.writeText("app", { issueId: id, type: "document", name: "handoff.md" }, "# handoff");
+// A partição em filhas Design é gate do CLOSED (AFK): é a saída onde a sequência viva é cobrada.
+const closeConcluido = (dir: string, issueId: string) =>
+  statusIssue({ id: issueId, agent: "pi", status: "CLOSED", comment: "fim", closed_reason: "concluido" }, dir);
 // Uma filha Design por Feature: o casamento é pelo nome da Feature contido no título da filha.
 // Um grupo de Features por filha Design: o título é livre, quem casa é o campo `features`.
 const decomposeInto = (dir: string, issueId: string, groups: string[][]): void => {
@@ -75,15 +78,16 @@ test("RequirementArtifact limita os Requirements a 5 Features", () => {
     file: file(dir, jsonl(...Array.from({ length: 6 }, (_, i) => named(`F${i}`)))) }, dir), /limite 5/);
 });
 
+// Requisitos são cobrados nas duas saídas (o humano precisa deles para julgar); a partição em
+// filhas Design é cobrada só no CLOSED — no AWAITING a Issue nem pode ter filhas.
 test("gate Planning exige RequirementArtifact e as filhas Design cobrindo as Features", async () => {
   const dir = root();
   const issueId = planningClaimed(dir);
   await assert.rejects(statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir), /sem requisitos/);
   setRequirements({ issueId, file: file(dir, VALID) }, dir);
   decomposeInto(dir, issueId, [["Login"]]);
-  seedHandoff(dir, issueId);
-  const issue = await statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir);
-  assert.equal(issue.status, "AWAITING");
+  const issue = await closeConcluido(dir, issueId);
+  assert.equal(issue.status, "CLOSED");
 });
 
 test("gate Planning fecha com agrupamento N:1 (uma filha Design cobrindo três Features)", async () => {
@@ -91,9 +95,25 @@ test("gate Planning fecha com agrupamento N:1 (uma filha Design cobrindo três F
   const issueId = planningClaimed(dir);
   setRequirements({ issueId, file: file(dir, THREE) }, dir);
   decomposeInto(dir, issueId, [["Login", "Logout", "Cadastro"]]);
+  const issue = await closeConcluido(dir, issueId);
+  assert.equal(issue.status, "CLOSED");
+});
+
+// A entrega sem filha nenhuma vai para AWAITING (é a ordem nova); a filha só nasce depois.
+test("gate Planning manda para AWAITING sem filha e recusa AWAITING com filha", async () => {
+  const dir = root();
+  const issueId = planningClaimed(dir);
+  setRequirements({ issueId, file: file(dir, VALID) }, dir);
   seedHandoff(dir, issueId);
   const issue = await statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir);
   assert.equal(issue.status, "AWAITING");
+
+  const outro = planningClaimed(dir);
+  setRequirements({ issueId: outro, file: file(dir, VALID) }, dir);
+  decomposeInto(dir, outro, [["Login"]]);
+  seedHandoff(dir, outro);
+  await assert.rejects(statusIssue({ id: outro, agent: "pi", status: "AWAITING", comment: "fim" }, dir),
+    /não vai para AWAITING com filha.*decomposição vem DEPOIS da aprovação/s);
 });
 
 test("gate Planning aponta a primeira Feature ainda não coberta por filha Design", async () => {
@@ -101,7 +121,7 @@ test("gate Planning aponta a primeira Feature ainda não coberta por filha Desig
   const issueId = planningClaimed(dir);
   setRequirements({ issueId, file: file(dir, THREE) }, dir);
   decomposeInto(dir, issueId, [["Login", "Logout"]]);
-  await assert.rejects(statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir), /não fecha sem decompor a Feature "Cadastro"/);
+  await assert.rejects(closeConcluido(dir, issueId), /não fecha sem decompor a Feature "Cadastro"/);
 });
 
 // Sobreposição só nasce por escrita direta do artefato (o decompose barra antes); o gate é a
@@ -114,7 +134,7 @@ test("gate Planning barra Feature coberta por duas filhas Design, nomeando-as", 
   const intrusa = createIssue({ ...body, action: "Design", title: "Design duplicado" }, dir);
   relateIssues({ id: issueId, relates: [intrusa.id], kind: "child" }, dir);
   new Queue(dir).writeRequirements("app", intrusa.id, VALID);
-  await assert.rejects(statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir),
+  await assert.rejects(closeConcluido(dir, issueId),
     (e: unknown) => e instanceof DomainError && /coberta por mais de uma filha Design/.test(e.message) && e.message.includes("Design duplicado"));
 });
 
@@ -125,5 +145,5 @@ test("gate Planning ignora filha Design sem Requirements e manda decompor", asyn
   setRequirements({ issueId, file: file(dir, VALID) }, dir);
   const avulsa = createIssue({ ...body, action: "Design", title: "Design Login" }, dir);
   relateIssues({ id: issueId, relates: [avulsa.id], kind: "child" }, dir);
-  await assert.rejects(statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "fim" }, dir), /issues decompose/);
+  await assert.rejects(closeConcluido(dir, issueId), /issues decompose/);
 });

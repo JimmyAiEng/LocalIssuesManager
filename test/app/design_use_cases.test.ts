@@ -182,12 +182,12 @@ test("getDesignPackage é somente leitura, funciona com Issue CLOSED e re-checa 
   const dir = root();
   const issueId = designIssue(dir);
   await completeChangedDesign(dir, issueId);
-  seedImplementChild(dir, issueId);
   nextIssue({ agent: "pi", id: issueId }, dir);
   seedHandoff(dir, issueId);
   await statusIssue({ id: issueId, agent: "pi", status: "AWAITING", comment: "spec congelada" }, dir);
   decideIssue({ id: issueId, human: true, status: "APPROVED", comment: "aceito" }, dir); // aprova → APPROVED
   nextIssue({ agent: "pi", id: issueId }, dir); // reivindica a aprovada
+  seedImplementChild(dir, issueId); // decompõe só depois da aprovação; o CLOSED cobra a filha viva
   await statusIssue({ id: issueId, agent: "pi", status: "CLOSED", comment: "fechado", closed_reason: "concluido" }, dir); // fecha pós-APPROVED
   assert.equal((await getDesignPackage({ issueId }, dir)).validation.ready, true);
 
@@ -229,9 +229,10 @@ test("gate: com mudança e 4 níveis válidos cai em AWAITING e nunca fecha AFK"
   const dir = root();
   const issueId = designIssue(dir);
   await completeChangedDesign(dir, issueId);
-  seedImplementChild(dir, issueId);
   nextIssue({ agent: "pi", id: issueId }, dir);
-  await assert.rejects( // com mudança de arquitetura, CLOSED por agente é bloqueado (aceite é humano)
+  // A trava do aceite humano vem antes do gate de entrega: uma Issue que nunca fecha por agente
+  // ouve isso primeiro, em vez de ser mandada decompor — decompor barraria o AWAITING seguinte.
+  await assert.rejects(
     statusIssue({ id: issueId, agent: "pi", status: "CLOSED", comment: "fim", closed_reason: "concluido" }, dir),
     /não fecha por agente/);
   seedHandoff(dir, issueId);

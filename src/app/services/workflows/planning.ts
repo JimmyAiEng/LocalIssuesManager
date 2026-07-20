@@ -2,13 +2,15 @@ import { RequirementArtifact, type RequirementSet } from "../../../domain/artifa
 import { DomainError, NotFoundError } from "../../../domain/domain_error.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import type { Queue } from "../../../domain/queue_repository.js";
-import type { ActionType } from "../../../domain/value_objects.js";
+import { type ActionType, isLive } from "../../../domain/value_objects.js";
+import type { CompletionStatus } from "./index.js";
 
-// Gate de conclusão de uma Issue Planning: requisitos válidos persistidos e as filhas Design
-// particionando as Features — toda Feature coberta por exatamente uma filha.
-export function validatePlanning(queue: Queue, issue: Issue): void {
+// Gate de conclusão de uma Issue Planning: requisitos válidos persistidos nas duas saídas; a
+// partição em filhas Design só no CLOSED — ela é a sequência que o Planning abre, e a sequência
+// nasce depois da aprovação humana (no AWAITING a Issue nem pode ter filhas).
+export function validatePlanning(queue: Queue, issue: Issue, status: CompletionStatus): void {
   const requirements = requireValidRequirements(queue, issue.project, issue.id);
-  requireFeaturePartition(queue, issue, requirements);
+  if (status === "CLOSED") requireFeaturePartition(queue, issue, requirements);
 }
 
 export function requireValidRequirements(queue: Queue, project: string,
@@ -40,7 +42,16 @@ function requireFeaturePartition(queue: Queue, issue: Issue,
     if (owners.length > 1) {
       throw new DomainError(`Feature "${feature}" coberta por mais de uma filha Design (${owners.map((child) => `${child.title} (${child.id})`).join(", ")}): cada Feature pertence a exatamente um grupo`);
     }
+    requireLiveOwner(feature, owners[0]!);
   }
+}
+
+// A filha que cobre a Feature tem que estar viva: uma filha Design já CLOSED (ou parada em
+// AWAITING/APPROVED) não continua o fan-out, e fechar o Planning apoiado nela deixaria a Feature
+// sem ninguém trabalhando nela.
+function requireLiveOwner(feature: string, owner: Issue): void {
+  if (isLive(owner.status)) return;
+  throw new DomainError(`Feature "${feature}" está com a filha Design ${owner.id} em ${owner.status}: o Planning só fecha com a filha viva (OPEN ou CLAIMED) — crie a filha Design que segue a Feature com 'issues decompose' ou reabra a existente`);
 }
 
 // Features cobertas por filha Design → o RequirementArtifact da própria filha, gravado pelo

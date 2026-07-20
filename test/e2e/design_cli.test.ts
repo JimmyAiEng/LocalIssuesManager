@@ -126,9 +126,7 @@ test("e2e: gate bloqueia a conclusão da Issue Design sem pacote (JSON errors, e
   run(["design", "changed", "--issue", issueId, "--value", "false"], vars); // atalho ao plano, sem diagramas
   run(["plan", "set", "--id", issueId, "--file", fixture("plan.json", PLAN)], vars);
   assert.deepEqual(json(["get", "PLAN", "--id", issueId], vars), JSON.parse(PLAN));
-  const into = fixture("decomp.json", JSON.stringify({ children: [
-    { title: "Implementar fatia", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) }] }));
-  run(["decompose", "--id", issueId, "--into", into, "--agent", "pi"], vars); // trava: filha Implement
+  // Sem decompor: a filha Implement é cobrada só no CLOSED, e o AWAITING recusa Issue com filha.
   run(["artifact", "--id", issueId, "--name", "handoff.md", "--file", fixture("handoff.md", "# handoff")], vars);
   const issue = json(["status", "--id", issueId, "--agent", "pi",
     "--status", "AWAITING", "--comment", "fim"], vars);

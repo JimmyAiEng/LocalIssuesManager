@@ -13,12 +13,13 @@ const CONTRACTS: Record<ActionType, string> = {
    issues requirements set --id {{id}} --file req.jsonl
    Cada linha de req.jsonl é uma Feature completa. O sistema escreve os prefixos ("Como <como>", "Eu quero poder <quero>", "Para que eu possa <para>"), então grave só a forma neutra: "como" = papel com artigo, "quero" e "para" = verbo no infinitivo. Não conjugue, não repita o prefixo.
    {"feature": "Login", "como": "um usuário", "quero": "entrar", "para": "acessar o painel", "scenarios": [{"nome": "ok", "steps": ["Given a tela de login", "When envio credenciais válidas", "Then vejo o painel"]}]}
-2. Decomposição — uma filha Design por grupo de Features; toda Feature em exatamente uma filha:
+2. Artefato do alinhamento — markdown livre, máx. 300 palavras:
+   issues artifact --id {{id}} --file artifact.md
+3. Decomposição — uma filha Design por grupo de Features; toda Feature em exatamente uma filha:
    issues decompose --id {{id}} --into decompose.json --agent {{agent}}
    Conteúdo exato de decompose.json ("features" repete os valores exatos do campo "feature" de cada linha do req.jsonl):
    {"children": [{"title": "Design: <conceito>", "type": "Feat", "action": "Design", "problem": "<o que desenhar>", "features": ["Login"]}]}
-3. Artefato do alinhamento — markdown livre, máx. 300 palavras:
-   issues artifact --id {{id}} --file artifact.md
+   QUANDO decompor: só no passo que FECHA a Issue. Se o encerramento abaixo for --status AWAITING, NÃO decomponha agora — ir para AWAITING com filha já criada é recusado, porque a decomposição vem DEPOIS da aprovação humana. Envie para AWAITING sem filhas, registre no handoff.md que a decomposição ficou pendente e decomponha quando a Issue voltar APROVADA; só então feche. Se o encerramento for --status CLOSED, decomponha antes de fechar: o CLOSED exige toda Feature coberta por uma filha Design VIVA (OPEN ou CLAIMED).
 4. Encerramento com evidência:
 {{close}}`,
 
@@ -33,12 +34,13 @@ Grave as entregas nesta ordem (comandos prontos para esta Issue):
    issues plan set --id {{id}} --file plan.json
    Conteúdo exato de plan.json:
    {"objetivo": "<resultado>", "passos": ["<passo 1>", "<passo 2>"], "arquivos": ["<src/arquivo.ts>"], "criterio_pronto": "<verificação objetiva>"}
-3. Decomposição — ao menos uma filha Implement, cada uma com o seu Small Plan:
+3. Artefato da spec — markdown, máx. 300 palavras; é ele que viaja no prompt das filhas, então grave-o antes de decompor:
+   issues artifact --id {{id}} --file artifact.md
+4. Decomposição — ao menos uma filha Implement, cada uma com o seu Small Plan:
    issues decompose --id {{id}} --into decompose.json --agent {{agent}}
    Conteúdo exato de decompose.json:
    {"children": [{"title": "Implement: <fatia>", "type": "Feat", "action": "Implement", "problem": "<o que implementar>", "plan": {"objetivo": "<resultado>", "passos": ["<passo>"], "arquivos": ["<arquivo>"], "criterio_pronto": "<verificação>"}}]}
-4. Artefato da spec — markdown, máx. 300 palavras; é ele que viaja no prompt das filhas:
-   issues artifact --id {{id}} --file artifact.md
+   QUANDO decompor: só no passo que FECHA a Issue. Se o encerramento abaixo for --status AWAITING, NÃO decomponha agora — ir para AWAITING com filha já criada é recusado, porque a decomposição vem DEPOIS da aprovação humana. Envie para AWAITING sem filhas, registre no handoff.md as fatias que virarão Issues Implement e decomponha quando a Issue voltar APROVADA; só então feche. Se o encerramento for --status CLOSED, decomponha antes de fechar: o CLOSED exige ao menos uma filha Implement VIVA (OPEN ou CLAIMED).
 5. Encerramento com evidência:
 {{close}}`,
 
@@ -69,8 +71,10 @@ Fluxo desta Issue (comandos prontos):
 4. Só se o Adversarial Check não achou problema: rode o CI Pipeline (o check do projeto) sobre o conjunto integrado.
 5. Veredito — obrigatório, markdown, máx. 300 palavras, começando com APROVADO | APROVADO com ressalva | REPROVADO:
    issues artifact --id {{id}} --file artifact.md
-   REPROVADO só conclui com retrabalho VIVO: crie e vincule a esta Review ao menos uma Issue Implement ou Design fora de CLOSED:
+   No REPROVADO, NÃO crie o retrabalho junto com o veredito. Quem julga se a reprovação procede é o humano: vá para AWAITING só com o veredito e as evidências. A trava é mecânica e não olha o kind da relação — ir a AWAITING é recusado se existir qualquer Issue relacionada a esta Review com action Implement ou Design em OPEN ou CLAIMED. Aprovar um veredito REPROVADO significa que o humano CONCORDA com a reprovação; quando a Issue voltar APROVADA, aí sim abra SÓ as Issues Implement do conserto, vincule-as a esta Review e feche. Se o humano discordar, ele reabre esta Review com --status OPEN apontando os erros da sua análise.
    issues create --title "<t>" --project {{project}} --type Fix --action Implement --problem "<o quê>" --relates {{id}} --agent {{agent}}
+   NUNCA crie a Review do próximo ciclo: o sistema a cria sozinho quando a última Implement irmã fecha por concluido, e o gatilho não dispara enquanto existir Review irmã fora de CLOSED — criar a Review na mão TRAVA o ciclo seguinte em vez de adiantá-lo.
+   O CLOSED com veredito REPROVADO exige retrabalho VIVO: ao menos uma Issue Implement ou Design relacionada a esta Review em OPEN ou CLAIMED (CLOSED, AWAITING ou APPROVED não contam).
 6. Encerramento com evidência:
    issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<veredito + achados>" --reason concluido
    (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING, sem --reason.)`,
@@ -117,7 +121,8 @@ const EXECUTION = `Esta Issue já foi APROVADA pelo humano e reentrou na fila pa
 
 1. Busque o handoff (resumo + próximos passos gravados na aprovação):
    issues handoff --id {{id}}
-2. Execute os próximos passos descritos no handoff.
+2. Execute os próximos passos descritos no handoff. Numa Issue Planning ou Design, isso inclui a decomposição, que ficou pendente de propósito: as filhas só se criam agora, depois da aprovação. Numa Review com veredito REPROVADO, inclui abrir SÓ as Issues Implement do conserto — o APPROVED quer dizer que o humano concordou com a reprovação, e a Review do próximo ciclo nasce sozinha (não a crie).
+   issues decompose --id {{id}} --into decompose.json --agent {{agent}}
 3. Encerramento com evidência — feche direto (a trava humana já foi dispensada por já ter sido aprovada; não envie para AWAITING):
    issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<o que executou e como validou>" --reason concluido`;
 

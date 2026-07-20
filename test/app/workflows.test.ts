@@ -29,22 +29,47 @@ const FEATURE = JSON.stringify({ feature: "Login", como: "u", quero: "entrar", p
   scenarios: [{ nome: "ok", steps: ["Given a", "When b", "Then c"] }] });
 const PLAN = JSON.stringify({ objetivo: "o", passos: ["p"], arquivos: ["a"], criterio_pronto: "c" });
 
-// Entrega de Planning válida: requisitos + uma filha Design que particiona a Feature.
-function seedPlanning(queue: Queue, issue: Issue): void {
+// Artefatos de uma Planning: os requisitos que o humano lê para julgar (cobrados nas duas saídas).
+function seedPlanningArtifacts(queue: Queue, issue: Issue): void {
   queue.artifacts.writeText("p", { issueId: issue.id, type: "requirement" }, FEATURE);
-  const child = Issue.create({ title: "d", project: "p", type: "Feat", action: "Design", problem: "p" }, "pi");
-  queue.artifacts.writeText("p", { issueId: child.id, type: "requirement" }, FEATURE);
-  queue.save(child);
-  issue.relate([{ id: child.id, kind: "child" }]);
 }
 
-// Entrega de Design válida sem mudança de arquitetura: plano + filha Implement (atalho ao plano).
-function seedDesign(queue: Queue, issue: Issue): void {
-  issue.setArchitectureChanged(false);
-  queue.artifacts.writeText("p", { issueId: issue.id, type: "implementation-plan" }, PLAN);
-  const child = Issue.create({ title: "impl", project: "p", type: "Feat", action: "Implement", problem: "p" }, "pi");
+// A filha Design que particiona a Feature, no status pedido. Só o CLOSED a exige, e viva.
+function addDesignChild(queue: Queue, issue: Issue, status: "OPEN" | "CLAIMED" | "CLOSED" = "OPEN"): Issue {
+  const child = Issue.create({ title: "d", project: "p", type: "Feat", action: "Design", problem: "p" }, "pi");
+  queue.artifacts.writeText("p", { issueId: child.id, type: "requirement" }, FEATURE);
+  if (status !== "OPEN") child.claim("pi");
+  if (status === "CLOSED") child.closeByAgent("pi", "feito", "concluido");
   queue.save(child);
   issue.relate([{ id: child.id, kind: "child" }]);
+  return child;
+}
+
+// Entrega de Planning completa para o CLOSED AFK: requisitos + filha Design viva.
+function seedPlanning(queue: Queue, issue: Issue): void {
+  seedPlanningArtifacts(queue, issue);
+  addDesignChild(queue, issue);
+}
+
+// Artefatos de um Design sem mudança de arquitetura: decisão + plano (atalho, sem diagramas).
+function seedDesignArtifacts(queue: Queue, issue: Issue): void {
+  issue.setArchitectureChanged(false);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "implementation-plan" }, PLAN);
+}
+
+function addImplementChild(queue: Queue, issue: Issue, status: "OPEN" | "CLAIMED" | "CLOSED" = "OPEN"): Issue {
+  const child = Issue.create({ title: "impl", project: "p", type: "Feat", action: "Implement", problem: "p" }, "pi");
+  if (status !== "OPEN") child.claim("pi");
+  if (status === "CLOSED") child.closeByAgent("pi", "feito", "concluido");
+  queue.save(child);
+  issue.relate([{ id: child.id, kind: "child" }]);
+  return child;
+}
+
+// Entrega de Design completa para o CLOSED AFK: plano + filha Implement viva.
+function seedDesign(queue: Queue, issue: Issue): void {
+  seedDesignArtifacts(queue, issue);
+  addImplementChild(queue, issue);
 }
 
 // Conjunto de documentos de uma Review válida: intent + 2 evidence + veredito no artefato legado.
@@ -234,6 +259,168 @@ test("Review REPROVADO exige Issue Implement/Design vinculada e não-CLOSED", as
   await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
 });
 
+// === Inversão do fan-out: filha só existe depois que o humano interveio ========================
+
+// Regra 1: qualquer relação kind="child" barra a ida para AWAITING, em toda action. see-also e
+// parent são ignorados (só a linhagem descendente é decomposição).
+test("AWAITING recusa Issue com filha e aceita sem filha; see-also/parent não contam", async () => {
+  const { queue, issue } = context("Implement");
+  seedHandoff(queue, issue);
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "ev"));
+
+  const vizinha = Issue.create({ title: "v", project: "p", type: "Feat", action: "Implement", problem: "p" }, "pi");
+  queue.save(vizinha);
+  issue.relate([{ id: vizinha.id, kind: "see-also" }]);
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "ev"));
+
+  addImplementChild(queue, issue);
+  await assert.rejects(completeIssue(queue, issue, "AWAITING", "ev"),
+    /não vai para AWAITING com filha.*decomposição vem DEPOIS da aprovação/s);
+});
+
+// Exceção da Regra 1: quem já passou por APPROVED volta a AWAITING mesmo decomposta — senão a
+// Issue aprovada que já criou as filhas e precisa de uma segunda decisão fica presa para sempre.
+test("AWAITING aceita Issue com filha quando ela já passou por APPROVED", async () => {
+  const { queue, issue } = context("Implement");
+  seedHandoff(queue, issue);
+  addImplementChild(queue, issue);
+  await assert.rejects(completeIssue(queue, issue, "AWAITING", "ev"), /não vai para AWAITING com filha/);
+
+  issue.submit("pi", "ev"); issue.decide("APPROVED", "ok"); issue.claim("pi"); // phases passam por APPROVED
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "ev"));
+});
+
+// Regra 3 no Planning: a filha Design que cobre a Feature tem que estar viva no CLOSED.
+test("Planning só fecha com a filha Design viva (OPEN ou CLAIMED)", async () => {
+  const semFilha = context("Planning");
+  seedPlanningArtifacts(semFilha.queue, semFilha.issue);
+  await assert.rejects(completeIssue(semFilha.queue, semFilha.issue, "CLOSED", "fim"),
+    /não fecha sem decompor a Feature "Login"/);
+
+  const morta = context("Planning");
+  seedPlanningArtifacts(morta.queue, morta.issue);
+  addDesignChild(morta.queue, morta.issue, "CLOSED");
+  await assert.rejects(completeIssue(morta.queue, morta.issue, "CLOSED", "fim"),
+    /filha Design .* em CLOSED.*OPEN ou CLAIMED/s);
+
+  for (const status of ["OPEN", "CLAIMED"] as const) {
+    const viva = context("Planning");
+    seedPlanningArtifacts(viva.queue, viva.issue);
+    addDesignChild(viva.queue, viva.issue, status);
+    await assert.doesNotReject(completeIssue(viva.queue, viva.issue, "CLOSED", "fim"));
+  }
+});
+
+// Regra 3 no Design: a filha Implement também precisa estar viva para o CLOSED.
+test("Design só fecha com a filha Implement viva (OPEN ou CLAIMED)", async () => {
+  const morta = context("Design");
+  seedDesignArtifacts(morta.queue, morta.issue);
+  addImplementChild(morta.queue, morta.issue, "CLOSED");
+  await assert.rejects(completeIssue(morta.queue, morta.issue, "CLOSED", "fim"),
+    /não fecha sem decompor em Implement viva/);
+
+  for (const status of ["OPEN", "CLAIMED"] as const) {
+    const viva = context("Design");
+    seedDesignArtifacts(viva.queue, viva.issue);
+    addImplementChild(viva.queue, viva.issue, status);
+    await assert.doesNotReject(completeIssue(viva.queue, viva.issue, "CLOSED", "fim"));
+  }
+});
+
+// Regra 3 na Review: o veredito REPROVADO vai para o humano SEM retrabalho criado — aprovar o
+// REPROVADO é o humano concordando com a reprovação; só então o agente abre a correção e fecha.
+test("Review REPROVADO vai a AWAITING sem retrabalho e só fecha com retrabalho vivo", async () => {
+  const { queue, issue } = context("Review");
+  seedReview(queue, issue, "REPROVADO: precisa refazer o gate");
+  seedHandoff(queue, issue);
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /retrabalho vivo/);
+
+  // Retrabalho parado em AWAITING não corrige nada: só OPEN/CLAIMED satisfazem.
+  const parado = Issue.create({ title: "r", project: "p", type: "Fix", action: "Implement", problem: "p" }, "pi");
+  parado.claim("pi");
+  parado.submit("pi", "entrego para decisão");
+  queue.save(parado);
+  issue.relate([{ id: parado.id, kind: "see-also" }]);
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /retrabalho vivo.*OPEN ou CLAIMED/s);
+
+  const vivo = Issue.create({ title: "r2", project: "p", type: "Fix", action: "Implement", problem: "p" }, "pi");
+  vivo.claim("pi");
+  queue.save(vivo);
+  issue.relate([{ id: vivo.id, kind: "see-also" }]);
+  await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
+});
+
+// Buraco que kind="child" não fecha: o retrabalho nasce de '--relates', cujo default é see-also.
+// Na Review a trava do AWAITING é o inverso exato de requireLiveRework — qualquer kind conta.
+test("Review não vai a AWAITING com retrabalho see-also vivo criado cedo", async () => {
+  const { queue, issue } = context("Review");
+  seedReview(queue, issue, "REPROVADO: precisa refazer o gate");
+  seedHandoff(queue, issue);
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
+
+  // Issue revisada (CLOSED) não é retrabalho: revisa-se trabalho terminado.
+  const revisada = Issue.create({ title: "revisada", project: "p", type: "Feat", action: "Implement", problem: "p" }, "pi");
+  revisada.closeByHuman("revisada e fechada", "concluido");
+  queue.save(revisada);
+  issue.relate([{ id: revisada.id, kind: "see-also" }]);
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
+
+  const cedo = Issue.create({ title: "correção", project: "p", type: "Fix", action: "Implement", problem: "p" }, "pi");
+  queue.save(cedo); // OPEN, ligada por see-also: escaparia de uma trava só de kind="child"
+  issue.relate([{ id: cedo.id, kind: "see-also" }]);
+  await assert.rejects(completeIssue(queue, issue, "AWAITING", "fim"),
+    /não vai para AWAITING com retrabalho já criado.*aprovar um REPROVADO/s);
+
+  // Exceção da Regra 1: já tendo passado por APPROVED, ela volta a AWAITING mesmo com o retrabalho.
+  issue.submit("pi", "ev"); issue.decide("APPROVED", "ok"); issue.claim("pi");
+  await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
+});
+
+// A trava de supervisão precede o gate de entrega: quem nunca fecha por agente ouve isso primeiro,
+// em vez de ser mandado decompor — decompor barraria o AWAITING que é o único caminho restante.
+test("CLOSED impossível avisa da decisão humana antes de cobrar a decomposição", async () => {
+  const { queue, issue } = context("Planning");
+  highConcern(queue);
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /concern HIGH.*--status AWAITING/s);
+  // Já aprovada, a trava sai da frente e o gate de entrega volta a falar.
+  const aprovada = context("Planning");
+  highConcern(aprovada.queue);
+  aprovada.issue.submit("pi", "ev"); aprovada.issue.decide("APPROVED", "ok"); aprovada.issue.claim("pi");
+  await assert.rejects(completeIssue(aprovada.queue, aprovada.issue, "CLOSED", "fim"), /sem requisitos/);
+});
+
+// AFK segue igual: CLAIMED → CLOSED decompondo na mesma sessão, sem passar pelo humano.
+test("caminho AFK CLAIMED→CLOSED segue decompondo como antes", async () => {
+  const planning = context("Planning");
+  seedPlanning(planning.queue, planning.issue);
+  planning.queue.save(planning.issue); // statusIssue relê do disco: a linhagem precisa estar gravada
+  const closed = await statusIssue({ id: planning.issue.id, agent: "pi", status: "CLOSED",
+    comment: "planning fechado com as filhas", closed_reason: "concluido" }, planning.root);
+  assert.equal(closed.status, "CLOSED");
+
+  const design = context("Design");
+  seedDesign(design.queue, design.issue);
+  design.queue.save(design.issue);
+  const designClosed = await statusIssue({ id: design.issue.id, agent: "pi", status: "CLOSED",
+    comment: "design fechado com as filhas", closed_reason: "concluido" }, design.root);
+  assert.equal(designClosed.status, "CLOSED");
+});
+
+// closeByHuman também passa pelo gate de entrega, e é caminho CLOSED: cobra a sequência viva.
+test("fechamento humano concluido cobra a sequência viva do CLOSED", async () => {
+  const { root, queue, issue } = context("Design");
+  seedDesignArtifacts(queue, issue);
+  queue.save(issue);
+  await assert.rejects(statusIssue({ id: issue.id, human: true, status: "CLOSED",
+    comment: "fecho eu", closed_reason: "concluido" }, root), /não fecha sem decompor em Implement viva/);
+  addImplementChild(queue, issue);
+  queue.save(issue);
+  const closed = await statusIssue({ id: issue.id, human: true, status: "CLOSED",
+    comment: "fecho eu", closed_reason: "concluido" }, root);
+  assert.equal(closed.status, "CLOSED");
+});
+
 test("Deploy força humano antes de validar evidência", async () => {
   const { queue, issue } = context("Deploy");
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "https://git/pr/1 análise sonar"), /não fecha por agente/);
@@ -300,10 +487,12 @@ test("abandono não afrouxa o gate de entrega nem a decisão humana", async () =
 
 // concern=HIGH é piso de supervisão: Planning e Design AFK (sem tags) nunca fecham por agente —
 // o CLOSED é recusado mandando usar AWAITING, e o AWAITING (decisão humana) segue permitido.
+// A trava de supervisão precede o gate de entrega: a Issue sem filha nenhuma (a ordem nova) já
+// ouve "use AWAITING" no CLOSED, sem ser mandada decompor antes.
 test("HIGH força AWAITING em Planning AFK: CLOSED recusado, AWAITING ok", async () => {
   const { queue, issue } = context("Planning");
   highConcern(queue);
-  seedPlanning(queue, issue);
+  seedPlanningArtifacts(queue, issue);
   seedHandoff(queue, issue);
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /concern HIGH.*--status AWAITING/s);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
@@ -312,7 +501,7 @@ test("HIGH força AWAITING em Planning AFK: CLOSED recusado, AWAITING ok", async
 test("HIGH força AWAITING em Design AFK sem mudança de arquitetura: CLOSED recusado, AWAITING ok", async () => {
   const { queue, issue } = context("Design");
   highConcern(queue);
-  seedDesign(queue, issue);
+  seedDesignArtifacts(queue, issue);
   seedHandoff(queue, issue);
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /concern HIGH.*--status AWAITING/s);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
@@ -326,7 +515,7 @@ test("Refactor Design não fecha por agente mesmo sem mudança de arquitetura", 
   const issue = Issue.create({ title: "d", project: "p", type: "Refactor", action: "Design", problem: "p" }, "pi");
   issue.claim("pi");
   queue.save(issue);
-  seedDesign(queue, issue); // architecture_changed=false + plano + filha Implement
+  seedDesignArtifacts(queue, issue); // architecture_changed=false + plano
   seedHandoff(queue, issue); // AWAITING não-abandono exige handoff.md
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /Refactor.*--status AWAITING/s);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));

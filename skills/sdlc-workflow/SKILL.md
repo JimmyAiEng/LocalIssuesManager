@@ -29,6 +29,27 @@ Uma **Issue** é a unidade de trabalho de uma sessão: pequena, com uma entrega 
 Issues podem se relacionar (`issues relate` ou `--relates` no create).
 Quem reivindica uma Issue recebe no prompt os **artefatos das relacionadas** — é assim que o design congelado chega à sessão de implementação.
 Ao decompor trabalho, crie as novas Issues já relacionadas à origem.
+**Quando** decompor é regra de processo — veja a seção seguinte.
+
+## Ordem do fan-out (as filhas vêm depois do humano)
+
+No caminho **HITL** a decomposição é o **último** passo, e acontece **depois** da aprovação humana:
+
+`CLAIMED` → grave os artefatos, **sem criar filha** → `AWAITING` → o humano decide → `APPROVED` → **agora** crie as filhas → `CLOSED`.
+
+- **Ir para `AWAITING` com filha já criada é recusado**, em qualquer action.
+  Só conta a relação `kind=child` (a que o `issues decompose` grava); `see-also` e `parent` são ignorados.
+- **Na `Review` a trava é outra**, porque o retrabalho é criado com `--relates` (default `see-also`) e escaparia da regra acima.
+  Lá a recusa é o **inverso exato** do retrabalho vivo: ir a `AWAITING` é barrado se existir Issue relacionada — de **qualquer** kind — com action `Implement` ou `Design` em `OPEN`/`CLAIMED`.
+  É seguro porque as Issues revisadas estão sempre `CLOSED`: relacionada viva só pode ser retrabalho criado cedo demais.
+- **Exceção**: uma Issue que já passou por `APPROVED` pode voltar a `AWAITING` mesmo com filhas — o humano já interveio uma vez, e sem isso ela ficaria presa.
+- **Fechar exige a filha viva**: a cobrança de filhas roda na transição para `CLOSED` e só aceita filha em `OPEN` ou `CLAIMED`.
+  Filha `CLOSED`, `AWAITING` ou `APPROVED` não satisfaz o gate.
+- **Abandono** (`--reason obsoleto|duplicado|errado`) pula tudo isso, como pula qualquer outro gate.
+- **AFK não muda**: quem fecha direto (`CLAIMED → CLOSED`) entrega os artefatos **e** as filhas na mesma conclusão.
+
+Quem sai por `AWAITING` registra no `handoff.md` que a decomposição ficou pendente.
+É a sessão pós-`APPROVED` que a executa, e só então fecha a Issue.
 
 ## Workflow por type
 
@@ -68,9 +89,11 @@ Se a Issue for grande demais para uma sessão, crie as Issues menores relacionad
 - **Projeto `concern=HIGH`**: piso de supervisão do Projeto — Planning e Design **não fecham por agente**, só por `--status AWAITING` (a decisão é humana, no web), mesmo em Issue AFK.
 - Como `concern` é piso e não teto, `concern=LOW` (ou Projeto sem o campo) não muda nada: Planning/Design seguem a regra AFK/HITL acima.
 - O gate da action roda nas duas saídas (AWAITING e CLOSED) quando `--reason` é `concluido` ou está ausente; sem a entrega, o comando falha explicando o que falta.
+- O gate se divide: os **artefatos** (requisitos, spec, plano, veredito, evidência de PR) são cobrados nas duas saídas — o humano precisa deles para julgar —, enquanto as **filhas** são cobradas só na saída por `CLOSED` (veja "Ordem do fan-out").
 - **Toda saída por `AWAITING` exige o `handoff.md`** — veja a seção abaixo. Vale para **todas** as actions, inclusive `Implement`, que não tem outro artefato obrigatório.
 - **Abandono**: `--reason obsoleto|duplicado|errado` **pula o gate** da action — a Issue abandonada não tem entrega a cobrar, e também não exige handoff.
 - **Pós-`APPROVED`**: uma vez aprovada pelo humano, a Issue pode ser fechada pelo agente (`--status CLOSED --reason concluido`) mesmo sendo HITL, `risk=ALTO`, `complexity=ALTA` ou `action=Deploy` — o humano já decidiu; as travas de supervisão saem do caminho para não prender o agente num loop `AWAITING → APPROVED → AWAITING`. O gate da entrega da action continua valendo.
+  É nesta sessão pós-`APPROVED` que a decomposição acontece: crie as filhas e só então feche.
 
 ## Handoff (obrigatório em toda saída por `AWAITING`)
 

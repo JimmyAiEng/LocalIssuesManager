@@ -466,6 +466,17 @@ test("UI-08b: estado vazio mostra as colunas sem cards (Nenhuma Issue)", async (
     assert.equal(await page.locator(".card").count(), 0);
     assert.match(await page.locator(".column.status-OPEN").innerText(), /Nenhuma Issue OPEN/);
     assert.equal(await page.locator(".column.status-OPEN h2 small").textContent(), "0");
+    // O estado vazio tem que ler igual à descrição da coluna: mesmo font-size e mesmas margens.
+    // (regressão: o wrapper .cards tirou o <p class="empty"> do alcance de .column > p)
+    const typography = (selector: string) =>
+      page.locator(selector).evaluate((el) => {
+        const s = getComputedStyle(el);
+        return [s.fontSize, s.marginTop, s.marginRight, s.marginBottom, s.marginLeft].join(" ");
+      });
+    for (const status of ["OPEN", "CLAIMED", "AWAITING", "APPROVED", "CLOSED"]) {
+      assert.equal(await typography(`.column.status-${status} .empty`),
+        await typography(`.column.status-${status} > p`), `estado vazio de ${status} destoa da descrição`);
+    }
   }));
 
 test("UI-08c: erro de leitura da API mostra a mensagem de falha e botão de tentar novamente", async () =>

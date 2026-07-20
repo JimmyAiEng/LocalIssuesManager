@@ -114,7 +114,8 @@ a { color: var(--accent); }
   border: 1px solid color-mix(in srgb, var(--col, var(--dim)) 40%, transparent);
   border-radius: var(--pill); padding: .1rem .55rem; min-width: 1.5rem; text-align: center;
 }
-.column > p { margin: 0 0 var(--sp-2); color: var(--dim); font-size: .8rem; }
+/* Descendente, não filho: a descrição é filha direta, mas o estado vazio mora dentro de .cards. */
+.column p { margin: 0 0 var(--sp-2); color: var(--dim); font-size: .8rem; }
 .status-OPEN.column { --col: var(--st-open); } .status-CLAIMED.column { --col: var(--st-claimed); }
 .status-AWAITING.column { --col: var(--st-awaiting); } .status-APPROVED.column { --col: var(--st-approved); }
 .status-CLOSED.column { --col: var(--st-closed); }

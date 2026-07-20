@@ -35,7 +35,7 @@ Ao decompor trabalho, crie as novas Issues já relacionadas à origem.
 O `type` da Issue escolhe a jornada; a `action` é a fase dentro dela.
 
 - **`Feat`** — jornada completa: `Planning → Design → Implement → Review → Deploy`.
-- **`Refactor`** — refatorar sem mudar funcionalidade. **Começa no Design** (não tem Planning — o sistema recusa `Refactor`+`Planning`). O Design **sempre passa pelo engenheiro** (nunca fecha AFK, nem com `architecture_changed=false`). O Review foca em **regressão** (bug/vulnerabilidade introduzido), não em intenção. Ao fim de um `Fix`, a melhoria arquitetural adiada vira uma Issue `Refactor` relacionada.
+- **`Refactor`** — refatorar sem mudar funcionalidade. **Começa no Design** (não tem Planning — o sistema recusa `Refactor`+`Planning`). O Design **sempre passa pelo engenheiro** (nunca fecha AFK, nem com `architecture_changed=false`). O Review foca em **regressão** (bug/vulnerabilidade introduzido), não em intenção: troca o `intent.md` pelo `diff-check.md`, onde você **declara** se a interface pública mudou e se algum teste e2e mudou. O sistema confia na declaração — ele nunca lê o diff —, mas cobra a consequência dela no encerramento com veredito APROVADO: e2e alterado não conclui (o veredito é REPROVADO) e interface alterada só conclui havendo um Design `APPROVED` na cadeia de parents da Review. Ao fim de um `Fix`, a melhoria arquitetural adiada vira uma Issue `Refactor` relacionada.
 - **`Fix`** — mais direto (hot-fix). Guias próprios ainda não separados; siga o guia da action e a ênfase de causa-raiz.
 
 O gate só diverge por type em **dois** pontos, e os guias dessas fases têm a seção correspondente: `phases/design.md` (o Design de Refactor nunca fecha AFK) e `phases/review.md` (Diff Check em vez de Understand Intent).

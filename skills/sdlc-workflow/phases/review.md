@@ -25,11 +25,32 @@ Não avance para a etapa seguinte: o veredito é REPROVADO e o problema vira ret
 
 ## Refactor (Diff Check em vez de Understand Intent)
 
-Numa Issue `type=Refactor` a etapa 1 muda: em vez de *Understand Intent*, faça o **Diff Check** — o Refactor não muda funcionalidade, então o foco é caçar **regressão** (bug/vulnerabilidade introduzido pela mudança), não confirmar intenção. No `intent.md`, registre o diff analisado e o que garante que o comportamento não mudou. Invariantes do Refactor a verificar:
+Numa Issue `type=Refactor` a etapa 1 muda: em vez de *Understand Intent*, faça o **Diff Check** — o Refactor não muda funcionalidade, então o foco é caçar **regressão** (bug/vulnerabilidade introduzido pela mudança), não confirmar intenção.
 
-- **Mudança de interface** (assinatura pública, contrato) exige ter sido **aprovada por humano** — se apareceu sem aceite, é REPROVADO.
-- **Mudança em teste e2e não é permitida** em Refactor: se o comportamento externo não muda, os e2e não deveriam mudar. Teste e2e alterado ⇒ REPROVADO.
+O Diff Check vai num documento próprio, `diff-check.md` (o `intent.md` **não** é cobrado em Refactor).
+Ele começa por duas declarações em linha; o resto é prosa livre — o diff analisado e o que garante que o comportamento não mudou.
 
+```markdown
+interface_publica_alterada: false
+teste_e2e_alterado: false
+```
+
+`issues artifact --id <id> --name diff-check.md --file <f>`
+
+Valor `true|false`, uma declaração por linha, caixa livre, marcação de lista/negrito tolerada.
+Faltando (ou com valor inválido) qualquer uma das duas, o encerramento falha nomeando a invariante.
+
+**O sistema confia na declaração: ele nunca lê o diff.**
+O issue-manager não executa nada no repositório do projeto — quem analisa o diff e classifica o que é "interface pública" (assinatura, contrato exposto a quem consome o código) é você.
+A declaração é auto-reportada; o que o gate cobra é a **consequência** dela.
+
+Invariantes do Refactor e o que o gate faz com cada uma, **só quando o veredito é APROVADO**:
+
+- **Teste e2e alterado** (`teste_e2e_alterado: true`) — se o comportamento externo não muda, os e2e não deveriam mudar. O encerramento é recusado: o veredito é REPROVADO, com retrabalho vivo.
+- **Interface pública alterada** (`interface_publica_alterada: true`) — exige aceite humano. O encerramento só passa se alguma Issue `Design` da **cadeia de parents** desta Review tiver passado por `APPROVED` (a busca sobe os parents, então no 2º ciclo ela atravessa a Review anterior até o Design). Sem esse Design aprovado: relacione-o (`issues relate --id <id> --relates <design> --kind parent`) ou dê veredito REPROVADO.
+- `interface_publica_alterada: false` não consulta a linhagem — interface intacta conclui sem Design aprovado nenhum.
+
+Veredito REPROVADO não cobra nenhuma das duas consequências: o que ele exige é o retrabalho vivo, igual para todo type.
 As etapas 2–5 (Rebase, Conflict, Adversarial, CI) seguem iguais.
 
 ## Documentos e veredito (o gate exige)
@@ -38,6 +59,7 @@ O gate `validateReview` só conclui a Issue com o conjunto persistido; sem ele o
 
 - `intent.md` — a intenção compreendida (≤300 palavras).
   `issues artifact --id <id> --name intent.md --file <f>`
+  Em `type=Refactor`, no lugar dele: `diff-check.md` com as duas declarações (veja a seção Refactor acima).
 - ao menos duas `evidence-*.md` — o que foi verificado, aprovado e reprovado em cada etapa (cada uma ≤300 palavras).
   `issues artifact --id <id> --name evidence-<n>.md --file <f>`
 - o **veredito** no artefato legado (sem `--name`), começando por APROVADO | APROVADO com ressalva | REPROVADO (≤300 palavras).

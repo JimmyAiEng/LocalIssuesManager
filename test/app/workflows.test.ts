@@ -8,12 +8,12 @@ import { completeIssue } from "../../src/app/services/workflows/index.js";
 import { DesignGateError } from "../../src/domain/gates/design_gate.js";
 import { Issue } from "../../src/domain/issue_entity.js";
 import { Queue } from "../../src/domain/queue_repository.js";
-import type { ActionType } from "../../src/domain/value_objects.js";
+import type { ActionType, IssueType } from "../../src/domain/value_objects.js";
 
-function context(action: ActionType): { root: string; queue: Queue; issue: Issue } {
+function context(action: ActionType, type: IssueType = "Feat"): { root: string; queue: Queue; issue: Issue } {
   const root = mkdtempSync(join(tmpdir(), "workflow-service-"));
   const queue = new Queue(root);
-  const issue = Issue.create({ title: action, project: "p", type: "Feat", action, problem: "p" }, "pi");
+  const issue = Issue.create({ title: action, project: "p", type, action, problem: "p" }, "pi");
   issue.claim("pi");
   queue.save(issue);
   return { root, queue, issue };
@@ -85,6 +85,84 @@ test("Review exige intent + ≥2 evidence + veredito válido e depois aprova", a
   queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "Talvez sim");
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /deve começar por APROVADO/);
   queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "APROVADO com ressalva: ok");
+  await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
+});
+
+// Review de Refactor troca o intent.md pelo diff-check.md com as duas declarações; Feat não muda.
+test("Review de Refactor exige diff-check.md com as duas declarações", async () => {
+  const { queue, issue } = context("Review", "Refactor");
+  seedReview(queue, issue);
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /sem diff-check\.md/);
+
+  const write = (body: string) =>
+    queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "diff-check.md" }, body);
+
+  write("# diff check\nteste_e2e_alterado: false");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /"interface_publica_alterada"/);
+  write("interface_publica_alterada: false");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /"teste_e2e_alterado"/);
+  write("interface_publica_alterada: talvez\nteste_e2e_alterado: false");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /"interface_publica_alterada"/);
+
+  // Marcação de lista/negrito e caixa alta são toleradas.
+  write("- **interface_publica_alterada:** FALSE\n* teste_e2e_alterado: false\n\nprosa livre.");
+  await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
+});
+
+// Consequência 1: e2e alterado significa comportamento mudado — não conclui APROVADO, conclui REPROVADO.
+test("Review de Refactor com e2e alterado não conclui APROVADO", async () => {
+  const { queue, issue } = context("Review", "Refactor");
+  seedReview(queue, issue);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "diff-check.md" },
+    "interface_publica_alterada: false\nteste_e2e_alterado: true");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /teste_e2e_alterado: true/);
+
+  // REPROVADO com retrabalho vivo conclui, mesmo com o e2e alterado.
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "REPROVADO e2e mexido");
+  const rework = Issue.create({ title: "r", project: "p", type: "Refactor", action: "Implement", problem: "p" }, "pi");
+  queue.save(rework);
+  issue.relate([{ id: rework.id, kind: "child" }]);
+  await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
+});
+
+// Consequência 2: interface pública alterada exige aceite humano — um Design APPROVED na cadeia de parents.
+test("Review de Refactor com interface alterada exige Design APPROVED na linhagem", async () => {
+  const { queue, issue } = context("Review", "Refactor");
+  seedReview(queue, issue);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "diff-check.md" },
+    "interface_publica_alterada: true\nteste_e2e_alterado: false");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /passado por APPROVED/);
+
+  // A busca sobe a cadeia: Review → Review do ciclo anterior → Design aprovado.
+  const design = Issue.create({ title: "d", project: "p", type: "Refactor", action: "Design", problem: "p" }, "pi");
+  design.claim("pi");
+  design.submit("pi", "desenho entregue para decisão humana");
+  design.decide("APPROVED", "aprovado: pode mudar a interface");
+  queue.save(design);
+  const previous = Issue.create({ title: "rev", project: "p", type: "Refactor", action: "Review", problem: "p" }, "pi");
+  previous.relate([{ id: design.id, kind: "parent" }]);
+  queue.save(previous);
+  issue.relate([{ id: previous.id, kind: "parent" }]);
+  await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
+});
+
+// Interface intacta não consulta a linhagem: conclui APROVADO sem nenhum Design relacionado.
+test("Review de Refactor com interface intacta não consulta a linhagem", async () => {
+  const { queue, issue } = context("Review", "Refactor");
+  seedReview(queue, issue);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "diff-check.md" },
+    "interface_publica_alterada: false\nteste_e2e_alterado: false");
+  assert.deepEqual(issue.relates, []);
+  await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
+});
+
+test("Review de Refactor conclui sem intent.md", async () => {
+  const { queue, issue } = context("Review", "Refactor");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "diff-check.md" },
+    "interface_publica_alterada: false\nteste_e2e_alterado: false");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "evidence-a.md" }, "# a");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "evidence-b.md" }, "# b");
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document" }, "APROVADO revisão ok");
   await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
 });
 

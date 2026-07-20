@@ -56,6 +56,11 @@ Fluxo desta Issue (comandos prontos):
 
 1. Understand Intent — leia as threads e artefatos das Issues Planning e Design da linhagem (onde a mudança foi pedida e desenhada) e grave a intenção compreendida:
    issues artifact --id {{id}} --name intent.md --file intent.md
+   Se esta Issue é type=Refactor, a etapa 1 é o Diff Check no lugar do intent.md — o gate cobra diff-check.md, não intent.md. Duas declarações suas em linha (o sistema confia na declaração; ele não lê o diff), o resto é prosa livre:
+   issues artifact --id {{id}} --name diff-check.md --file diff-check.md
+   interface_publica_alterada: false
+   teste_e2e_alterado: false
+   Consequências cobradas no encerramento com veredito APROVADO: teste_e2e_alterado true não conclui (e2e alterado = comportamento mudado, o veredito é REPROVADO); interface_publica_alterada true só conclui se um Design da cadeia de parents desta Review tiver passado por APPROVED (aceite humano).
 2. Rebase com a base do projeto (prd/hml/dev) e faça o Conflict Check; grave a evidência do que verificou:
    issues artifact --id {{id}} --name evidence-conflito.md --file evidence-conflito.md
 3. Só se o Conflict Check não achou problema: Adversarial Check — estresse a solução contra cada requisito/critério (rodar > ler) e grave a evidência:

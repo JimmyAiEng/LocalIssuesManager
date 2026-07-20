@@ -1,8 +1,8 @@
 import { initPack, linkPackSkillsForDogfood } from "./app/services/use_cases/init_pack_use_case.js";
 import {
-  addComment, artifactFromFile, assertNotOpen, attachmentFromFile, createIssue, decideIssue, getIssue,
-  type IncomingAttachment, type IssueView, listIssues, nextIssue, relateIssues, resetClaim,
-  setArtifact, statusIssue, updateTags,
+  addComment, artifactFromFile, assertNotOpen, attachmentFromFile, createIssue, decideIssue,
+  getHandoff, getIssue, type IncomingAttachment, type IssueView, listIssues, nextIssue, relateIssues,
+  resetClaim, setArtifact, statusIssue, updateTags,
 } from "./app/services/use_cases/issue_use_cases.js";
 import { decomposeIssue } from "./app/services/use_cases/decomposition_use_cases.js";
 import { createProject, listProjects } from "./app/services/use_cases/project_use_cases.js";
@@ -26,6 +26,7 @@ export function main(argv = process.argv.slice(2)): void | Promise<void> {
     const options = parseOptions(raw);
     if (command === "web") return void launchWeb(options);
     if (command === "next" && options.prompt) return void nextPrompt(options);
+    if (command === "handoff") return void handoffDoc(options); // handoff.md cru (getHandoff), como nextPrompt
     if (command === "get") assertNotOpen(value(options, "id")); // OPEN só pelo claim de `next`, com o contrato da action junto
     if (command === "get" && options.target === "DESIGN") return void printDesignPackage(value(options, "id"), Boolean(options.pretty));
     if (command === "status") return runStatus(options); // async pelo gate da action
@@ -89,7 +90,7 @@ function execute(command: string | undefined, options: Options): Result {
   if (command === "list") return list(options);
   if (command === "artifact") return issueArtifact(options);
   if (command === "init") return init(options);
-  throw new Error("Usage: issues <create|next|comment|tag|status|decide|reset|relate|decompose|get|list|artifact|requirements|plan|design|project|web|init> [flags]");
+  throw new Error("Usage: issues <create|next|handoff|comment|tag|status|decide|reset|relate|decompose|get|list|artifact|requirements|plan|design|project|web|init> [flags]");
 }
 
 function create(options: Options): Result {
@@ -127,6 +128,11 @@ function claimNext(options: Options): IssueView | null {
 function nextPrompt(options: Options): void {
   const result = claimNext(options);
   process.stdout.write(result ? `${composePrompt(result)}\n` : "");
+}
+
+// Handoff cru da Issue (handoff.md): a sessão pós-APPROVED o lê para seguir. Texto puro, não JSON.
+function handoffDoc(options: Options): void {
+  process.stdout.write(`${getHandoff(value(options, "id"))}\n`);
 }
 
 function comment(options: Options): Result {

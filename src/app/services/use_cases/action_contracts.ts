@@ -103,6 +103,22 @@ const ABANDONO = `Issue errada, duplicada ou grande demais? Crie as Issues subst
    issues status --id {{id}} --agent {{agent}} --status CLOSED --reason obsoleto --comment "<por quê / substituída por qual Issue>"
    (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING --reason obsoleto.)`;
 
+// Contrato de execução pós-APPROVED: a Issue já foi aprovada pelo humano e reentrou na fila. A sessão
+// NÃO recebe o handoff inline no prompt — busca-o pelo comando, executa os próximos passos gravados
+// na aprovação e fecha direto (a trava humana já é dispensada pelo app no fechamento pós-APPROVED,
+// então nada de AWAITING). Substitui o contrato da action: aqui não se desenha nem se replaneja.
+const EXECUTION = `Esta Issue já foi APROVADA pelo humano e reentrou na fila para execução. Não refaça o design nem a decisão — execute o handoff.
+
+1. Busque o handoff (resumo + próximos passos gravados na aprovação):
+   issues handoff --id {{id}}
+2. Execute os próximos passos descritos no handoff.
+3. Encerramento com evidência — feche direto (a trava humana já foi dispensada por já ter sido aprovada; não envie para AWAITING):
+   issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<o que executou e como validou>" --reason concluido`;
+
+export function executionContract(issue: { id: string; project: string; owner: string | null }): string {
+  return `## Entrega desta Issue (Issue APROVADA — executar o handoff)\n\n${fill(EXECUTION, issue)}`;
+}
+
 export function actionContract(issue: { id: string; action: ActionType; project: string; owner: string | null; concern?: ConcernLevel }): string {
   const raw = issue.action === "Deploy" ? CONTRACTS.Deploy : `${CONTRACTS[issue.action]}\n\n${ABANDONO}`;
   const close = CLOSE[issue.action];

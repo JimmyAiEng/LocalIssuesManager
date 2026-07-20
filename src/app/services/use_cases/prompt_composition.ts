@@ -2,8 +2,8 @@ import { extForMediaType } from "../../../domain/artifacts/media_artifact.js";
 import type { ImplementationPlan } from "../../../domain/artifacts/implementation_plan_artifact.js";
 import { type Feature, toGherkin } from "../../../domain/artifacts/requirement_artifact.js";
 import { projectSegment } from "../../../domain/queue_repository.js";
-import type { Tags, Thread } from "../../../domain/value_objects.js";
-import { actionContract } from "./action_contracts.js";
+import { type Tags, type Thread, wasApproved } from "../../../domain/value_objects.js";
+import { actionContract, executionContract } from "./action_contracts.js";
 import type { IssueView, RelatedView } from "./issue_use_cases.js";
 
 // Prompt do claim: a Issue reivindicada, a linhagem relacionada e o contrato mecânico da action
@@ -21,7 +21,8 @@ export function composePrompt(issue: IssueView): string {
   if (issue.related.length) sections.push(relatedSection(issue.related));
   const lineageThreads = issue.action === "Review" ? reviewLineageThreads(issue.ancestors) : null;
   if (lineageThreads) sections.push(lineageThreads);
-  sections.push(actionContract(issue));
+  // Issue que passou por APPROVED reentrou na fila: troca o contrato da action pelo de execução do handoff.
+  sections.push(wasApproved(issue.phases) ? executionContract(issue) : actionContract(issue));
   return sections.join("\n\n");
 }
 

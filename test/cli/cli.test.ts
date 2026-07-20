@@ -244,6 +244,23 @@ test("CLI next --prompt --id reivindica Issue específica como Markdown", () => 
   assert.throws(() => JSON.parse(output));
 });
 
+test("in-process: handoff imprime o handoff.md cru; ausente erra apontando como gravá-lo", async () => {
+  const root = mkdtempSync(join(tmpdir(), "issues-cli-handoff-"));
+  await withIssuesRoot(root, async () => {
+    await captureMain(["project", "create", "--name", "demo", "--repo", root]);
+    const created = JSON.parse((await captureMain(createArgs)).stdout);
+    const missing = await captureMain(["handoff", "--id", created.id]);
+    assert.match(missing.stderr, /sem handoff\.md/);
+    assert.notEqual(missing.exitCode, undefined);
+    await captureMain(["artifact", "--id", created.id, "--name", "handoff.md", "--file",
+      qaFile("handoff-inproc.md", "# handoff\npróximos passos")]);
+    const ok = await captureMain(["handoff", "--id", created.id]);
+    assert.equal(ok.stdout, "# handoff\npróximos passos\n"); // texto cru, não JSON
+    assert.throws(() => JSON.parse(ok.stdout));
+  });
+  process.exitCode = undefined; // não vaza o erro simulado (handoff ausente) para o processo de teste
+});
+
 test("CLI next --prompt com fila vazia = stdout vazio e exit 0", () => {
   const vars = env();
   const result = spawnSync(bin, ["next", "--prompt", "--agent", "pi", "--project", "demo"], { env: vars, encoding: "utf8" });

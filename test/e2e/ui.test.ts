@@ -278,10 +278,32 @@ test("UI-04b: detalhe da Issue AWAITING oferece Decidir (Devolver/Fechar) e most
       const id = readdirSync(join(root, "projects", "ops", "awaiting"))[0].replace(".json", "");
       await page.goto(`${url}/issues/${id}`);
       await page.getByRole("heading", { name: "Detalhe awaiting" }).waitFor();
+      await assert.ok(await page.getByRole("button", { name: "Aprovar" }).count()); // as três vias do decide
       await assert.ok(await page.getByRole("button", { name: "Devolver para OPEN" }).count()); // Decidir só em AWAITING
       await assert.ok(await page.getByRole("button", { name: "Fechar Issue" }).count());
       assert.equal(await page.getByRole("button", { name: "Fazer Reset" }).count(), 0);
       assert.match(await page.locator(".thread").innerText(), /evidência: relatório/); // evidência obrigatória visível
+      // Fechar na AWAITING é abandono administrativo: `concluido` não é oferecido — aprovar é o botão Aprovar.
+      await page.getByRole("button", { name: "Fechar Issue" }).first().click();
+      assert.deepEqual(await page.locator("select[name=closed_reason] option").allInnerTexts(),
+        ["Selecione", "obsoleto", "duplicado", "errado"]);
+    }));
+
+test("UI-04b2: Aprovar leva a AWAITING para APPROVED e a Issue reentra na fila sem Owner", async () =>
+  withUI((root) => { awaiting(root, { title: "Aprovar awaiting", project: "ops", type: "Fix" }); },
+    async (page, url, root) => {
+      const id = readdirSync(join(root, "projects", "ops", "awaiting"))[0].replace(".json", "");
+      await page.goto(`${url}/issues/${id}`);
+      await page.getByRole("button", { name: "Aprovar" }).click();
+      await page.locator("#action-form textarea[name=comment]").fill("aceito: segue para a próxima sessão");
+      await page.getByRole("button", { name: "Confirmar aprovação" }).click();
+      await page.locator(".badge.status-APPROVED").waitFor();
+      assert.match(await page.locator(".detail .meta").first().innerText(), /Sem Owner/);
+      assert.match(await page.locator(".thread").innerText(), /aceito: segue para a próxima sessão/);
+      // A aprovada reentra na fila: dá para retomá-la pelo web sem passar pelo CLI.
+      await page.getByRole("button", { name: "Assumir Issue" }).click();
+      await page.locator(".badge.status-CLAIMED").waitFor();
+      assert.match(await page.locator(".detail .meta").first().innerText(), /Owner: human/);
     }));
 
 test("UI-04c: detalhe da Issue CLOSED mostra o motivo de fechamento e só oferece Remover", async () =>

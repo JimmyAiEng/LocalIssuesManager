@@ -204,13 +204,8 @@ async function close(response: ServerResponse, id: string, body: Body, root?: st
 }
 
 function decide(response: ServerResponse, id: string, body: Body, root?: string): void {
-  const status = text(body, "status");
-  const closedReason = optionalText(body, "closed_reason");
-  // ponytail: ponte até a fatia 4 trocar o botão. O painel ainda posta "aprovar" como decide
-  // CLOSED+concluido; o modelo novo aprova para APPROVED. Mapeia aqui p/ não quebrar a web viva.
-  const approve = status === "CLOSED" && closedReason === "concluido";
-  const issue = decideIssue({ id, human: true, status: approve ? "APPROVED" : status,
-    comment: text(body, "comment"), closed_reason: approve ? undefined : closedReason,
+  const issue = decideIssue({ id, human: true, status: text(body, "status"),
+    comment: text(body, "comment"), closed_reason: optionalText(body, "closed_reason"),
     attachments: decodeAttachments(body) }, root);
   respond(response, 200, issue.toJSON());
 }

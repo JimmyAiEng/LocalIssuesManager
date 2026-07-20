@@ -32,9 +32,9 @@ test("CA-05: humano cria Issue HITL pela web; IA entrega evidência via CLI; hum
     cli(["artifact", "--id", id, "--name", "handoff.md", "--file", qaFile("handoff.md", "# handoff")], root);
     cli(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "evidência: relatório"], root);
     assert.equal((await request(url, "GET", `/api/issues/${id}`)).body.status, "AWAITING");
-    // O botão "aprovar" do painel ainda posta decide CLOSED+concluido; o backend mapeia p/ APPROVED (ponte até a fatia 4).
+    // O botão "Aprovar" do painel posta a decisão APPROVED direto.
     const decided = await request(url, "POST", `/api/issues/${id}/decision`,
-      { status: "CLOSED", comment: "aceito", closed_reason: "concluido" });
+      { status: "APPROVED", comment: "aceito" });
     assert.equal(decided.status, 200);
     assert.equal(decided.body.status, "APPROVED");
   }));

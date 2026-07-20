@@ -144,9 +144,9 @@ Os valores finais são responsabilidade da implementação e devem atender contr
 ├──────────────────────────────────────────────┬───────────────────────────────┤
 │ PROBLEMA                                     │ AÇÕES                         │
 │ Texto completo…                              │ Requer sua Decisão            │
-│                                              │ [Devolver para OPEN]          │
-│ ARTEFATOS                                    │ [Fechar Issue]                │
-│ Texto completo…                              │                               │
+│                                              │ [Aprovar]                     │
+│ ARTEFATOS                                    │ [Devolver para OPEN]          │
+│ Texto completo…                              │ [Fechar Issue]                │
 │                                              │ DATAS                         │
 │ CRITÉRIOS DE ACEITE                          │ Criada …                      │
 │ ☐ Critério…                                  │ Claim …                       │
@@ -173,12 +173,19 @@ Os valores finais são responsabilidade da implementação e devem atender contr
 |---|---|
 | `OPEN` | Fechar Issue |
 | `CLAIMED` | Reset |
-| `AWAITING` | Devolver para `OPEN`; fechar Issue |
+| `AWAITING` | Aprovar (`APPROVED`); devolver para `OPEN`; fechar Issue |
 | `CLOSED` | Nenhuma |
 
 A UI não oferece Claim: essa ação permanece destinada às IAs pela CLI.
 
 ## 6. Padrões de transição
+
+### Aprovar AWAITING
+
+1. Botão `Aprovar` abre área de comentário.
+2. Texto explica: “A Issue irá para APPROVED e reentra na fila sem Owner, para a próxima sessão continuar a partir do handoff”.
+3. Comentário é obrigatório.
+4. `Confirmar aprovação` executa diretamente, sem diálogo adicional.
 
 ### Devolver AWAITING para OPEN
 

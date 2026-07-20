@@ -170,8 +170,8 @@ export function commentField() {
   return `<label>Comentário<textarea name="comment" rows="3" aria-invalid="${Boolean(state.errors.comment)}">${escapeHtml(state.draft.comment ?? "")}</textarea>${fieldError("comment")}</label>`;
 }
 
-export function reasonField() {
-  return selectInput("closed_reason", "Motivo de fechamento", CLOSED_REASONS, state.draft.closed_reason ?? "");
+export function reasonField(reasons = CLOSED_REASONS) {
+  return selectInput("closed_reason", "Motivo de fechamento", reasons, state.draft.closed_reason ?? "");
 }
 
 export function message(entry) {

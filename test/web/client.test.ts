@@ -137,7 +137,7 @@ test("statusAge cai para phases.at(-1) e depois para created_at quando falta sta
 test("somente ações humanas válidas por Status", () => {
   assert.deepEqual(humanActions("OPEN"), ["close"]);
   assert.deepEqual(humanActions("CLAIMED"), ["reset"]);
-  assert.deepEqual(humanActions("AWAITING"), ["decide-open", "decide-close"]);
+  assert.deepEqual(humanActions("AWAITING"), ["decide-approve", "decide-open", "decide-close"]);
   assert.deepEqual(humanActions("CLOSED"), []);
 });
 
@@ -165,12 +165,16 @@ test("fechar exige apenas Motivo válido (comentário opcional); reset exige com
   assert.match(validateReset({ comment: "  " }).errors.comment, /obrigat/i);
 });
 
-test("Decisão AWAITING: OPEN só com comentário; CLOSED com Motivo", () => {
+test("Decisão AWAITING: OPEN e APPROVED só com comentário; CLOSED com Motivo (sem `concluido`)", () => {
   assert.equal(validateDecide({ status: "OPEN", comment: "voltar" }).ok, true);
-  assert.match(validateDecide({ status: "OPEN", comment: "", closed_reason: "concluido" }).errors.comment, /obrigat/i);
-  assert.equal(validateDecide({ status: "CLOSED", comment: "fim", closed_reason: "concluido" }).ok, true);
-  assert.equal(validateDecide({ status: "CLOSED", comment: "", closed_reason: "concluido" }).ok, true);
+  assert.match(validateDecide({ status: "OPEN", comment: "", closed_reason: "obsoleto" }).errors.comment, /obrigat/i);
+  assert.equal(validateDecide({ status: "APPROVED", comment: "aceito" }).ok, true);
+  assert.match(validateDecide({ status: "APPROVED", comment: "  " }).errors.comment, /obrigat/i);
+  assert.equal(validateDecide({ status: "CLOSED", comment: "fim", closed_reason: "obsoleto" }).ok, true);
+  assert.equal(validateDecide({ status: "CLOSED", comment: "", closed_reason: "obsoleto" }).ok, true);
   assert.match(validateDecide({ status: "CLOSED", comment: "fim", closed_reason: "" }).errors.closed_reason, /Motivo/);
+  // Aprovar é decidir APPROVED: `concluido` não é abandono e o domínio o recusa no decide.
+  assert.match(validateDecide({ status: "CLOSED", comment: "fim", closed_reason: "concluido" }).errors.closed_reason, /inválido/i);
 });
 
 test("critérios '[ ]'/'[x]' viram checklist; texto sem sintaxe não vira itens", () => {

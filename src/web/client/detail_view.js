@@ -1,5 +1,5 @@
 import {
-  escapeHtml, humanActions, parseChecklist, splitThread, statusAge,
+  DECIDE_REASONS, escapeHtml, humanActions, parseChecklist, splitThread, statusAge,
 } from "./view_model.js";
 import { state } from "./state.js";
 import {
@@ -16,8 +16,14 @@ export function renderDetail() {
   const owner = issue.owner ? `Owner: ${escapeHtml(issue.owner)}` : "Sem Owner";
   const closed = issue.closed_reason ? `<section class="box"><h2>Motivo de fechamento</h2><p class="preserve">${escapeHtml(issue.closed_reason)}</p></section>` : "";
   // CLOSED entra na barra por causa da remoção — é a única ação que sobra numa Issue imutável.
-  const actions = humanActions(issue.status).length || ["OPEN", "CLOSED"].includes(issue.status) ? `<section class="actionbar"><h2>Ações</h2>${actionsPanel(issue)}</section>` : "";
+  const actions = humanActions(issue.status).length || canClaim(issue.status) || issue.status === "CLOSED" ? `<section class="actionbar"><h2>Ações</h2>${actionsPanel(issue)}</section>` : "";
   root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escapeHtml(issue.title)}</h1><p class="meta">Projeto: ${escapeHtml(issue.project)} · Tipo: ${escapeHtml(issue.type)} · Action: ${escapeHtml(issue.action)} · ${owner}</p><p class="meta">ID: <code>${escapeHtml(issue.id)}</code> <button type="button" class="copy-id" data-copy-id="${escapeHtml(issue.id)}">Copiar ID</button> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}${tagEditor(issue.tags, issue.status)}</header>${closed}${mdField("Problema", issue.problem)}${artifactSection(issue)}${documentsMarkup(state.documents)}${criteriaField(issue.acceptance_criteria)}${relatedSection(issue)}${requirementsSection(issue)}${designSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
+}
+
+// Claim humano pelo teclado da web: OPEN (assume a Issue livre) e APPROVED (retoma a aprovada, que
+// reentrou na fila para a sessão pós-aprovação seguir os próximos passos). Ambas → CLAIMED.
+function canClaim(status) {
+  return status === "OPEN" || status === "APPROVED";
 }
 
 function commentSection(issue) {
@@ -28,10 +34,10 @@ function commentSection(issue) {
 
 function actionsPanel(issue) {
   const available = humanActions(issue.status);
-  // Humano assume a Issue OPEN (OPEN->CLAIMED) para trabalhar nela pelo teclado da web.
-  const claim = issue.status === "OPEN"
+  const claim = canClaim(issue.status)
     ? `<button type="button" id="claim-issue" ${state.busy ? "disabled" : ""}>Assumir Issue</button>` : "";
-  const buttons = available.map((action) => `<button type="button" data-open-panel="${action}">${actionLabel(action)}</button>`).join(" ");
+  const buttons = available.map((action) =>
+    `<button type="button"${action === "decide-approve" ? ' class="approve"' : ""} data-open-panel="${action}">${actionLabel(action)}</button>`).join(" ");
   // Remover só em CLOSED; o use case ainda barra se a árvore de relates não estiver toda fechada.
   const remove = issue.status === "CLOSED"
     ? `<button type="button" class="danger" data-open-delete="1" ${state.busy ? "disabled" : ""}>Remover Issue</button>` : "";
@@ -51,10 +57,15 @@ function actionForm(issue) {
   if (state.panel === "reset") {
     return `<form id="action-form" class="form">${summaryError()}<p class="hint">A Issue voltará para OPEN e o Owner será removido.</p>${commentField()}${attachmentField()}<button ${state.busy ? "disabled" : ""}>Fazer Reset</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
   }
+  if (state.panel === "decide-approve") {
+    return `<form id="action-form" class="form">${summaryError()}<p class="hint">A Issue irá para APPROVED e reentra na fila sem Owner, para a próxima sessão continuar a partir do handoff.</p>${commentField()}${attachmentField()}<button class="approve" ${state.busy ? "disabled" : ""}>Confirmar aprovação</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
+  }
   if (state.panel === "decide-open") {
     return `<form id="action-form" class="form">${summaryError()}${commentField()}${attachmentField()}<button ${state.busy ? "disabled" : ""}>Confirmar devolução</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
   }
-  return `<form id="action-form" class="form">${summaryError()}${commentField()}${reasonField()}<button ${state.busy ? "disabled" : ""}>Fechar Issue</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
+  // Fechar direto da AWAITING é abandono: sem `concluido` na lista — aprovar é o botão Aprovar.
+  const reasons = state.panel === "decide-close" ? reasonField(DECIDE_REASONS) : reasonField();
+  return `<form id="action-form" class="form">${summaryError()}${commentField()}${reasons}<button ${state.busy ? "disabled" : ""}>Fechar Issue</button><button type="button" data-cancel-panel>Cancelar</button></form>`;
 }
 
 // Confirmação de fechamento irreversível (UX.md §6): só "Fechar definitivamente" chama a API.
@@ -156,5 +167,5 @@ function dates(issue) {
 }
 
 function actionLabel(action) {
-  return { close: "Fechar Issue", reset: "Fazer Reset", "decide-open": "Devolver para OPEN", "decide-close": "Fechar Issue" }[action];
+  return { close: "Fechar Issue", reset: "Fazer Reset", "decide-approve": "Aprovar", "decide-open": "Devolver para OPEN", "decide-close": "Fechar Issue" }[action];
 }

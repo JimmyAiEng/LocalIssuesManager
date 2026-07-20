@@ -312,6 +312,13 @@ button.danger {
 }
 button.danger:hover { border-color: var(--danger-ink); background: color-mix(in srgb, var(--danger) 28%, transparent); }
 
+/* Aprovar: CTA positivo na cor de APPROVED (contraparte da .danger no fechamento) */
+button.approve {
+  font-weight: 700; color: var(--st-approved); border-color: color-mix(in srgb, var(--st-approved) 55%, transparent);
+  background: color-mix(in srgb, var(--st-approved) 16%, transparent);
+}
+button.approve:hover { border-color: var(--st-approved); background: color-mix(in srgb, var(--st-approved) 26%, transparent); }
+
 /* ---------- Aviso não-bloqueante do form ---------- */
 .warn { color: var(--st-awaiting); font-size: .88rem; margin: 0; }
 

@@ -113,6 +113,7 @@ function fileToBase64(file) {
 
 export async function submitAction(form) {
   if (state.panel === "reset") return submitReset(form);
+  if (state.panel === "decide-approve") return submitDecide("APPROVED", form);
   if (state.panel === "decide-open") return submitDecide("OPEN", form);
   if (state.panel === "decide-close" || state.panel === "close") return submitClose();
 }
@@ -202,7 +203,8 @@ async function submitDecide(status, form) {
   renderDetail();
   const body = { status, comment: state.draft.comment };
   if (attachments.length) body.attachments = attachments;
-  await mutate(`/api/issues/${state.issue.id}/decision`, body, "Issue devolvida para OPEN");
+  const message = status === "APPROVED" ? "Issue aprovada" : "Issue devolvida para OPEN";
+  await mutate(`/api/issues/${state.issue.id}/decision`, body, message);
 }
 
 export async function claimIssue() {

@@ -101,7 +101,7 @@ Não há bug visível: entradas `- [ ]` caem no fallback de markdown e ainda ren
 - [x] Worktree: seção com path e branch (Issue Implement).
 - [x] Artefato: seção da Issue QA (relatório .md renderizado).
 - [x] Thread append-only com badges de papel (architect, test-coding), autor e status.
-- [x] Ações por Status: OPEN (Assumir/Fechar), CLAIMED (Reset), AWAITING (Devolver para OPEN / Fechar), CLOSED (imutável, sem barra, sem comentar).
+- [x] Ações por Status: OPEN (Assumir/Fechar), CLAIMED (Reset), AWAITING (Aprovar / Devolver para OPEN / Fechar), CLOSED (imutável, sem barra, sem comentar).
 - [x] Confirmação irreversível de fechamento (alertdialog "Fechar definitivamente").
 - [x] Comentar: painel de comentário com campo de anexo.
 - [x] Nova Issue: formulário, validação prévia (5 erros de campo no submit vazio), campo de anexo.

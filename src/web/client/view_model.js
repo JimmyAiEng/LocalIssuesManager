@@ -2,6 +2,8 @@ export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "APPROVED", "CLOSE
 export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"];
 export const ACTION_TYPES = ["Planning", "Design", "Implement", "Review", "Deploy"];
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"];
+// Fechar no decide é só abandono administrativo: aprovar é decidir APPROVED (assertDecision recusa `concluido`).
+export const DECIDE_REASONS = CLOSED_REASONS.filter((reason) => reason !== "concluido");
 export const TAG_VALUES = { complexity: ["BAIXA", "MEDIA", "ALTA"], human_need: ["HITL", "AFK"], risk: ["BAIXO", "MEDIO", "ALTO"] };
 export const CONCERN_LEVELS = ["LOW", "HIGH"];
 
@@ -109,7 +111,8 @@ export function options(issues, property) {
 export function humanActions(status) {
   if (status === "OPEN") return ["close"];
   if (status === "CLAIMED") return ["reset"];
-  if (status === "AWAITING") return ["decide-open", "decide-close"];
+  // As três vias do decide humano (assertDecision): aprovar, rejeitar devolvendo à fila, abandonar.
+  if (status === "AWAITING") return ["decide-approve", "decide-open", "decide-close"];
   return [];
 }
 
@@ -141,8 +144,9 @@ export function validateReset(values) {
 }
 
 export function validateDecide(values) {
-  if (values.status === "OPEN") return validateCommentAndReason(values, { requireComment: true, requireReason: false });
-  return validateCommentAndReason(values, { requireComment: false, requireReason: true });
+  // Só CLOSED (abandono administrativo) exige motivo; OPEN e APPROVED reentram na fila com comentário.
+  if (values.status === "CLOSED") return validateCommentAndReason(values, { requireComment: false, requireReason: true, reasons: DECIDE_REASONS });
+  return validateCommentAndReason(values, { requireComment: true, requireReason: false });
 }
 
 export function attachmentsMarkup(attachments) {
@@ -168,12 +172,13 @@ export function escapeHtml(value) {
 }
 
 /** @returns {ValidationResult} */
-function validateCommentAndReason(values, { requireComment, requireReason }) {
+function validateCommentAndReason(values, { requireComment, requireReason, reasons }) {
   const errors = {};
   if (requireComment && !String(values.comment ?? "").trim()) errors.comment = "Campo obrigatório";
   if (requireReason) {
+    const allowed = reasons ?? CLOSED_REASONS;
     if (!String(values.closed_reason ?? "").trim()) errors.closed_reason = "Motivo obrigatório";
-    else if (!CLOSED_REASONS.includes(values.closed_reason)) errors.closed_reason = "Motivo inválido";
+    else if (!allowed.includes(values.closed_reason)) errors.closed_reason = "Motivo inválido";
   }
   return { ok: Object.keys(errors).length === 0, values, errors };
 }

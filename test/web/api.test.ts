@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -294,6 +294,34 @@ test("API lista os documentos da Issue: nomeados lidos com name, legado sem name
 test("API devolve lista vazia de documentos quando a Issue não tem nenhum", async () => withWeb(async (url) => {
   const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
   assert.deepEqual((await request(url, "GET", `/api/issues/${id}/documents`)).body, []);
+}));
+
+test("API remove a Issue CLOSED e devolve 404 depois; Issue viva é barrada com 400", async () => withWeb(async (url, root) => {
+  const id = (await request(url, "POST", "/api/issues", input)).body.id as string;
+  const alive = await request(url, "POST", `/api/issues/${id}/delete`, {});
+  assert.equal(alive.status, 400); // OPEN: a trava do use case vira 400 no respondError
+  assert.match(String(alive.body.error), /só remove com a árvore de relates toda CLOSED/);
+  seedReview(root, id);
+  await request(url, "POST", `/api/issues/${id}/close`, { comment: "feito", closed_reason: "concluido" });
+  const removed = await request(url, "POST", `/api/issues/${id}/delete`, {});
+  assert.equal(removed.status, 200);
+  assert.equal(removed.body.id, id);
+  assert.equal((await request(url, "GET", `/api/issues/${id}`)).status, 404); // sumiu do disco
+}));
+
+test("API recusa id fora do formato UUID: travessia no /delete não apaga arquivo fora da árvore", async () => withWeb(async (url, root) => {
+  // Vítima = uma Issue CLOSED de verdade (o /delete só remove CLOSED) posta fora das pastas de Issue.
+  // ../../vitima resolve para <root>/projects/vitima.json a partir da pasta de status da Issue.
+  const seed = (await request(url, "POST", "/api/issues", input)).body.id as string;
+  seedReview(root, seed);
+  await request(url, "POST", `/api/issues/${seed}/close`, { comment: "feito", closed_reason: "concluido" });
+  const victim = join(root, "projects", "vitima.json");
+  writeFileSync(victim, readFileSync(join(root, "projects", "web", "closed", `${seed}.json`), "utf8"));
+  for (const id of ["..%2F..%2Fvitima", "..%5C..%5Cvitima", "%2E%2E%2F..%2Fvitima", "nao-e-uuid"]) {
+    assert.equal((await request(url, "POST", `/api/issues/${id}/delete`, {})).status, 404, id);
+    assert.equal((await request(url, "GET", `/api/issues/${id}`)).status, 404, id);
+    assert.equal(existsSync(victim), true, id);
+  }
 }));
 
 async function withWeb(run: (url: string, root: string) => Promise<void>): Promise<void> {

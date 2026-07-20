@@ -3,7 +3,7 @@ import { api } from "./http.js";
 import { renderBoard, renderError, renderLoading, renderNewIssue, renderNewProject, root } from "./view.js";
 import { renderDetail } from "./detail_view.js";
 import {
-  claimIssue, fetchDesign, fetchDocuments, fetchRequirements, performClose, readForm, refreshIssue,
+  claimIssue, fetchDesign, fetchDocuments, fetchRequirements, performClose, performDelete, readForm, refreshIssue,
   submitAction, submitComment, submitCreate, submitCreateProject, submitTags,
 } from "./mutations.js";
 
@@ -48,7 +48,7 @@ export function handleClick(event) {
   if (target.id === "refresh") return refresh();
   if (target.id === "refresh-issue") return refreshIssue();
   if (target.id === "clear") { state.filters = emptyFilters(); saveFilters(); return renderBoard(); }
-  if (target.id === "toggle-decisions") { state.decisionsOpen = !state.decisionsOpen; return renderBoard(); }
+  if (target.id === "toggle-sidebar") { state.sidebarOpen = !state.sidebarOpen; return renderBoard(); }
   if (target.dataset.openPanel) {
     state.panel = target.dataset.openPanel;
     state.confirmClose = false;
@@ -65,6 +65,10 @@ export function handleClick(event) {
   if (target.dataset.expandThread) { state.threadExpanded = true; return renderDetail(); }
   if (target.dataset.confirmClose) return performClose();
   if (target.dataset.cancelClose) { state.confirmClose = false; return renderDetail(); }
+  // Remoção: o clique só abre a confirmação; apagar mesmo é só no confirmDelete.
+  if (target.dataset.openDelete) { state.confirmDelete = true; state.feedback = null; return renderDetail(); }
+  if (target.dataset.confirmDelete) return performDelete();
+  if (target.dataset.cancelDelete) { state.confirmDelete = false; return renderDetail(); }
   if (target.id === "claim-issue") return claimIssue();
   // Atributos data-* sem valor viram "" (falsy) — presença via `in`, nunca truthiness.
   if ("cancelPanel" in target.dataset) { state.panel = null; state.confirmClose = false; state.errors = {}; return renderDetail(); }

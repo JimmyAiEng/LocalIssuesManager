@@ -43,8 +43,7 @@ export class Queue {
       for (const file of this.#files(project, "CLOSED")) {
         const issue = this.#read(file);
         if (Date.parse(issue.status_changed_at) <= cutoff) {
-          this.#purge(issue);
-          rmSync(file, { force: true }); // corrida entre closes concorrentes: ignora arquivo já removido
+          this.purge(issue);
           purged.push(issue.id);
         }
       }
@@ -52,11 +51,14 @@ export class Queue {
     return purged;
   }
 
-  #purge(issue: Issue): void {
+  // Apaga a Issue por completo: mídia, artefatos de texto (documento, requirements, design) e o JSON.
+  purge(issue: Issue): void {
     for (const entry of issue.thread) for (const attachment of entry.attachments ?? []) {
       this.artifacts.purgeMedia(issue.project, attachment.id, attachment.mediaType);
     }
     this.artifacts.purgeIssue(issue.project, issue.id);
+    const file = this.#findPath(issue.id);
+    if (file) rmSync(file, { force: true }); // corrida entre closes concorrentes: ignora arquivo já removido
   }
 
   // Registro de projetos: project.json na pasta do projeto, criado por `issues project create`.

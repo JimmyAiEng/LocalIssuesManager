@@ -4,7 +4,7 @@ import {
 } from "./view_model.js";
 import { clearActionState, emptyDraft, emptyProjectDraft, state } from "./state.js";
 import { api } from "./http.js";
-import { renderError, renderNewIssue, renderNewProject } from "./view.js";
+import { renderBoard, renderError, renderNewIssue, renderNewProject } from "./view.js";
 import { renderDetail } from "./detail_view.js";
 
 export function readForm(form, target) {
@@ -139,6 +139,24 @@ export async function performClose() {
     ? { comment: state.draft.comment, closed_reason: state.draft.closed_reason }
     : { status: "CLOSED", comment: state.draft.comment, closed_reason: state.draft.closed_reason };
   await mutate(path, body, "Issue fechada");
+}
+
+// Só "Remover definitivamente" chama a API. No sucesso não dá para usar o finishMutation padrão:
+// ele refaria o GET da Issue que acabou de ser apagada — fecha o detalhe e volta ao quadro.
+export async function performDelete() {
+  state.confirmDelete = false;
+  state.busy = true;
+  renderDetail();
+  try {
+    await api(`/api/issues/${state.issue.id}/delete`, { method: "POST", body: {} });
+    await reloadIssues();
+    clearActionState();
+    state.issue = null;
+    state.draft = emptyDraft();
+    // ponytail: sem mensagem de sucesso — o quadro não renderiza feedback, e a Issue sumir do quadro já é o retorno.
+    history.pushState({}, "", "/");
+    renderBoard();
+  } catch (error) { failMutation(error); }
 }
 
 async function submitReset(form) {

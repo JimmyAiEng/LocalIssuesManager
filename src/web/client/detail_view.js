@@ -15,7 +15,8 @@ export function renderDetail() {
   document.title = `${issue.title} · Issues`;
   const owner = issue.owner ? `Owner: ${escapeHtml(issue.owner)}` : "Sem Owner";
   const closed = issue.closed_reason ? `<section class="box"><h2>Motivo de fechamento</h2><p class="preserve">${escapeHtml(issue.closed_reason)}</p></section>` : "";
-  const actions = humanActions(issue.status).length || issue.status === "OPEN" ? `<section class="actionbar"><h2>Ações</h2>${actionsPanel(issue)}</section>` : "";
+  // CLOSED entra na barra por causa da remoção — é a única ação que sobra numa Issue imutável.
+  const actions = humanActions(issue.status).length || ["OPEN", "CLOSED"].includes(issue.status) ? `<section class="actionbar"><h2>Ações</h2>${actionsPanel(issue)}</section>` : "";
   root().innerHTML = `<header class="toolbar"><a class="button" href="/" data-back>← Voltar ao quadro</a><button type="button" id="refresh-issue">Atualizar Issue</button></header>${feedback()}<main class="detail"><header><span class="badge status-${issue.status}">${issue.status}</span><h1>${escapeHtml(issue.title)}</h1><p class="meta">Projeto: ${escapeHtml(issue.project)} · Tipo: ${escapeHtml(issue.type)} · Action: ${escapeHtml(issue.action)} · ${owner}</p><p class="meta">ID: <code>${escapeHtml(issue.id)}</code> <button type="button" class="copy-id" data-copy-id="${escapeHtml(issue.id)}">Copiar ID</button> · No Status ${statusAge(issue)}</p>${tagsMarkup(issue.tags)}${tagEditor(issue.tags, issue.status)}</header>${closed}${mdField("Problema", issue.problem)}${artifactSection(issue)}${documentsMarkup(state.documents)}${criteriaField(issue.acceptance_criteria)}${relatedSection(issue)}${requirementsSection(issue)}${designSection(issue)}${dates(issue)}${thread(issue.thread)}${commentSection(issue)}${actions}</main>`;
 }
 
@@ -31,8 +32,17 @@ function actionsPanel(issue) {
   const claim = issue.status === "OPEN"
     ? `<button type="button" id="claim-issue" ${state.busy ? "disabled" : ""}>Assumir Issue</button>` : "";
   const buttons = available.map((action) => `<button type="button" data-open-panel="${action}">${actionLabel(action)}</button>`).join(" ");
-  if (!claim && !available.length) return `<p class="muted">Issue imutável</p>`;
-  return `<div class="actions">${claim}${buttons}</div>${actionForm(issue)}`;
+  // Remover só em CLOSED; o use case ainda barra se a árvore de relates não estiver toda fechada.
+  const remove = issue.status === "CLOSED"
+    ? `<button type="button" class="danger" data-open-delete="1" ${state.busy ? "disabled" : ""}>Remover Issue</button>` : "";
+  if (!claim && !available.length && !remove) return `<p class="muted">Issue imutável</p>`;
+  return `<div class="actions">${claim}${buttons}${remove}</div>${actionForm(issue)}${deleteConfirmation(issue)}`;
+}
+
+// Remoção irreversível: mesmo molde do closeConfirmation — só "Remover definitivamente" chama a API.
+function deleteConfirmation(issue) {
+  if (!state.confirmDelete) return "";
+  return `<div class="confirm-close" role="alertdialog" aria-label="Confirmar remoção"><p>Remover "${escapeHtml(issue.title)}"? A Issue e seus arquivos serão apagados do disco e não poderão ser recuperados.</p><div class="form-actions"><button type="button" data-cancel-delete="1">Cancelar</button><button type="button" class="danger" data-confirm-delete="1" ${state.busy ? "disabled" : ""}>Remover definitivamente</button></div></div>`;
 }
 
 function actionForm(issue) {

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { deleteIssue } from "../app/services/use_cases/deletion_use_cases.js";
 import { getDesignPackage } from "../app/services/use_cases/design_use_cases.js";
 import {
   addComment, claimIssue as claimIssueCase, createIssue, decideIssue, getIssue, type IncomingAttachment,
@@ -37,6 +38,10 @@ async function dispatch(request: IncomingMessage, response: ServerResponse, root
   }
   if (url.pathname === "/api/projects") return projectAction(request, response, root);
   const route = routeParts(url.pathname);
+  // Trava de travessia: o id vem cru da URL e vira caminho em disco lá no Queue#findPath (`${id}.json`).
+  // Guarda única no funil por onde TODA rota de Issue passa — /delete e irmãs — em vez de remendo por rota.
+  // O UUID já barra `/`, `\`, `..` e o que vier de percent-encoding (o decode acontece antes, no routeParts).
+  if (route.length > 0 && !UUID.test(route[0])) return respond(response, 404, { error: "Not found" });
   if (request.method === "GET") return getAction(request, response, url, route, root);
   const body = await readBody(request);
   if (request.method !== "POST") return respond(response, 404, { error: "Not found" });
@@ -68,6 +73,9 @@ function issueAction(response: ServerResponse, route: string[], body: Body, root
   if (route[1] === "reset") return reset(response, route[0], body, root);
   if (route[1] === "comment") return comment(response, route[0], body, root);
   if (route[1] === "tags") return tag(response, route[0], body, root);
+  // Remoção definitiva: o use case é quem trava (raiz e árvore de relates toda CLOSED) e o
+  // DomainError vira 400 no respondError.
+  if (route[1] === "delete") return respond(response, 200, deleteIssue({ issueId: route[0] }, root));
   respond(response, 404, { error: "Not found" });
 }
 

@@ -209,14 +209,32 @@ test("UI-04b: detalhe da Issue AWAITING oferece Decidir (Devolver/Fechar) e most
       assert.match(await page.locator(".thread").innerText(), /evidência: relatório/); // evidência obrigatória visível
     }));
 
-test("UI-04c: detalhe da Issue CLOSED mostra o motivo de fechamento e não oferece ações", async () =>
+test("UI-04c: detalhe da Issue CLOSED mostra o motivo de fechamento e só oferece Remover", async () =>
   withUI((root) => { closed(root, { title: "Detalhe closed", project: "legacy", type: "Fix" }); },
     async (page, url, root) => {
       const id = readdirSync(join(root, "projects", "legacy", "closed"))[0].replace(".json", "");
       await page.goto(`${url}/issues/${id}`);
       await page.getByRole("heading", { name: "Detalhe closed" }).waitFor();
       assert.match(await page.locator(".detail").innerText(), /Motivo de fechamento/);
-      assert.equal(await page.locator(".actionbar").count(), 0); // Issue imutável: sem barra de ações
+      // Issue imutável: nenhuma ação de workflow; só a remoção definitiva.
+      await assert.ok(await page.getByRole("button", { name: "Remover Issue" }).count());
+      assert.equal(await page.getByRole("button", { name: "Fazer Reset" }).count(), 0);
+      assert.equal(await page.getByRole("button", { name: "Fechar Issue" }).count(), 0);
+    }));
+
+test("UI-04d: remover Issue CLOSED pede confirmação, apaga do disco e volta ao quadro sem ela", async () =>
+  withUI((root) => { closed(root, { title: "Some daqui", project: "legacy", type: "Fix" }); },
+    async (page, url, root) => {
+      const id = readdirSync(join(root, "projects", "legacy", "closed"))[0].replace(".json", "");
+      await page.goto(`${url}/issues/${id}`);
+      await page.getByRole("button", { name: "Remover Issue" }).click();
+      const dialog = page.getByRole("alertdialog", { name: "Confirmar remoção" });
+      await dialog.waitFor(); // clique só confirma; nada foi apagado ainda
+      assert.equal(readdirSync(join(root, "projects", "legacy", "closed")).length, 1);
+      await dialog.getByRole("button", { name: "Remover definitivamente" }).click();
+      await page.locator(".board").waitFor(); // sucesso volta ao quadro, sem refazer o GET da Issue removida
+      assert.deepEqual(readdirSync(join(root, "projects", "legacy", "closed")), []);
+      assert.equal(await page.locator(".card").count(), 0);
     }));
 
 // =====================================================================================

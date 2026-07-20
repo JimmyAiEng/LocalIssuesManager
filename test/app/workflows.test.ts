@@ -207,6 +207,7 @@ test("Refactor Design não fecha por agente mesmo sem mudança de arquitetura", 
   issue.claim("pi");
   queue.save(issue);
   seedDesign(queue, issue); // architecture_changed=false + plano + filha Implement
+  seedHandoff(queue, issue); // AWAITING não-abandono exige handoff.md
   await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /Refactor.*--status AWAITING/s);
   await assert.doesNotReject(completeIssue(queue, issue, "AWAITING", "fim"));
 });

@@ -65,13 +65,18 @@ function parentIds(issue: Issue): string[] {
 }
 
 // Uma declaração por linha, valor true|false: case-insensitive e tolerante a marcação de lista/negrito.
+// Repetir a mesma invariante é tolerado enquanto os valores concordam; valores conflitantes são
+// ambiguidade (o template do guia colado acima da declaração honesta escondia a real) e recusam.
 function readDeclaration(content: string, key: string): boolean {
   const declaration = new RegExp(`^${key}\\s*:\\s*(true|false)$`, "i");
+  const values = new Set<boolean>();
   for (const line of content.split("\n")) {
     const match = declaration.exec(line.replace(/\*/g, "").replace(/^\s*[-+]\s*/, "").trim());
-    if (match) return match[1].toLowerCase() === "true";
+    if (match) values.add(match[1].toLowerCase() === "true");
   }
-  throw new DomainError(`diff-check.md não declara a invariante "${key}": acrescente a linha '${key}: true|false'`);
+  if (values.size === 0) throw new DomainError(`diff-check.md não declara a invariante "${key}": acrescente a linha '${key}: true|false'`);
+  if (values.size > 1) throw new DomainError(`diff-check.md declara a invariante "${key}" duas vezes com valores conflitantes (true e false): deixe uma única declaração — apague o bloco de exemplo se colou o do guia`);
+  return values.values().next().value!;
 }
 
 function requireEvidence(queue: Queue, issue: Issue): void {

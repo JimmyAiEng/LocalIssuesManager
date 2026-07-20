@@ -31,14 +31,16 @@ O Diff Check vai num documento próprio, `diff-check.md` (o `intent.md` **não**
 Ele começa por duas declarações em linha; o resto é prosa livre — o diff analisado e o que garante que o comportamento não mudou.
 
 ```markdown
-interface_publica_alterada: false
-teste_e2e_alterado: false
+interface_publica_alterada: <true|false>
+teste_e2e_alterado: <true|false>
 ```
 
 `issues artifact --id <id> --name diff-check.md --file <f>`
 
 Valor `true|false`, uma declaração por linha, caixa livre, marcação de lista/negrito tolerada.
+O bloco acima é **modelo, não declaração**: `<true|false>` é placeholder inválido de propósito — substitua pelo valor real, não cole o bloco por cima da sua declaração.
 Faltando (ou com valor inválido) qualquer uma das duas, o encerramento falha nomeando a invariante.
+Declarar a mesma invariante duas vezes com valores **conflitantes** (`true` e `false`) recusa o encerramento por ambiguidade, nomeando a invariante; repetição com o mesmo valor é tolerada.
 
 **O sistema confia na declaração: ele nunca lê o diff.**
 O issue-manager não executa nada no repositório do projeto — quem analisa o diff e classifica o que é "interface pública" (assinatura, contrato exposto a quem consome o código) é você.

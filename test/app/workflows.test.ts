@@ -125,6 +125,24 @@ test("Review de Refactor com e2e alterado não conclui APROVADO", async () => {
   await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
 });
 
+// Fronteira de confiança: colar o modelo do guia acima da declaração honesta escondia a real (primeiro
+// match vencia). Valores conflitantes agora recusam; repetição concordante segue valendo.
+test("Review de Refactor recusa invariante declarada duas vezes com valores conflitantes", async () => {
+  const { queue, issue } = context("Review", "Refactor");
+  seedReview(queue, issue);
+  const write = (body: string) =>
+    queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "diff-check.md" }, body);
+
+  write("interface_publica_alterada: false\nteste_e2e_alterado: false\n\ndeclaração real:\ninterface_publica_alterada: true\nteste_e2e_alterado: true");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /"interface_publica_alterada".*conflitantes/s);
+  write("interface_publica_alterada: false\nteste_e2e_alterado: false\nteste_e2e_alterado: true");
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /"teste_e2e_alterado".*conflitantes/s);
+
+  // Repetição concordante não é ambiguidade: o valor declarado é o mesmo em todas as linhas.
+  write("interface_publica_alterada: false\nteste_e2e_alterado: false\n\nresumo:\n- **interface_publica_alterada:** FALSE\n- teste_e2e_alterado: false");
+  await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
+});
+
 // Consequência 2: interface pública alterada exige aceite humano — um Design APPROVED na cadeia de parents.
 test("Review de Refactor com interface alterada exige Design APPROVED na linhagem", async () => {
   const { queue, issue } = context("Review", "Refactor");
@@ -144,6 +162,30 @@ test("Review de Refactor com interface alterada exige Design APPROVED na linhage
   queue.save(previous);
   issue.relate([{ id: previous.id, kind: "parent" }]);
   await assert.doesNotReject(completeIssue(queue, issue, "CLOSED", "fim"));
+});
+
+// A busca de Design aprovado é uma BFS sobre dados que o usuário controla: ciclo entre parents não
+// pode travar e parent que não existe mais no store não pode explodir — os dois terminam recusando.
+test("Review de Refactor: ciclo na linhagem e parent inexistente recusam sem travar", async () => {
+  const { queue, issue } = context("Review", "Refactor");
+  seedReview(queue, issue);
+  queue.artifacts.writeText("p", { issueId: issue.id, type: "document", name: "diff-check.md" },
+    "interface_publica_alterada: true\nteste_e2e_alterado: false");
+
+  // Ciclo A → B → A, com a Review apontando para A.
+  const a = Issue.create({ title: "a", project: "p", type: "Refactor", action: "Review", problem: "p" }, "pi");
+  const b = Issue.create({ title: "b", project: "p", type: "Refactor", action: "Review", problem: "p" }, "pi");
+  a.relate([{ id: b.id, kind: "parent" }]);
+  b.relate([{ id: a.id, kind: "parent" }]);
+  queue.save(a);
+  queue.save(b);
+  issue.relate([{ id: a.id, kind: "parent" }]);
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /passado por APPROVED/);
+
+  // Parent que não existe no store: a BFS pula o id órfão em vez de estourar.
+  b.relate([{ id: "nao-existe-no-store", kind: "parent" }]);
+  queue.save(b);
+  await assert.rejects(completeIssue(queue, issue, "CLOSED", "fim"), /passado por APPROVED/);
 });
 
 // Interface intacta não consulta a linhagem: conclui APROVADO sem nenhum Design relacionado.

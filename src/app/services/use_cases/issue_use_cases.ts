@@ -133,12 +133,12 @@ function summary(issue: Issue): IssueSummary {
 }
 
 // Fila: reivindica a Issue elegível mais antiga do projeto (ou uma por --id). Em concern=HIGH,
-// Design/Implement só é reivindicável por agente com todo pai (kind=parent) CLOSED: --id recusa citando o pai; --project pula. LOW/sem-pai/see-also/humano: livres.
-export function nextIssue(input: { agent: string; project?: string; id?: string; now?: Date }, root?: string): IssueView | null {
+// Design/Implement só é reivindicável por agente com todo pai (kind=parent) CLOSED: --id recusa citando o pai; --project pula. LOW/sem-pai/see-also/humano: livres. `actions` (--action a,b) restringe a fila do projeto a essas actions; --id nomeia a Issue e ignora o filtro.
+export function nextIssue(input: { agent: string; project?: string; id?: string; actions?: string[]; now?: Date }, root?: string): IssueView | null {
   const agent = parseAgentId(input.agent);
   const queue = new Queue(root);
   if (!input.id && !input.project?.trim()) throw new Error("project is required");
-  const issue = input.id ? claimTarget(queue, input.id) : oldestEligible(queue, input.project);
+  const issue = input.id ? claimTarget(queue, input.id) : oldestEligible(queue, input.project, input.actions?.map(parseActionType));
   if (!issue) return null;
   issue.claim(agent, input.now);
   queue.save(issue);
@@ -153,11 +153,11 @@ function claimTarget(queue: Queue, id: string): Issue {
 }
 
 // Elegível = OPEN ou APPROVED (a aprovada reentra na fila para o handoff seguir); pula as filhas
-// bloqueadas e ordena como `oldestOpen`.
-function oldestEligible(queue: Queue, project: string | undefined): Issue | null {
+// bloqueadas e ordena como `oldestOpen`; `actions` (quando dado) restringe às actions pedidas.
+function oldestEligible(queue: Queue, project: string | undefined, actions?: ActionType[]): Issue | null {
   return [...queue.list({ status: "OPEN", project }), ...queue.list({ status: "APPROVED", project })]
     .sort((a, b) => a.status_changed_at.localeCompare(b.status_changed_at) || a.id.localeCompare(b.id))
-    .find((issue) => !blockingParent(queue, issue)) ?? null;
+    .find((issue) => (!actions || actions.includes(issue.action)) && !blockingParent(queue, issue)) ?? null;
 }
 
 // Pai (kind=parent) fora de CLOSED que bloqueia o claim de agente, ou null (só HIGH bloqueia; pai purgado já foi CLOSED; see-also do decompose é decorativa).

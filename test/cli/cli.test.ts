@@ -310,6 +310,15 @@ test("CLI next --prompt com fila vazia = stdout vazio e exit 0", () => {
   assert.equal(result.stdout, "");
 });
 
+test("CLI next --action reivindica só as actions pedidas, ignorando a mais antiga fora do filtro", () => {
+  const vars = env();
+  run(createArgs, vars); // action Review, a mais antiga da fila
+  const design = JSON.parse(run([...createArgs, "--action", "Design"], vars));
+  const output = run(["next", "--prompt", "--agent", "pi", "--project", "demo", "--action", "Design,Deploy"], vars);
+  assert.match(output, /action `Design`/);
+  assert.equal(JSON.parse(run(["get", "--id", design.id], vars)).status, "CLAIMED");
+});
+
 test("e2e: artifact grava .md da Issue e create --artifact-file grava no id novo", () => {
   const vars = env();
   const dir = mkdtempSync(join(tmpdir(), "issues-art-"));

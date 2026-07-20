@@ -73,7 +73,7 @@ O `--repo` aponta o repositório git do projeto e viaja no prompt do agente; o C
 | **project create** | Registrar projeto | `--name` `--repo` | — |
 | **project list** | Listar projetos | — | — |
 | **create** | Criar Issue | `--title` `--project` `--type` `--action` `--problem` + (`--human` \| `--agent`) | `--acceptance-criteria` `--relates` `--artifact-file` `--complexity` `--risk` `--human-need` `--attach` |
-| **next** | Claimar a próxima Issue | `--agent` + (`--project` \| `--id`) | `--prompt` |
+| **next** | Claimar a próxima Issue | `--agent` + (`--project` \| `--id`) | `--prompt` `--action` (lista, só com `--project`) |
 | **comment** | Adicionar comentário | `--id` + (`--human` \| `--agent`) | `--comment` `--attach` |
 | **tag** | Tags | `--id` + (`--human` \| `--agent`) | `--complexity` `--human-need` `--risk` |
 | **relate** | Relacionar Issues (linhagem) | `--id` `--relates` | `--kind` (`parent` \| `child` \| `see-also`) |
@@ -100,6 +100,7 @@ issues create --title "Login com e-mail" --project app --type Feat --action Plan
 
 # Workflow da IA
 issues next --prompt --agent codex --project app
+issues next --prompt --agent codex --project app --action Planning,Design   # só as Issues dessas actions
 issues status --id <uuid> --agent codex --status CLOSED --comment "evidência: o que foi feito e decidido" --reason concluido
 
 # HITL: a IA envia para decisão humana

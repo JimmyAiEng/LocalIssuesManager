@@ -21,6 +21,7 @@ Uma **Issue** é a unidade de trabalho de uma sessão: pequena, com uma entrega 
 - `AWAITING` é a entrega para decisão humana; o `decide` humano no web devolve `APPROVED` (siga) ou fecha a Issue.
 - Issue reivindicável é a que está em `OPEN` **ou** `APPROVED`: a aprovada **reentra na fila sem dono** para a sessão seguinte continuar a partir do handoff. `issues next --prompt` pode, portanto, te entregar uma Issue já trabalhada — não é erro.
 - Issue `OPEN` só chega até você pelo claim de `issues next` — é ele que entrega o contrato da action junto. `issues get` recusa id em `OPEN`: não dá para contornar o claim com `list` + `get` e trabalhar uma Issue que ninguém reivindicou.
+- A fila do projeto aceita `--action <a,b>` para entregar só Issues das actions listadas (um agente especializado numa fase puxa só o trabalho dela); sem a flag ela entrega qualquer action, e a forma `--id` ignora a restrição.
 - Trabalho maior vira **novas Issues relacionadas** (`--relates`), nunca uma Issue gorda.
 - Não há validação de sequência entre actions: você pode criar uma Issue `Implement` sem `Design` anterior — siga o roteamento e os gates descritos nesta skill.
 
@@ -153,8 +154,8 @@ issues project list
 issues create --title <t> --project <p> --type <T> --action <A> --problem <txt>
               [--acceptance-criteria <c>] [--relates a,b] [--artifact-file <a.md>]
               [--complexity …] [--risk …] [--human-need HITL|AFK] --agent <ia>
-issues next --prompt --project <p> --agent <ia>      # reivindica a Issue mais antiga aberta do projeto
-issues next --id <id> --agent <ia>                   # reivindica uma Issue específica
+issues next --prompt --project <p> --agent <ia> [--action Planning,Design]   # reivindica a Issue mais antiga aberta do projeto; --action restringe as actions elegíveis
+issues next --id <id> --agent <ia>                   # reivindica uma Issue específica (ignora --action)
 issues get --id <id> [REQUIREMENTS|DESIGN|PLAN]      # recusa Issue OPEN: reivindique antes com `issues next`
 issues list [--status --project --type --title]
 issues comment --id <id> --comment <t> --agent <ia> [--attach <arquivo>] [--role <papel>]

@@ -12,7 +12,7 @@ const TAGS = `[--complexity ${or(TAG_VALUES.complexity)}] [--risk ${or(TAG_VALUE
 
 export const USAGE: Record<string, string> = {
   create: `issues create --title <t> --project <p> --type ${or(ISSUE_TYPES)} --action ${or(ACTION_TYPES)} --problem <txt> [--acceptance-criteria <c>] [--relates <id,id>] [--artifact-file <f>] ${TAGS} [--attach <f>] ${AGENT}`,
-  next: `issues next (--project <p> | --id <id>) ${AGENT} [--prompt]`,
+  next: `issues next (--project <p> | --id <id>) ${AGENT} [--action ${or(ACTION_TYPES)} (lista por vírgula, só com --project)] [--prompt]`,
   handoff: "issues handoff --id <id>",
   comment: `issues comment --id <id> (${AGENT} | --human) [--comment <txt>] [--attach <f>] [--role ${or(ROLES)}]`,
   tag: `issues tag --id <id> (${AGENT} | --human) ${TAGS}`,

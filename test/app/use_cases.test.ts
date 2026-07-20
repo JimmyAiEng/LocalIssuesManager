@@ -89,6 +89,20 @@ test("next --id reivindica a Issue específica; inexistente lança NotFound", ()
   assert.throws(() => nextIssue({ agent: "pi" }, dir), /project is required/);
 });
 
+// --action filtra a fila do projeto antes do FIFO: o pi loop de uma fase só reivindica o que sabe fazer.
+test("next --action filtra a fila por action (lista), mantendo o mais antigo dentro do filtro", () => {
+  const dir = root();
+  const review = createIssue({ ...body, title: "review", now: new Date("2026-01-01") }, dir);
+  const design = createIssue({ ...body, title: "design", action: "Design", now: new Date("2026-01-02") }, dir);
+  const planning = createIssue({ ...body, title: "planning", action: "Planning", now: new Date("2026-01-03") }, dir);
+  // Design é mais nova que a Review, mas o filtro roda antes da escolha do mais antigo.
+  assert.equal(nextIssue({ agent: "pi", project: "app", actions: ["Design"] }, dir)?.id, design.id);
+  assert.equal(nextIssue({ agent: "pi", project: "app", actions: ["Planning", "Deploy"] }, dir)?.id, planning.id);
+  assert.equal(nextIssue({ agent: "pi", project: "app", actions: ["Implement"] }, dir), null); // sem match: null, não erro
+  assert.throws(() => nextIssue({ agent: "pi", project: "app", actions: ["Nope"] }, dir), /Invalid action/);
+  assert.equal(nextIssue({ agent: "pi", project: "app" }, dir)?.id, review.id); // sem --action: FIFO puro
+});
+
 test("ciclo AFK: IA reivindica, entrega evidência e fecha direto", async () => {
   const dir = root();
   const issue = createIssue({ ...body, title: "afk" }, dir);

@@ -129,7 +129,7 @@ function next(options: Options): Result {
 function claimNext(options: Options): IssueView | null {
   const id = optional(options, "id");
   const project = id ? optional(options, "project") : value(options, "project");
-  return nextIssue({ agent: value(options, "agent"), project, id });
+  return nextIssue({ agent: value(options, "agent"), project, id, actions: optionalList(options, "action") });
 }
 
 function nextPrompt(options: Options): void {

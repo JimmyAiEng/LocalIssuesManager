@@ -20,6 +20,7 @@ import {
   validateCreate,
   validateDecide,
   validateReset,
+  visibleClosed,
 } from "../../src/web/client/view_model.js";
 import { requirementsMarkup } from "../../src/web/client/gherkin.js";
 import { documentsMarkup } from "../../src/web/client/documents.js";
@@ -39,6 +40,18 @@ test("view model combina filtros por tipo e mantém as cinco colunas ordenadas",
   assert.deepEqual(columns.AWAITING, []);
   assert.deepEqual(columns.APPROVED, []);
   assert.equal(Object.keys(columns).length, 5);
+});
+
+// Escopo da limpeza em massa: o filtro ativo restringe, e só CLOSED entra.
+test("visibleClosed devolve só as CLOSED que sobrevivem ao filtro do quadro", () => {
+  const withClosed = [
+    ...issues,
+    { id: "velha", title: "Needle velha", project: "app", type: "Fix", action: "Review", status: "CLOSED", created_at: "2026-01-01T00:00:00Z" },
+    { id: "alheia", title: "Needle alheia", project: "other", type: "Fix", action: "Review", status: "CLOSED", created_at: "2026-01-01T00:00:00Z" },
+  ];
+  const scoped = visibleClosed(withClosed, { title: "", project: "app", type: "", owner: "" });
+  assert.deepEqual(scoped.map((issue) => issue.id), ["velha"]); // "alheia" é CLOSED mas está fora do filtro
+  assert.deepEqual(visibleClosed(issues, { title: "", project: "", type: "", owner: "" }), []);
 });
 
 test("filtro por Owner isola as Issues de um dono", () => {

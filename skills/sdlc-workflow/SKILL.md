@@ -17,7 +17,9 @@ Uma **Issue** é a unidade de trabalho de uma sessão: pequena, com uma entrega 
 
 - **type** diz o problema: `Fix` · `Feat` · `Research` · `Refactor`.
 - **action** diz a entrega esperada: `Planning` · `Design` · `Implement` · `Review` · `Deploy`.
-- Status: `OPEN → CLAIMED → (AWAITING →) CLOSED`.
+- Status: `OPEN → CLAIMED → (AWAITING → APPROVED →) CLOSED`.
+- `AWAITING` é a entrega para decisão humana; o `decide` humano no web devolve `APPROVED` (siga) ou fecha a Issue.
+- Issue reivindicável é a que está em `OPEN` **ou** `APPROVED`: a aprovada **reentra na fila sem dono** para a sessão seguinte continuar a partir do handoff. `issues next --prompt` pode, portanto, te entregar uma Issue já trabalhada — não é erro.
 - Issue `OPEN` só chega até você pelo claim de `issues next` — é ele que entrega o contrato da action junto. `issues get` recusa id em `OPEN`: não dá para contornar o claim com `list` + `get` e trabalhar uma Issue que ninguém reivindicou.
 - Trabalho maior vira **novas Issues relacionadas** (`--relates`), nunca uma Issue gorda.
 - Não há validação de sequência entre actions: você pode criar uma Issue `Implement` sem `Design` anterior — siga o roteamento e os gates descritos nesta skill.
@@ -36,7 +38,9 @@ O `type` da Issue escolhe a jornada; a `action` é a fase dentro dela.
 - **`Refactor`** — refatorar sem mudar funcionalidade. **Começa no Design** (não tem Planning — o sistema recusa `Refactor`+`Planning`). O Design **sempre passa pelo engenheiro** (nunca fecha AFK, nem com `architecture_changed=false`). O Review foca em **regressão** (bug/vulnerabilidade introduzido), não em intenção. Ao fim de um `Fix`, a melhoria arquitetural adiada vira uma Issue `Refactor` relacionada.
 - **`Fix`** — mais direto (hot-fix). Guias próprios ainda não separados; siga o guia da action e a ênfase de causa-raiz.
 
-Onde a fase diverge por type, o guia da action tem uma seção **Refactor** — leia-a se a Issue for `Refactor`.
+O gate só diverge por type em **dois** pontos, e os guias dessas fases têm a seção correspondente: `phases/design.md` (o Design de Refactor nunca fecha AFK) e `phases/review.md` (Diff Check em vez de Understand Intent).
+`phases/implement.md` tem uma seção **Refactor** de disciplina — não de gate: o CLI trata `Implement` igual para todo type.
+`phases/planning.md` e `phases/deploy.md` **não** têm seção Refactor porque não divergem: Refactor nem chega ao Planning (o create é recusado) e o Deploy é idêntico para todo type.
 
 ## Roteamento por action
 
@@ -64,7 +68,27 @@ Se a Issue for grande demais para uma sessão, crie as Issues menores relacionad
 - **Projeto `concern=HIGH`**: piso de supervisão do Projeto — Planning e Design **não fecham por agente**, só por `--status AWAITING` (a decisão é humana, no web), mesmo em Issue AFK.
 - Como `concern` é piso e não teto, `concern=LOW` (ou Projeto sem o campo) não muda nada: Planning/Design seguem a regra AFK/HITL acima.
 - O gate da action roda nas duas saídas (AWAITING e CLOSED) quando `--reason` é `concluido` ou está ausente; sem a entrega, o comando falha explicando o que falta.
-- **Abandono**: `--reason obsoleto|duplicado|errado` **pula o gate** da action — a Issue abandonada não tem entrega a cobrar.
+- **Toda saída por `AWAITING` exige o `handoff.md`** — veja a seção abaixo. Vale para **todas** as actions, inclusive `Implement`, que não tem outro artefato obrigatório.
+- **Abandono**: `--reason obsoleto|duplicado|errado` **pula o gate** da action — a Issue abandonada não tem entrega a cobrar, e também não exige handoff.
+- **Pós-`APPROVED`**: uma vez aprovada pelo humano, a Issue pode ser fechada pelo agente (`--status CLOSED --reason concluido`) mesmo sendo HITL, `risk=ALTO`, `complexity=ALTA` ou `action=Deploy` — o humano já decidiu; as travas de supervisão saem do caminho para não prender o agente num loop `AWAITING → APPROVED → AWAITING`. O gate da entrega da action continua valendo.
+
+## Handoff (obrigatório em toda saída por `AWAITING`)
+
+Enviar para decisão humana **exige** o documento `handoff.md` gravado **antes** do `issues status`:
+
+```bash
+issues artifact --id <id> --name handoff.md --file ./handoff.md
+issues status --id <id> --agent <ia> --status AWAITING --comment "<evidência>"
+```
+
+Sem ele o comando falha com:
+`Envio para AWAITING exige o handoff: grave-o com 'issues artifact --id <id> --name handoff.md --file <f>' antes de enviar para decisão humana`.
+
+- O `--name handoff.md` é obrigatório: **sem** `--name`, `issues artifact` grava o Artefato legado da Issue (aquele que viaja no prompt das filhas), **não** o handoff. São dois arquivos distintos.
+- Conteúdo livre em Markdown, **≤300 palavras**. Ele existe para a sessão seguinte: escreva o que foi feito, o que ficou pendente e qual é o próximo passo concreto.
+- **Regravar substitui**: retomou uma Issue `APPROVED` e vai devolvê-la a `AWAITING`? Regrave o `handoff.md` com o estado novo — o antigo não serve mais.
+- **Ao reivindicar uma Issue `APPROVED`, leia o handoff com `issues handoff --id <id>`**: ele **não** viaja no prompt de `issues next`. O subcomando imprime o Markdown cru (não JSON); se a Issue não tiver handoff, ele falha dizendo como gravá-lo. O arquivo também fica em `$ISSUES_ROOT/projects/<projeto>/artifacts/<id>/handoff.md` (`ISSUES_ROOT` default: `~/issues-manager`), mas o comando é o caminho oficial.
+- O prompt do reclaim de uma Issue `APPROVED` já traz `issues handoff --id <id>` como passo 1 — siga o contrato que veio no prompt, não procure o handoff por conta própria.
 
 ## Correções (conserte seus próprios erros)
 
@@ -101,7 +125,7 @@ Se o sistema rejeitar por tamanho, o remédio nunca é resumir à força: crie I
 ## Comandos (issues-local)
 
 ```text
-issues project create --name <p> --repo <path>   # registra projeto (nome + repositório git, que viaja no prompt do agente)
+issues project create --name <p> --repo <path> [--concern LOW|HIGH]   # registra projeto (nome + repositório git, que viaja no prompt do agente)
 issues project list
 issues create --title <t> --project <p> --type <T> --action <A> --problem <txt>
               [--acceptance-criteria <c>] [--relates a,b] [--artifact-file <a.md>]
@@ -110,14 +134,17 @@ issues next --prompt --project <p> --agent <ia>      # reivindica a Issue mais a
 issues next --id <id> --agent <ia>                   # reivindica uma Issue específica
 issues get --id <id> [REQUIREMENTS|DESIGN|PLAN]      # recusa Issue OPEN: reivindique antes com `issues next`
 issues list [--status --project --type --title]
-issues comment --id <id> --comment <t> [--attach <arquivo>] [--role <papel>]
+issues comment --id <id> --comment <t> --agent <ia> [--attach <arquivo>] [--role <papel>]
 issues tag --id <id> [--complexity …] [--risk …] [--human-need …] --agent <ia>
 issues relate --id <id> --relates <a,b> [--kind parent|child|see-also]   # linhagem entre Issues (default see-also)
 issues decompose --id <id> --into <arquivo.json> --agent <ia>  # fan-out: cria as filhas (Design por grupo de Features / Implement por Small Plan)
-issues artifact --id <id> --file <a.md>              # grava/substitui o Artefato .md (≤300 palavras; o nome do arquivo é irrelevante)
+issues artifact --id <id> --file <a.md>              # grava/substitui o Artefato .md da Issue (≤300 palavras; o nome do arquivo em disco é irrelevante)
+issues artifact --id <id> --name handoff.md --file <f>   # grava um documento nomeado; handoff.md é exigido em toda saída por AWAITING
+issues handoff --id <id>                             # imprime o handoff.md cru (Markdown, não JSON) — leia ao retomar uma Issue APPROVED
 issues status --id <id> --agent <ia> --status AWAITING|CLOSED --comment <evidência> [--reason <r>] [--role <papel>]
 issues requirements set --id <id> --file <req.jsonl> # Features estruturadas, uma por linha (entrega de Planning)
-issues design doc|add --issue <id> [--kind <k>] --file <f>   # entrega de Design
+issues design doc --issue <id> --file <f>             # documento de Design (entrega de Design)
+issues design add --issue <id> --kind <k> --file <f>  # diagrama; --kind é obrigatório aqui
 issues design changed --issue <id> --value true|false        # decisão de arquitetura (entrega de Design)
 issues plan set --id <id> --file <plan.json>         # plano de implementação (entrega de Design)
 ```

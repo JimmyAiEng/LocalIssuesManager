@@ -90,13 +90,18 @@ Fatie em Implements pequenos: cada um deve entregar uma fatia funcional/integrá
 `mode`: `sequential` encadeia as filhas para execução em ordem; `concurrent` (default) deixa-as independentes.
 `decompose` já grava a linhagem parent/child recíproca — não chame `relate` depois.
 
+**Só `action=Implement`.**
+O Design não cria a Issue `Review` do conjunto: ela é criada **pelo próprio sistema**, automaticamente, quando a última Implement irmã fecha por `concluido` — já ligada a este Design (`kind=parent`) e às Implement concluídas.
+Criar uma Review aqui a deixaria aberta antes de existir o que revisar e ainda bloquearia o gatilho, que não dispara com Review irmã fora de `CLOSED`.
+Filha de outra action (`Planning`, `Deploy`) também não sai do Design.
+
 ## Entrega 4 — o Artefato da spec
 
 ```bash
 issues artifact --id <id> --file ./artifact.md
 ```
 
-O **nome do arquivo é irrelevante**; use `./artifact.md`.
+O **nome do arquivo em disco é irrelevante**; use `./artifact.md`. Aqui **não** se passa `--name`: sem ele o comando grava o Artefato da Issue, que é o que se quer nesta entrega.
 É este texto que viaja no prompt das Issues filhas. Máximo 300 palavras.
 
 ```markdown
@@ -196,7 +201,18 @@ issues status --id <id> --agent <ia> --status CLOSED \
   --comment "<evidência: decisão de arquitetura, desenho, fatias criadas>" --reason concluido
 ```
 
-Com `architecture_changed=true`, HITL, `risk=ALTO` ou `complexity=ALTA`: use `--status AWAITING` (sem `--reason`) — o fechamento é do humano, via `decide` no web.
+Com `architecture_changed=true`, `type=Refactor`, HITL, `risk=ALTO` ou `complexity=ALTA`: use `--status AWAITING` (sem `--reason`) — o fechamento é do humano, via `decide` no web.
 Em Projeto `concern=HIGH`, Design **não fecha por agente** nem com `architecture_changed=false`: encerre sempre por `--status AWAITING` (sem `--reason concluido`) — o aceite é humano, no web — mesmo em Issue AFK.
+
+**Toda saída por `AWAITING` exige o `handoff.md` gravado antes** — e o Design sai por `AWAITING` na maioria dos casos acima, então é a regra e não a exceção nesta fase:
+
+```bash
+issues artifact --id <id> --name handoff.md --file ./handoff.md
+issues status --id <id> --agent <ia> --status AWAITING --comment "<evidência>"
+```
+
+Sem ele o `status` falha com `Envio para AWAITING exige o handoff`.
+O `--name handoff.md` **não** é opcional: sem `--name`, o comando grava o Artefato da spec (Entrega 4), não o handoff — são arquivos distintos, e gravar um não satisfaz o outro.
+No handoff (≤300 palavras) escreva o que a sessão pós-aprovação precisa: o que ficou congelado, o que ficou pendente e o próximo passo. Detalhes na seção "Handoff" da camada 0.
 **Gate**: sem a decisão de arquitetura, sem plano válido e sem ao menos uma filha Implement, o comando sai com exit 1 e JSON `{"errors":[…]}` no stderr; a Issue permanece no status atual.
 Concluída a Issue, **encerre a sessão**: não busque outra Issue.

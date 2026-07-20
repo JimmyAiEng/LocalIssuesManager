@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -87,11 +87,44 @@ test("openBrowser não lança mesmo quando o comando do SO é inexistente (spawn
   }
 });
 
-test("openBrowser escolhe o comando certo por plataforma (darwin: open, win32: cmd, resto: xdg-open)", () => {
-  for (const platform of ["darwin", "win32", "linux"]) {
-    withPlatform(platform, () => assert.doesNotThrow(() => openBrowser("http://127.0.0.1:1")));
+test("openBrowser escolhe o comando certo por plataforma (darwin: open, win32: cmd, resto: xdg-open)", async () => {
+  const { dir, log } = fakeOpeners();
+  const originalPath = process.env.PATH;
+  process.env.PATH = dir; // só os abridores falsos no PATH: nada abre um navegador de verdade
+  try {
+    const esperados = [["darwin", "open"], ["win32", "cmd"], ["linux", "xdg-open"]];
+    for (const [indice, [platform]] of esperados.entries()) {
+      withPlatform(platform, () => openBrowser("http://example.invalid"));
+      // o log acumula: compara o prefixo inteiro, que também prova a ordem das escolhas
+      assert.deepEqual(await waitForLines(log, indice + 1, 3000), esperados.slice(0, indice + 1).map(([, cmd]) => cmd));
+    }
+  } finally {
+    process.env.PATH = originalPath;
   }
 });
+
+// Abridores falsos: cada um registra o próprio nome em vez de abrir o SO, revelando a escolha por plataforma.
+function fakeOpeners(): { dir: string; log: string } {
+  const dir = mkdtempSync(join(tmpdir(), "issues-opener-"));
+  const log = join(dir, "opened.log");
+  for (const name of ["open", "cmd", "xdg-open"]) {
+    const file = join(dir, name);
+    writeFileSync(file, `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(name)} >> ${JSON.stringify(log)}\n`);
+    chmodSync(file, 0o755);
+  }
+  return { dir, log };
+}
+
+// spawn é detached: o registro do abridor chega em algum momento depois da chamada.
+async function waitForLines(path: string, count: number, timeoutMs: number): Promise<string[]> {
+  let lines: string[] = [];
+  for (let waited = 0; waited < timeoutMs; waited += 25) {
+    if (existsSync(path)) lines = readFileSync(path, "utf8").trim().split("\n").filter(Boolean);
+    if (lines.length >= count) return lines;
+    await new Promise((done) => setTimeout(done, 25));
+  }
+  return lines;
+}
 
 function withPlatform(platform: string, run: () => void): void {
   const original = Object.getOwnPropertyDescriptor(process, "platform")!;

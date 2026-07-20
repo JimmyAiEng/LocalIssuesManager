@@ -82,4 +82,5 @@ issues status --id <id> --agent <ia> --status CLOSED \
 ```
 
 Use `--status AWAITING` (sem `--reason`) se a Issue é HITL, `risk=ALTO` ou `complexity=ALTA`.
+**Toda saída por `AWAITING` exige o `handoff.md` gravado antes** — `issues artifact --id <id> --name handoff.md --file ./handoff.md` —, senão o `status` falha (veja "Handoff" na camada 0).
 Concluída a Issue, **encerre a sessão**: não busque outra Issue.

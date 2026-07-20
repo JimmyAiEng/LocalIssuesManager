@@ -28,6 +28,16 @@ Sem worktree, sem check automático, sem verificação de histórico TDD — nad
 - Review interno **não** substitui uma Issue `Review` para o conjunto.
 - **Como** implementar (ferramentas, desenho do teste, uso de worktree) é decisão do agente.
 
+## Refactor
+
+O gate **não** diverge por type: `Implement` cobra a mesma evidência para `Fix`, `Feat`, `Research` e `Refactor`.
+O que muda numa Issue `type=Refactor` é a disciplina da fatia — o Refactor não muda funcionalidade:
+
+- **Não altere teste e2e.** Se o comportamento externo não muda, os e2e não deveriam mudar. A Review de Refactor reprova diff que mexe em e2e (`phases/review.md`) — se você precisou alterar um, o comportamento mudou: pare e trate como mudança de escopo.
+- A suíte existente é o seu critério: rode-a **antes** e **depois** e cite os dois resultados na evidência. Verde→verde sem editar teste é o que prova que não houve regressão.
+- Teste novo é bem-vindo (cobrir o que a refatoração expôs); teste **alterado** para acomodar a mudança é sinal de regressão.
+- Comportamento que você quis mudar no meio do caminho vira Issue nova relacionada — nunca entra de carona no Refactor.
+
 ## Encerramento
 
 ```bash
@@ -35,6 +45,11 @@ issues status --id <id> --agent <ia> --status CLOSED \
   --comment "<evidência: o que foi implementado, como validou, decisões>" --reason concluido
 ```
 
-Use `--status AWAITING` (sem `--reason`) se a Issue é HITL, `risk=ALTO` ou `complexity=ALTA`.
 Esta action não tem artefato obrigatório: a evidência vai no `--comment`.
+Se a Issue é HITL, `risk=ALTO` ou `complexity=ALTA`, use `--status AWAITING` (sem `--reason`) — e **grave o `handoff.md` antes**, senão o comando falha (veja "Handoff" na camada 0):
+
+```bash
+issues artifact --id <id> --name handoff.md --file ./handoff.md
+issues status --id <id> --agent <ia> --status AWAITING --comment "<evidência>"
+```
 Concluída a Issue, **encerre a sessão**: não busque outra Issue.

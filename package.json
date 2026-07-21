@@ -1,6 +1,6 @@
 {
   "name": "@jimmypgomes/issues-local",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Issues manager local (CLI + web) com pack de skills SDLC para agentes (claude-code, cursor, codex, pi)",
   "license": "MIT",
   "type": "module",

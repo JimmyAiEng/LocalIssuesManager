@@ -22,7 +22,7 @@ export type CreateInput = {
   title: string; project: string; type: string; action: string; problem: string;
   acceptance_criteria?: string; actor: string; now?: Date;
   complexity?: string; human_need?: string; risk?: string; artifact?: string;
-  relates?: string[]; attachments?: IncomingAttachment[];
+  relates?: string[]; attachments?: IncomingAttachment[]; integration?: boolean;
 };
 
 export function createIssue(input: CreateInput, root?: string): Issue {
@@ -34,7 +34,7 @@ export function createIssue(input: CreateInput, root?: string): Issue {
   const created = persistableAttachments(input.attachments, input.now); // valida antes de criar a Issue
   const issue = Issue.create({ title: input.title, project: input.project,
     type: parseIssueType(input.type), action: parseActionType(input.action), problem: input.problem,
-    acceptance_criteria: input.acceptance_criteria, // relates fica com relateIssues, abaixo: aresta nos dois lados
+    acceptance_criteria: input.acceptance_criteria, integration: input.integration, // relates fica com relateIssues, abaixo
     attachments: created.map(({ entity }) => entity.toJSON()) }, actor, input.now);
   const tags: TagUpdates = { complexity: input.complexity, human_need: input.human_need, risk: input.risk };
   if (Object.values(tags).some((value) => value !== undefined)) issue.tag(tags, actor); // reusa applyTags (valida enums)

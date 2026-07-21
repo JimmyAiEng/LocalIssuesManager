@@ -7,6 +7,7 @@ export type Phase = { status: IssueStatus; timestamp: string };
 export type CreateIssue = {
   title: string; project: string; type: IssueType; action: ActionType; problem: string;
   acceptance_criteria?: string; relates?: string[]; attachments?: MediaArtifactData[];
+  integration?: boolean;
 };
 export type IssueData = {
   id: string; title: string; project: string; type: IssueType; action: ActionType;
@@ -14,6 +15,9 @@ export type IssueData = {
   closed_reason: ClosedReason | null; claimed_at: string | null; created_at: string;
   status_changed_at: string; thread: Thread[]; phases: Phase[]; relates: Relation[];
   revision: number; tags: Tags; architecture_changed: boolean | null;
+  // Marcador da Issue de integração criada pelo gatilho: distingue-a de uma fatia comum para
+  // não gerar integração recursiva e para disparar a Review só quando ela fecha (review_trigger).
+  integration: boolean;
 };
 
 // Uma Issue é a unidade de trabalho: type diz o problema (Fix/Feat/Research/Refactor) e
@@ -24,13 +28,14 @@ export class Issue implements IssueData {
   problem!: string; acceptance_criteria!: string; status!: IssueStatus; owner!: Actor | null;
   closed_reason!: ClosedReason | null; claimed_at!: string | null; created_at!: string;
   status_changed_at!: string; thread!: Thread[]; phases!: Phase[]; relates!: Relation[];
-  revision!: number; tags!: Tags; architecture_changed!: boolean | null; baseRevision!: number;
+  revision!: number; tags!: Tags; architecture_changed!: boolean | null; integration!: boolean; baseRevision!: number;
 
   private constructor(data: IssueData) {
     Object.assign(this, data);
     this.tags = data.tags ?? {};
     this.relates = normalizeRelations(data.relates); // JSON antigo (string[]) carrega como see-also
     this.architecture_changed = data.architecture_changed ?? null; // null = decisão de arquitetura ainda não tomada
+    this.integration = data.integration ?? false; // JSON antigo sem o campo carrega como fatia comum
     this.baseRevision = data.revision;
   }
 
@@ -53,7 +58,8 @@ export class Issue implements IssueData {
     return { ...fields, acceptance_criteria: input.acceptance_criteria ?? "",
       id: randomUUID(), status: "OPEN", owner: null, closed_reason: null, claimed_at: null,
       created_at: timestamp, status_changed_at: timestamp, thread: [entry],
-      phases: [{ status: "OPEN", timestamp }], relates: normalizeRelations(relates), revision: 0, tags: {}, architecture_changed: null };
+      phases: [{ status: "OPEN", timestamp }], relates: normalizeRelations(relates), revision: 0, tags: {}, architecture_changed: null,
+      integration: input.integration ?? false };
   }
 
   static fromJSON(data: IssueData): Issue {

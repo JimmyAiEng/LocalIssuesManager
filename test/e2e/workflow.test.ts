@@ -115,32 +115,59 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> Review 
   // Aprovação humana gera APPROVED; o agente reivindica a aprovada, SÓ ENTÃO decompõe e fecha.
   assert.equal(json(["decide", "--id", designArch, "--human", "--status", "APPROVED", "--comment", "aceito"], vars).status, "APPROVED");
   claim(vars, designArch);
-  const implA = decompose(vars, designArch, [
-    { title: "Impl auth 1", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) },
-    { title: "Impl auth 2", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) },
-  ]);
+  // Multi-Design: com um Design irmão sob o mesmo Planning, o Design NÃO decompõe em Implement (as
+  // fatias irmãs podem conflitar) — quem cria as Implement é a reconciliação (ConflictReview).
+  const blockedDecomp = attempt(["decompose", "--id", designArch, "--into",
+    fixture("blk.json", JSON.stringify({ children: [{ title: "x", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) }] })), "--agent", "pi"], vars);
+  assert.equal(blockedDecomp.status, 1);
+  assert.match(blockedDecomp.stderr, /não decompõe em Implement/);
+  // O Design fecha sem filha Implement (multi-Design dispensa a decomposição direta). Ainda há um
+  // Design irmão vivo, então a reconciliação ainda não nasce.
   assert.equal(closeAgent(vars, designArch).status, "CLOSED");
+  assert.equal(json(["list", "--project", "demo"], vars).some((i: { action: string }) => i.action === "ConflictReview"), false);
 
   // === DESIGN B (Registro): architecture_changed=false — atalho ao plano, fecha AFK ============
   claim(vars, designShortcut);
   run(["design", "changed", "--issue", designShortcut, "--value", "false"], vars);
   run(["plan", "set", "--id", designShortcut, "--file", fixture("plan.json", PLAN)], vars);
-  const implB = decompose(vars, designShortcut, [
+  assert.equal(closeAgent(vars, designShortcut).status, "CLOSED"); // multi-Design: fecha sem decompor
+
+  // === CONFLICT REVIEW: o último Design irmão fechou -> reconciliação criada sob o Planning =======
+  const conflict = json(["list", "--project", "demo"], vars).find((i: { action: string }) => i.action === "ConflictReview");
+  assert.ok(conflict, "o fechamento do último Design irmão cria o ConflictReview");
+  assert.ok(conflict.relates.includes(planning), "ConflictReview ligado ao Planning (kind=parent)");
+  claim(vars, conflict.id);
+  // Gate negativo: sem reconciliation.md o ConflictReview não fecha.
+  const noRecon = attempt(["status", "--id", conflict.id, "--agent", "pi", "--status", "CLOSED", "--comment", "fim", "--reason", "concluido"], vars);
+  assert.equal(noRecon.status, 1);
+  assert.match(noRecon.stderr, /reconciliation\.md/);
+  run(["artifact", "--id", conflict.id, "--name", "reconciliation.md", "--file", fixture("recon.md", "# plano reconciliado: fatias sem conflito")], vars);
+  // A reconciliação decompõe em 4 Implement (o fan-out que antes saía dos Designs, agora reconciliado).
+  const implementIds = decompose(vars, conflict.id, [
+    { title: "Impl auth 1", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) },
+    { title: "Impl auth 2", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) },
     { title: "Impl reg 1", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) },
     { title: "Impl reg 2", type: "Feat", action: "Implement", problem: "p", plan: JSON.parse(PLAN) },
   ]);
-  assert.equal(closeAgent(vars, designShortcut).status, "CLOSED"); // sem mudança de arquitetura: fecha direto
+  assert.equal(implementIds.length, 4);
+  assert.equal(closeAgent(vars, conflict.id).status, "CLOSED");
 
   // === IMPLEMENT x4: sem gate de entrega, fecham AFK só com a evidência =========================
-  const implementIds = [...implA, ...implB];
-  assert.equal(implementIds.length, 4);
   for (const id of implementIds) {
     claim(vars, id);
     assert.equal(closeAgent(vars, id).status, "CLOSED");
   }
 
-  // === Review: exige intent + 2 evidence + veredito -> fecha AFK ===================================
-  const qa = create(vars, "Review", "Review do conjunto", planning);
+  // === INTEGRAÇÃO: a última das 4 fatias gera a Issue de integração antes da Review =============
+  const integration = json(["list", "--project", "demo"], vars)
+    .find((i: { action: string; title: string }) => i.action === "Implement" && i.title.startsWith("Integração:"));
+  assert.ok(integration, "a última fatia cria a integração sob o ConflictReview");
+  claim(vars, integration.id);
+  assert.equal(closeAgent(vars, integration.id).status, "CLOSED");
+
+  // === Review: criada ao fechar a integração; exige intent + 2 evidence + veredito -> fecha AFK ==
+  const qa = json(["list", "--project", "demo"], vars).find((i: { action: string }) => i.action === "Review").id;
+  assert.ok(qa, "fechar a integração cria a Quality Review");
   claim(vars, qa);
   const noArtifact = attempt(["status", "--id", qa, "--agent", "pi", "--status", "CLOSED", "--comment", "fim", "--reason", "concluido"], vars);
   assert.equal(noArtifact.status, 1);
@@ -177,6 +204,8 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> Review 
   assert.equal(status(vars, planning), "CLOSED");
   assert.equal(status(vars, designArch), "CLOSED"); // aprovado (APPROVED) e fechado pelo agente
   assert.equal(status(vars, designShortcut), "CLOSED"); // AFK
+  assert.equal(status(vars, conflict.id), "CLOSED"); // reconciliação AFK
+  assert.equal(status(vars, integration.id), "CLOSED");
   for (const id of implementIds) assert.equal(status(vars, id), "CLOSED");
   assert.equal(status(vars, qa), "CLOSED");
   assert.equal(status(vars, deploy), "CLOSED");

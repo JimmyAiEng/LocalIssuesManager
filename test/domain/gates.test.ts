@@ -7,7 +7,7 @@ test("cada Action possui um Gate com o mesmo padrão de requisitos", () => {
   const gates = ACTION_TYPES.map(gateFor);
   assert.deepEqual(gates.map((gate) => gate.action), [...ACTION_TYPES]);
   assert.deepEqual(gates.map((gate) => gate.name),
-    ["Requirement Engineering", "Design", "Unit of Work", "Quality Review", "Merge/PR Analysis"]);
+    ["Requirement Engineering", "Design", "Conflict Review", "Unit of Work", "Quality Review", "Merge/PR Analysis"]);
   for (const gate of gates) {
     assert.ok(["none", "required", "conditional"].includes(gate.artifacts.mode));
     assert.ok(["none", "required", "conditional"].includes(gate.codeExecution.mode));
@@ -23,6 +23,7 @@ test("gates declaram artefatos, execução de código e aprovação humana", () 
   }), [
     ["Planning", "required", ["requirement"], "none", "conditional"],
     ["Design", "required", ["implementation-plan"], "conditional", "conditional"],
+    ["ConflictReview", "required", ["document"], "none", "conditional"],
     ["Implement", "none", [], "none", "conditional"],
     ["Review", "required", ["document"], "none", "conditional"],
     ["Deploy", "none", [], "required", "required"],

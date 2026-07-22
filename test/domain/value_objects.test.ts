@@ -22,7 +22,7 @@ test("VOs aceitam somente os enums exatos", () => {
 
 test("enums carregam exatamente os valores esperados (sem Ticket, sem ON-GOING)", () => {
   assert.deepEqual([...ISSUE_TYPES], ["Fix", "Feat", "Research", "Refactor"]);
-  assert.deepEqual([...ACTION_TYPES], ["Planning", "Design", "Implement", "Review", "Deploy"]);
+  assert.deepEqual([...ACTION_TYPES], ["Planning", "Design", "ConflictReview", "Implement", "Review", "Deploy"]);
   assert.deepEqual([...ISSUE_STATUSES], ["OPEN", "CLAIMED", "AWAITING", "APPROVED", "CLOSED"]);
   assert.throws(() => parseIssueStatus("ON-GOING"), /Invalid status: ON-GOING/);
   // Role (papel do workflow) é ortogonal ao AgentId (harness): rastreia QUEM fez o trabalho.
@@ -43,7 +43,7 @@ test("VOs identificam o enum inválido nas mensagens de domínio", () => {
   invalid(parseClosedReason, "Invalid closed reason: bad (use obsoleto|duplicado|concluido|errado)");
   invalid(parseIssueStatus, "Invalid status: bad (use OPEN|CLAIMED|AWAITING|APPROVED|CLOSED)");
   invalid(parseIssueType, "Invalid type: bad (use Fix|Feat|Research|Refactor)");
-  invalid(parseActionType, "Invalid action: bad (use Planning|Design|Implement|Review|Deploy)");
+  invalid(parseActionType, "Invalid action: bad (use Planning|Design|ConflictReview|Implement|Review|Deploy)");
   invalid(parseRole, "Invalid role: bad (use requirement|breaking-issues|architect|test-coding|coding|review|pr-analysis)");
 });
 

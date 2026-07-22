@@ -4,7 +4,7 @@ import { DomainError } from "./domain_error.js";
 export const AGENT_IDS = ["cursor", "claude-code", "codex", "pi"] as const;
 export const CLOSED_REASONS = ["obsoleto", "duplicado", "concluido", "errado"] as const;
 export const ISSUE_TYPES = ["Fix", "Feat", "Research", "Refactor"] as const;
-export const ACTION_TYPES = ["Planning", "Design", "Implement", "Review", "Deploy"] as const;
+export const ACTION_TYPES = ["Planning", "Design", "ConflictReview", "Implement", "Review", "Deploy"] as const;
 export const ISSUE_STATUSES = ["OPEN", "CLAIMED", "AWAITING", "APPROVED", "CLOSED"] as const;
 // Linhagem direcionada entre Issues: parent/child expressam o fan-out Planning→Design→Implement
 // (ancestral↔descendente); see-also é a relação simétrica sem direção (o default retrocompatível).
@@ -135,6 +135,12 @@ export function wasApproved(phases: readonly { status: IssueStatus }[]): boolean
 // nenhuma satisfaz os gates que exigem a próxima etapa existindo de fato.
 export function isLive(status: IssueStatus): boolean {
   return status === "OPEN" || status === "CLAIMED";
+}
+
+// Abandono administrativo: fechada por motivo que não seja "concluido" (errado/obsoleto/duplicado) —
+// a Issue não entregou nada. Issue viva (reason null) não conta como abandonada.
+export function isAbandoned(reason: ClosedReason | null): boolean {
+  return reason !== null && reason !== "concluido";
 }
 
 export function parseAgentId(value: string): AgentId {

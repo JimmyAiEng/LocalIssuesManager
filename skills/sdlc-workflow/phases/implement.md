@@ -8,8 +8,15 @@ O **como** implementar (worktree, desenho do teste, ferramentas) é decisão do 
 
 ## Fluxo da Unit of Work
 
-1. **Isole o trabalho (recomendado)**: trabalhe numa worktree/branch própria do repo do projeto — `git worktree add ../<fatia> -b issue/<id>`.
-   É orientação, não obrigação: o CLI não cria a worktree nem exige uma para concluir.
+1. **Isole o trabalho (obrigatório)**: cada fatia trabalha numa worktree própria, ramificada de `origin/main` atualizado, para dois ou mais agentes não colidirem no mesmo working copy.
+
+   ```bash
+   git fetch origin
+   git worktree add ../<id> -b <type>/<id> origin/main   # ex.: feat/39a1eb97
+   ```
+
+   O `<type>` é o type da Issue em minúsculas (`feat` · `fix` · `refactor` · `research`); o `<id>` é único, então a branch nunca colide com a de outra fatia da mesma família.
+   O CLI não cria a worktree nem verifica isso na conclusão — é regra de processo, cobrada mais à frente pela evidência do PR único no Deploy —, mas pular o isolamento é o que faz os trabalhos se misturarem: não pule.
 2. **Implemente a fatia** até ela ficar funcional e integrável conforme a spec.
    Escrever os testes antes (TDD) é uma boa prática, mas ninguém a força aqui.
 3. **Valide com as ferramentas do próprio repositório** (lint, testes, fitness, build, e2e, mutação na parte alterada — o que o repo oferecer).
@@ -19,14 +26,15 @@ O **como** implementar (worktree, desenho do teste, ferramentas) é decisão do 
 ## Gate de conclusão
 
 Esta action não tem artefato obrigatório e o CLI não executa código: o gate cobra apenas a **evidência** da conclusão.
-A evidência (`--comment`) é um relatório curto do que foi implementado, o que você rodou para validar e o resultado.
-Sem worktree, sem check automático, sem verificação de histórico TDD — nada disso bloqueia o fechamento; a qualidade da fatia é sua responsabilidade e será cobrada na Review do conjunto.
+A evidência (`--comment`) é um relatório curto do que foi implementado, o que você rodou para validar e o resultado — inclua o nome da branch `<type>/<id>` onde a fatia ficou.
+Sem check automático, sem verificação de histórico TDD — nada disso bloqueia o fechamento; a qualidade da fatia é sua responsabilidade e será cobrada na Review do conjunto.
+O isolamento em worktree é regra (veja o Fluxo), mas o CLI não o verifica: quem cobra o PR único é o Deploy.
 
 ## Heurísticas
 
 - Fatia grande → crie Issues `Implement` de continuação, relacionadas, e abandone esta (`--reason obsoleto`).
 - Review interno **não** substitui uma Issue `Review` para o conjunto.
-- **Como** implementar (ferramentas, desenho do teste, uso de worktree) é decisão do agente.
+- **Como** implementar (ferramentas, desenho do teste) é decisão do agente; **isolar em worktree de `origin/main`** não é — é regra (veja o Fluxo).
 
 ## Refactor
 

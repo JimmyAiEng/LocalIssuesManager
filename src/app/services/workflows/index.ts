@@ -4,6 +4,7 @@ import { assessGate, gateFor, type GateViolation } from "../../../domain/gates/i
 import type { Issue } from "../../../domain/issue_entity.js";
 import type { ConcernLevel, Queue } from "../../../domain/queue_repository.js";
 import { parseAgentId, parseClosedReason, parseRole, wasApproved } from "../../../domain/value_objects.js";
+import { validateConflictReview } from "./conflict_review.js";
 import { validateDeploy } from "./deploy.js";
 import { validateDesign } from "./design.js";
 import { validatePlanning } from "./planning.js";
@@ -95,6 +96,7 @@ export async function validateWorkflowDelivery(queue: Queue, issue: Issue, comme
   status: CompletionStatus): Promise<void> {
   if (issue.action === "Planning") return validatePlanning(queue, issue, status);
   if (issue.action === "Design") return validateDesign(queue, issue, status);
+  if (issue.action === "ConflictReview") return validateConflictReview(queue, issue, status);
   if (issue.action === "Review") return validateReview(queue, issue, status);
   if (issue.action === "Deploy") return validateDeploy(issue, comment);
   // Implement não tem gate de entrega: a evidência já é exigida pela transição de status.

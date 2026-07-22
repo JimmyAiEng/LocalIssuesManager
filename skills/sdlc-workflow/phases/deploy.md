@@ -9,7 +9,8 @@ No diagrama: **Merge & Pull Request** → análise estática → **PR Analysis**
 
 ## Validações da fase
 
-- Prepare o PR com o conjunto integrado; **não** faça o merge.
+- Prepare **um único** PR: da branch integrada (`integration/<parent-id>` quando houve várias fatias, ou a única `<type>/<id>` quando a fatia foi única) para `origin/main`; **não** faça o merge.
+  Um PR por família — nunca um PR por Issue Implement —, senão os PRs concorrentes voltam a se misturar.
 - Se o repositório tiver análise estática de PR (ex.: SonarQube), aguarde/colete o resultado.
 - **PR Analysis**: analise o diff do PR e os apontamentos da análise estática; trate ou registre cada um antes de pedir o go/no-go.
 

@@ -1,4 +1,5 @@
 import type { ActionType } from "../value_objects.js";
+import { CONFLICT_REVIEW_GATE } from "./conflict_review_gate.js";
 import { DEPLOY_GATE } from "./deploy_gate.js";
 import { DESIGN_GATE } from "./design_gate.js";
 import type { GateDefinition } from "./gate.js";
@@ -9,12 +10,14 @@ import { REVIEW_GATE } from "./review_gate.js";
 const GATES: Record<ActionType, GateDefinition> = {
   Planning: PLANNING_GATE,
   Design: DESIGN_GATE,
+  ConflictReview: CONFLICT_REVIEW_GATE,
   Implement: IMPLEMENT_GATE,
   Review: REVIEW_GATE,
   Deploy: DEPLOY_GATE,
 };
 
 export function gateFor(action: ActionType): GateDefinition { return structuredClone(GATES[action]); }
+export * from "./conflict_review_gate.js";
 export * from "./deploy_gate.js";
 export * from "./design_gate.js";
 export * from "./gate.js";

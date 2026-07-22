@@ -12,6 +12,7 @@ Cada etapa grava um documento, e **só se avança quando a etapa anterior não e
    É onde a mudança foi pedida e desenhada.
    Registre a intenção compreendida em `intent.md`.
 2. **Rebase com a base do projeto** (prd/hml/dev) para revisar contra o estado real de integração.
+   Revise sobre a branch integrada — `integration/<parent-id>` quando houve mais de uma fatia (a Issue de integração a criou), ou a única `<type>/<id>` quando a fatia foi única.
 3. **Conflict Check** — verifique conflitos de integração após o rebase.
    Grave o que verificou em uma `evidence-*.md`.
 4. **Adversarial Check** — só se o Conflict Check **não** achou problema.

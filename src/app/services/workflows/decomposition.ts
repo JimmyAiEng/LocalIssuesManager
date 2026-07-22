@@ -3,6 +3,7 @@ import { ImplementationPlanArtifact } from "../../../domain/artifacts/implementa
 import { type Feature, RequirementArtifact, type RequirementSet } from "../../../domain/artifacts/requirement_artifact.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import type { Queue } from "../../../domain/queue_repository.js";
+import { designSiblings } from "./design_siblings.js";
 import { designChildCoverage } from "./planning.js";
 
 // Formato do arquivo --into: descreve as filhas do fan-out. mode concurrent (default) = filhas
@@ -20,8 +21,18 @@ export type Decomposition = { mode?: string; children: DecomposeChild[] };
 // gates depois cobram.
 export function validateChildren(queue: Queue, parent: Issue, children: DecomposeChild[]): void {
   if (parent.action === "Planning") return validateDesignChildren(queue, parent, children);
-  if (parent.action === "Design") return validateImplementChildren(children);
-  throw new DomainError(`Issue ${parent.id} (action=${parent.action}) não decompõe: só Planning (→Design) e Design (→Implement)`);
+  if (parent.action === "Design") { requireSoleDesign(queue, parent); return validateImplementChildren(children); }
+  if (parent.action === "ConflictReview") return validateImplementChildren(children);
+  throw new DomainError(`Issue ${parent.id} (action=${parent.action}) não decompõe: só Planning (→Design), Design e ConflictReview (→Implement)`);
+}
+
+// Um Design que concorre com irmãos (2+ Designs não abandonados sob o mesmo pai) não cria Implement:
+// as fatias irmãs podem conflitar, então a reconciliação (ConflictReview) junta os Designs e é ELA
+// que decompõe. Design sozinho decompõe direto, como sempre (retrocompatível).
+function requireSoleDesign(queue: Queue, parent: Issue): void {
+  if (designSiblings(queue, parent).length > 1) {
+    throw new DomainError(`Design ${parent.id} não decompõe em Implement: há Designs irmãos sob o mesmo pai (conflito possível entre fatias concorrentes). A reconciliação (ConflictReview) nasce quando o último Design irmão fecha e é ela que cria as Issues Implement.`);
+  }
 }
 
 // Cada filha Design declara em `features` o grupo de Features que cobre: requisito é linguagem do

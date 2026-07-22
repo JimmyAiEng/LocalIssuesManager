@@ -8,6 +8,7 @@ import { DomainError, NotFoundError } from "../../../domain/domain_error.js";
 import type { Issue } from "../../../domain/issue_entity.js";
 import type { Queue } from "../../../domain/queue_repository.js";
 import { isLive } from "../../../domain/value_objects.js";
+import { designSiblings } from "./design_siblings.js";
 import { checkSyntax } from "../uml-validation/plantuml_check.js";
 import type { CompletionStatus } from "./index.js";
 
@@ -61,6 +62,9 @@ export function requireValidPlan(queue: Queue, project: string, issueId: string)
 // Small Plan) e com ao menos uma delas viva — filha já CLOSED (ou parada em AWAITING/APPROVED)
 // não continua o fan-out, então o Design fechar em cima dela pararia a sequência.
 function requireImplementChild(queue: Queue, issue: Issue): void {
+  // Multi-Design: quem decompõe em Implement é a reconciliação (ConflictReview), criada pelo gatilho
+  // quando o último Design irmão fecha. Este gate nunca trava aqui — só o Design sozinho decompõe.
+  if (designSiblings(queue, issue).length > 1) return;
   const hasImplement = issue.relates.filter((relation) => relation.kind === "child")
     .map((relation) => queue.load(relation.id))
     .some((child) => child?.action === "Implement" && isLive(child.status));

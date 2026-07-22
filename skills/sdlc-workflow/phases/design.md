@@ -80,7 +80,15 @@ O **nome do arquivo em disco é irrelevante**; use `./artifact.md`. Aqui **não*
 
 ## Entrega 4 — uma Issue Implement por fatia
 
-O gate exige **ao menos uma filha `action=Implement` viva** (`OPEN` ou `CLAIMED`) na transição para `CLOSED`.
+**Antes de decompor, veja se este Design é o único do Planning.**
+A cobrança de filha Implement é **condicional** ao número de Designs vivos do mesmo Planning:
+
+- **Design único** (o Planning tem só este Design vivo): o comportamento é o desta seção — o Design decompõe direto em Implement e fecha exigindo ao menos uma filha Implement viva.
+- **Design um-de-vários** (o Planning tem mais de um Design vivo): este Design **não** cria Implement. Quem decompõe em Implement é a `ConflictReview`, uma única vez, sobre o plano reconciliado (`phases/conflict-review.md`). Um Design um-de-vários fecha exigindo apenas a existência de **uma** destas: uma `ConflictReview`, um Design irmão vivo (`OPEN`/`CLAIMED`) ou uma Implement viva. A `ConflictReview` é **criada pelo próprio sistema** quando o **último** Design irmão vivo fecha por `concluido` — não a crie na mão, e não decomponha este Design em Implement.
+
+O restante desta seção (o `decompose` com Small Plan por fatia) vale para o **Design único**; num Design um-de-vários, pule direto para o Encerramento.
+
+O gate do Design único exige **ao menos uma filha `action=Implement` viva** (`OPEN` ou `CLAIMED`) na transição para `CLOSED`.
 Filha `CLOSED`, `AWAITING` ou `APPROVED` não satisfaz o gate.
 
 **Quando decompor**: só no passo que **fecha** a Issue.
@@ -231,5 +239,5 @@ Como a decomposição é passo pós-`APPROVED`, cite no handoff as fatias que vi
 
 - **`AWAITING`** cobra a decisão de arquitetura, o plano válido e o pacote de design quando `architecture_changed=true`.
   E recusa a Issue se ela já tiver qualquer filha: a decomposição vem depois da aprovação humana.
-- **`CLOSED`** cobra o mesmo conteúdo **mais** ao menos uma filha Implement viva (`OPEN` ou `CLAIMED`).
+- **`CLOSED`** cobra o mesmo conteúdo **mais** a filha exigida pelo caso: no **Design único**, ao menos uma filha Implement viva (`OPEN` ou `CLAIMED`); no **Design um-de-vários**, a existência de uma `ConflictReview`, um Design irmão vivo ou uma Implement viva (veja a Entrega 4).
 Concluída a Issue, **encerre a sessão**: não busque outra Issue.

@@ -44,6 +44,22 @@ Grave as entregas nesta ordem (comandos prontos para esta Issue):
 5. Encerramento com evidência:
 {{close}}`,
 
+  ConflictReview: `Reconcilie os Designs irmãos concluídos (listados em "Issues relacionadas"): cobrem Features diferentes, mas podem tocar o mesmo código e gerar conflitos entre agentes. Produza UM plano reconciliado — não altere os Designs (estão CLOSED). Só avance quando a etapa anterior não achou problema.
+
+Fluxo desta Issue (comandos prontos):
+
+1. Leia os Designs irmãos (artefatos e planos nas Issues relacionadas) e identifique conflitos entre as fatias (mesmos arquivos/interfaces).
+2. Plano reconciliado — markdown, máx. 300 palavras, descrevendo como as fatias convivem sem conflito e como se dividem as Issues Implement:
+   issues artifact --id {{id}} --name reconciliation.md --file reconciliation.md
+3. Decomposição — as Issues Implement reconciliadas, cada uma com o seu Small Plan:
+   issues decompose --id {{id}} --into decompose.json --agent {{agent}}
+   Conteúdo exato de decompose.json:
+   {"children": [{"title": "Implement: <fatia>", "type": "Feat", "action": "Implement", "problem": "<o que implementar>", "plan": {"objetivo": "<resultado>", "passos": ["<passo>"], "arquivos": ["<arquivo>"], "criterio_pronto": "<verificação>"}}]}
+   QUANDO decompor: só no passo que FECHA a Issue. Se o encerramento for --status AWAITING, NÃO decomponha agora — ir para AWAITING com filha já criada é recusado; registre no handoff.md as fatias e decomponha quando a Issue voltar APROVADA. Se for --status CLOSED, decomponha antes: o CLOSED exige ao menos uma filha Implement VIVA (OPEN ou CLAIMED).
+4. Encerramento com evidência:
+   issues status --id {{id}} --agent {{agent}} --status CLOSED --comment "<o que reconciliou e como dividiu as fatias>" --reason concluido
+   (HITL, risk=ALTO ou complexity=ALTA: use --status AWAITING, sem --reason.)`,
+
   Implement: `Fluxo desta Issue (comandos prontos):
 
 1. Trabalhe isolado numa worktree do repo (recomendado, não obrigatório; o CLI não a cria nem cobra): git worktree add ../<fatia> -b issue/{{id}}. A orientação completa está em phases/implement.md.

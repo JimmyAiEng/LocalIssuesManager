@@ -56,7 +56,7 @@ Quem sai por `AWAITING` registra no `handoff.md` que a decomposição ficou pend
 
 O `type` da Issue escolhe a jornada; a `action` é a fase dentro dela.
 
-- **`Feat`** — jornada completa: `Planning → Design → Implement → Review → Deploy`.
+- **`Feat`** — jornada completa: `Planning → Design → [ConflictReview quando >1 Design] → Implement → Review → Deploy`. A `ConflictReview` só entra quando um Planning tem mais de um Design vivo: ela reconcilia as specs irmãs e decompõe em Implement. Planning de Design único pula essa etapa (o Design decompõe direto em Implement). Veja `phases/conflict-review.md`.
 - **`Refactor`** — refatorar sem mudar funcionalidade. **Começa no Design** (não tem Planning — o sistema recusa `Refactor`+`Planning`). O Design **sempre passa pelo engenheiro** (nunca fecha AFK, nem com `architecture_changed=false`). O Review foca em **regressão** (bug/vulnerabilidade introduzido), não em intenção: troca o `intent.md` pelo `diff-check.md`, onde você **declara** se a interface pública mudou e se algum teste e2e mudou. O sistema confia na declaração — ele nunca lê o diff —, mas cobra a consequência dela no encerramento com veredito APROVADO: e2e alterado não conclui (o veredito é REPROVADO) e interface alterada só conclui havendo um Design `APPROVED` na cadeia de parents da Review. Ao fim de um `Fix`, a melhoria arquitetural adiada vira uma Issue `Refactor` relacionada.
 - **`Fix`** — mais direto (hot-fix). Guias próprios ainda não separados; siga o guia da action e a ênfase de causa-raiz.
 
@@ -73,6 +73,7 @@ Leia o arquivo da action reivindicada — ele traz o workflow, a entrega obrigat
 |---|---|
 | `Planning` | `phases/planning.md` |
 | `Design` | `phases/design.md` |
+| `ConflictReview` | `phases/conflict-review.md` |
 | `Implement` | `phases/implement.md` |
 | `Review` | `phases/review.md` |
 | `Deploy` | `phases/deploy.md` |

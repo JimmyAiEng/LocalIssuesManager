@@ -236,7 +236,7 @@ test("e2e: erro de enum enumera os valores aceitos na própria mensagem", () => 
     [["tag", "--id", created.id, "--risk", "HIGH", "--human"], /Invalid risk: HIGH \(use BAIXO\|MEDIO\|ALTO\)/],
     [["tag", "--id", created.id, "--human-need", "MAYBE", "--human"], /Invalid human_need: MAYBE \(use HITL\|AFK\)/],
     [createArgs.map((arg) => arg === "Feat" ? "Bug" : arg), /Invalid type: Bug \(use Fix\|Feat\|Research\|Refactor\)/],
-    [createArgs.map((arg) => arg === "Review" ? "Coding" : arg), /Invalid action: Coding \(use Planning\|Design\|Implement\|Review\|Deploy\)/],
+    [createArgs.map((arg) => arg === "Review" ? "Coding" : arg), /Invalid action: Coding \(use Planning\|Design\|ConflictReview\|Implement\|Review\|Deploy\)/],
     [["comment", "--id", created.id, "--agent", "pi", "--comment", "x", "--role", "wizard"], /Invalid role: wizard \(use requirement\|/],
     [["decide", "--id", created.id, "--human", "--status", "DONE", "--comment", "x"], /Invalid decision: DONE \(use OPEN\|APPROVED\|CLOSED\)/],
   ];

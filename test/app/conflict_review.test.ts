@@ -6,7 +6,7 @@ import test from "node:test";
 import { decomposeIssue } from "../../src/app/services/use_cases/decomposition_use_cases.js";
 import { setArchitectureChanged } from "../../src/app/services/use_cases/design_use_cases.js";
 import {
-  createIssue, getIssue, listIssues, nextIssue, relateIssues, setArtifact, statusIssue,
+  createIssue, decideIssue, getIssue, listIssues, nextIssue, relateIssues, setArtifact, statusIssue,
 } from "../../src/app/services/use_cases/issue_use_cases.js";
 import { setPlan } from "../../src/app/services/use_cases/plan_use_cases.js";
 import { createProject } from "../../src/app/services/use_cases/project_use_cases.js";
@@ -189,4 +189,56 @@ test("2º ciclo: 2 Designs re-desenhados sob uma Review, fechar o último cria o
   prepDesign(dir, dB.id);
   await claimClose(dir, dB.id);
   assert.equal(conflictsUnder(dir, review.id).length, 1, "o pai Review no 2º ciclo também dispara a reconciliação");
+});
+
+// Parado na decisão humana: prepara o gate do Design, reivindica e envia para AWAITING (com handoff).
+const toAwaiting = async (dir: string, id: string): Promise<void> => {
+  prepDesign(dir, id);
+  nextIssue({ agent: "pi", id }, dir);
+  new Queue(dir).artifacts.writeText("app", { issueId: id, type: "document", name: "handoff.md" }, "# handoff");
+  await statusIssue({ id, agent: "pi", status: "AWAITING", comment: "para decisão" }, dir);
+};
+
+test("D1/D2: irmão em AWAITING/APPROVED bloqueia o gatilho; fechá-lo depois cria exatamente um ConflictReview", async () => {
+  const dir = setup();
+  const { planning, designs: [dA, dB] } = planningWithDesigns(dir, FEATURE, LOGOUT);
+  await toAwaiting(dir, dB); // dB parado na decisão humana
+
+  // dA fecha childless-concluido enquanto dB está em AWAITING: NÃO pode nascer CR prematuro (D1).
+  prepDesign(dir, dA);
+  await claimClose(dir, dA);
+  assert.equal(conflictsUnder(dir, planning).length, 0, "D1: irmão em AWAITING bloqueia o gatilho");
+
+  // Humano aprova dB (reentra na fila como APPROVED): ainda !== CLOSED, ainda bloqueia.
+  decideIssue({ id: dB, human: true, status: "APPROVED", comment: "siga" }, dir);
+  const queue = new Queue(dir);
+  afterIssueClosed(queue, queue.loadRequired(dA), dir); // re-avaliar com dB em APPROVED
+  assert.equal(conflictsUnder(dir, planning).length, 0, "D1: irmão em APPROVED também bloqueia");
+
+  // dB finalmente fecha childless-concluido: todos terminais → exatamente um CR, sem duplicar (D2).
+  await claimClose(dir, dB);
+  assert.equal(conflictsUnder(dir, planning).length, 1, "D2: fechado o último, exatamente um ConflictReview");
+});
+
+test("D3 (agente): abandonar o último irmão não deixa ramo órfão — o childless sobrevivente ganha seu ConflictReview", async () => {
+  const dir = setup();
+  const { planning, designs: [dA, dB] } = planningWithDesigns(dir, FEATURE, LOGOUT);
+  // dA fecha childless-concluido (adia a decomposição); dB ainda vivo (OPEN) segura o gatilho.
+  prepDesign(dir, dA);
+  await claimClose(dir, dA);
+  assert.equal(conflictsUnder(dir, planning).length, 0, "com dB ainda vivo, nada nasce");
+  // dB é abandonado pelo agente (obsoleto): a re-avaliação no abandono dispara o CR do dA sobrevivente.
+  await claimClose(dir, dB, "obsoleto");
+  assert.equal(conflictsUnder(dir, planning).length, 1, "D3: abandono do último irmão dispara o ConflictReview");
+});
+
+test("D3 (humano): abandonar o último irmão via decideIssue também dispara o ConflictReview do sobrevivente", async () => {
+  const dir = setup();
+  const { planning, designs: [dA, dB] } = planningWithDesigns(dir, FEATURE, LOGOUT);
+  prepDesign(dir, dA);
+  await claimClose(dir, dA); // childless-concluido, adiado
+  await toAwaiting(dir, dB); // dB parado na decisão humana
+  assert.equal(conflictsUnder(dir, planning).length, 0, "AWAITING ainda segura o gatilho");
+  decideIssue({ id: dB, human: true, status: "CLOSED", comment: "descartado", closed_reason: "obsoleto" }, dir);
+  assert.equal(conflictsUnder(dir, planning).length, 1, "D3: abandono humano do último irmão dispara o ConflictReview");
 });

@@ -14,6 +14,8 @@ export function composePrompt(issue: IssueView): string {
     `Você reivindicou uma Issue com action \`${issue.action}\`. Leia a skill \`sdlc-workflow\` antes de agir: ela explica o workflow e roteia a skill da action pelos dados abaixo.`,
     `## Issue\n${issueInfo(issue)}`,
   ];
+  const decisions = humanDecisionSection(issue.thread);
+  if (decisions) sections.push(decisions);
   if (issue.artifact) sections.push(`## Artefato da Issue\n${issue.artifact}`);
   if (issue.plan) sections.push(`## Small Plan desta Issue\n${planBody(issue.plan)}`);
   if (issue.features?.length) sections.push(featureSection(issue.features));
@@ -73,6 +75,17 @@ function reviewLineageThreads(ancestors: RelatedView[]): string | null {
 
 function threadLine(entry: Thread): string {
   return `- ${entry.actor} [${entry.status}]: ${truncateWords(entry.comment, MAX_THREAD_ENTRY_WORDS)}`;
+}
+
+// Devolução (OPEN) e aprovação (APPROVED) do humano gravam o motivo no thread da própria Issue via
+// decideIssue (decided_by presente). Quando a Issue reentra na fila, esse comentário é a orientação
+// da sessão seguinte — mas issueInfo só mostra os campos e os anexos, nunca o thread. Sem isto, o
+// claim (issues next) e o issues get perdem o porquê da decisão. Corta por entrada como a linhagem.
+function humanDecisionSection(thread: Thread[]): string | null {
+  const decisions = thread.filter((entry) => entry.decided_by !== undefined && entry.comment.trim());
+  if (!decisions.length) return null;
+  const lines = decisions.map((entry) => `- [${entry.status}] ${truncateWords(entry.comment, MAX_THREAD_ENTRY_WORDS)}`);
+  return `## Decisão humana\n${lines.join("\n")}`;
 }
 
 function truncateWords(text: string, max: number): string {

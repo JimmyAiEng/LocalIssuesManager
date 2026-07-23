@@ -210,3 +210,34 @@ test("workflow e2e: Planning -> 2 Design (arch+atalho) -> 4 Implement -> Review 
   assert.equal(status(vars, qa), "CLOSED");
   assert.equal(status(vars, deploy), "CLOSED");
 });
+
+// Regressão: a decisão humana (devolução OPEN / aprovação APPROVED) grava o motivo no thread da
+// própria Issue via decide; ao reentrar na fila, o claim seguinte tem de mostrá-lo. composePrompt
+// omitia o thread, então next --prompt perdia o porquê. `issues get` sempre trouxe o thread (JSON).
+test("decisão humana (devolução/aprovação) reentra no prompt do claim seguinte", () => {
+  const vars = freshEnv();
+  const handoff = fixture("handoff.md", "# handoff");
+  const id = json(["create", "--title", "t", "--project", "demo", "--type", "Fix",
+    "--action", "Implement", "--problem", "p", "--agent", "pi"], vars).id;
+
+  // Devolução (OPEN) com motivo: reentra na fila; o claim seguinte deve exibi-lo.
+  claim(vars, id);
+  run(["artifact", "--id", id, "--name", "handoff.md", "--file", handoff], vars);
+  run(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "pronto"], vars);
+  run(["decide", "--id", id, "--human", "--status", "OPEN", "--comment", "DEVOLVIDO: refaça o passo 2"], vars);
+  const afterReturn = run(["next", "--id", id, "--agent", "pi", "--prompt"], vars);
+  assert.match(afterReturn, /## Decisão humana/);
+  assert.match(afterReturn, /\[OPEN\] DEVOLVIDO: refaça o passo 2/);
+
+  // Aprovação (APPROVED) com orientação: também viaja para a sessão pós-APPROVED.
+  run(["artifact", "--id", id, "--name", "handoff.md", "--file", handoff], vars);
+  run(["status", "--id", id, "--agent", "pi", "--status", "AWAITING", "--comment", "pronto de novo"], vars);
+  run(["decide", "--id", id, "--human", "--status", "APPROVED", "--comment", "APROVADO: atenção ao cache"], vars);
+  const afterApprove = run(["next", "--id", id, "--agent", "pi", "--prompt"], vars);
+  assert.match(afterApprove, /\[APPROVED\] APROVADO: atenção ao cache/);
+
+  // issues get já expõe o thread inteiro (JSON): o comentário nunca se perdeu ali.
+  const view = json(["get", "--id", id], vars);
+  assert.ok(view.thread.some((e: { comment: string }) => e.comment.includes("APROVADO: atenção ao cache")),
+    "get retorna o thread com o comentário de decisão");
+});
